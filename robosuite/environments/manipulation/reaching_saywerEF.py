@@ -19,7 +19,7 @@ from robosuite.utils.transform_utils import convert_quat
 from robosuite.controllers import load_controller_config
 
 
-class Reaching(SingleArmEnv):
+class ReachingSawyerEF(SingleArmEnv):
     """
     This class corresponds to the lifting task for a single robot arm.
 
