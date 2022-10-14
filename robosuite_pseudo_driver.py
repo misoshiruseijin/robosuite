@@ -2,7 +2,7 @@ import robosuite as suite
 import numpy as np
 import redis
 from robosuite import load_controller_config
-from  robosuite.devices import Keyboard
+from  robosuite.devices import Keyboard, SpaceMouse
 from robosuite.utils.input_utils import input2action
 from robosuite.wrappers import VisualizationWrapper
 
@@ -218,7 +218,7 @@ class FrankaReachingExperiment():
             render_camera=camera_view,
             use_camera_obs=False,
             control_freq=20,
-            # ignore_done=True,
+            ignore_done=True,
             # target_half_size=self.target_half_size,
             random_init=random_init,
         )
@@ -230,6 +230,19 @@ class FrankaReachingExperiment():
         print(obs['robot0_eef_pos_xy'])
 
     ################# For Reaching Environment ###################
+    # run simulation with spacemouse
+    def spacemouse_control(self):
+        device = SpaceMouse(
+            vendor_id=9583,
+            product_id=50734,
+            pos_sensitivity=1.0,
+            rot_sensitivity=1.0,
+        )
+
+        device.start_control()
+        while True:
+            print(device.control)
+
     # Run Simulation - Redis Mode
     def redis_control(self):
         """
@@ -526,11 +539,12 @@ def main():
 
     # Setup printing options for numbers
     np.set_printoptions(formatter={"float": lambda x: "{0:0.3f}".format(x)})
-
+    
     # change "target_half_size" in below line to change the size of the target region
     # currently, position of target region cannot be changed 
     reaching_task = FrankaReachingExperiment(camera_view="frontview", random_init=False)
-    reaching_task.keyboard_input()
+    reaching_task.spacemouse_control()
+    # reaching_task.keyboard_input()
     # reaching_task.redis_control()
     # reaching_task.test_step()
     # bb_task = BallBasketExperiment()

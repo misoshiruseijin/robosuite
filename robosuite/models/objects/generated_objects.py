@@ -702,7 +702,7 @@ class PrimitiveObject(MujocoGeneratedObject):
     def _get_object_subtree_(self, ob_type="box"):
         # Create element tree
         obj = new_body(name="main")
-
+        obj.append(new_inertial(pos=(0, 0, 0), mass=0.0001, diaginertia=(0.0001, 0.0001, 0.0001)))
         # Get base element attributes
         element_attr = {"name": "g0", "type": ob_type, "size": array_to_string(self.size)}
 

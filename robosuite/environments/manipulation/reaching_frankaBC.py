@@ -10,14 +10,14 @@ import robosuite.utils.transform_utils as T
 
 from robosuite.environments.manipulation.single_arm_env import SingleArmEnv
 from robosuite.models.arenas import TableArena
-from robosuite.models.objects import CylinderObject
+from robosuite.models.objects import CylinderObject, FloatingStageObject
 
 from robosuite.models.tasks import ManipulationTask
 from robosuite.utils.observables import Observable, sensor
 from robosuite.utils.transform_utils import convert_quat
 
 from robosuite.controllers import load_controller_config
-
+import pdb
 
 class ReachingFrankaBC(SingleArmEnv):
     """
@@ -178,7 +178,7 @@ class ReachingFrankaBC(SingleArmEnv):
         renderer="mujoco",
         renderer_config=None,
         target_half_size=(0.025, 0.05), # target radius, half height
-        target_position=(0.0, 0.0, 0.0), # target position (height above the table)
+        target_position=(0.0, 0.0, 0.2), # target position (height above the table)
         random_init=True,
     ):
 
@@ -266,8 +266,8 @@ class ReachingFrankaBC(SingleArmEnv):
 
         # Adjust base pose accordingly
         xpos = self.robots[0].robot_model.base_xpos_offset["table"](self.table_full_size[0])
-        xpos += np.array([-0.139, -0.159, 0])
-        # xpos += np.array([-0.139, 0, 0])
+        # xpos += np.array([-0.139, -0.159, 0])
+        xpos += np.array([-0.25, 0, 0])
         self.robots[0].robot_model.set_base_xpos(xpos)
 
         # load model for table top workspace
@@ -358,7 +358,6 @@ class ReachingFrankaBC(SingleArmEnv):
         target_xpos = np.concatenate((target_xpos, np.array((0, 0, 0, 1))))
         self.sim.data.set_joint_qpos(self.target.joints[0], target_xpos)
 
-
    
     def visualize(self, vis_settings):
         """
@@ -383,16 +382,12 @@ class ReachingFrankaBC(SingleArmEnv):
         Returns:
             bool: True if ball is in basket
         """
-        ##### Success = entire end effector is within target rectangle #####
-        # eef_in_x_range = -self.target_half_size[0] + 0.015 < self._eef_xpos[0] < self.target_half_size[0] - 0.015
-        # eef_in_y_range = -self.target_half_size[1] + 0.045 < self._eef_xpos[1] < self.target_half_size[1] - 0.045
-
-        ##### Success = center point of end effector is within target rectangle #####
-        # eef_in_x_range = -self.target_half_size[0] < self._eef_xpos[0] < self.target_half_size[0]
-        # eef_in_y_range = -self.target_half_size[1] < self._eef_xpos[1] < self.target_half_size[1]
-
-        # return eef_in_x_range and eef_in_y_range
-        return False
+       
+        ##### Success = center point of end effector is within target cylinder #####
+        eef_in_x_range = self.target_position[0] - self.target_half_size[0] < self._eef_xpos[0] < self.target_position[0] + self.target_half_size[0]
+        eef_in_y_range = self.target_position[1] - self.target_half_size[0] < self._eef_xpos[1] < self.target_position[1] + self.target_half_size[0]
+        eef_in_z_range = self.target_position[2] - self.target_half_size[1] < self._eef_xpos[2] < self.target_position[2] + self.target_half_size[1]
+        return eef_in_x_range and eef_in_y_range and eef_in_z_range
 
 
     def _check_terminated(self):
@@ -415,6 +410,7 @@ class ReachingFrankaBC(SingleArmEnv):
 
         # Prematurely terminate if task is success
         if self._check_success():
+            print("~~~~~~~~in target~~~~~~~~~~~~~~")
             terminated = True
 
         # # Prematurely terminate if joint limits are reached
@@ -431,7 +427,7 @@ class ReachingFrankaBC(SingleArmEnv):
         # if end effector position is off the table, ignore the action
         if not eef_x_in_bounds or not eef_y_in_bounds:
             action[:-1] = 0
-
+        print("eef position: ", self._eef_xpos)
         return super().step(action)
 
     def reset(self):

@@ -11,6 +11,7 @@ from robosuite.utils import SimulationError, XMLError
 
 REGISTERED_ENVS = {}
 
+import pdb
 
 def register_env(target_class):
     REGISTERED_ENVS[target_class.__name__] = target_class
@@ -234,7 +235,7 @@ class MujocoEnv(metaclass=EnvMeta):
         """
         # if we have an xml string, use that to create the sim. Otherwise, use the local model
         self.mjpy_model = load_model_from_xml(xml_string) if xml_string else self.model.get_model(mode="mujoco_py")
-
+    
         # Create the simulation instance and run a single step to make sure changes have propagated through sim state
         self.sim = MjSim(self.mjpy_model)
         self.sim.forward()
