@@ -177,7 +177,7 @@ class ReachingFrankaBC(SingleArmEnv):
         camera_segmentations=None,  # {None, instance, class, element}
         renderer="mujoco",
         renderer_config=None,
-        target_half_size=(0.1, 0.1), # target radius, half height
+        target_half_size=(0.05, 0.1), # target radius, half height
         target_position=(0.3, 0.0, 0.2), # target position (height above the table)
         random_init=True,
         random_target=True,
@@ -199,6 +199,9 @@ class ReachingFrankaBC(SingleArmEnv):
         # target
         self.target_half_size = target_half_size
         self.target_position = target_position + self.table_offset
+
+        # initial eef position
+        self.initial_eef_pos = None
 
         # whether to use random eef position and target position
         self.random_init = random_init
@@ -235,7 +238,6 @@ class ReachingFrankaBC(SingleArmEnv):
             renderer=renderer,
             renderer_config=renderer_config,
         )
-        pdb.set_trace()
 
 
     def reward(self, action=None): ### TODO ###
@@ -354,16 +356,25 @@ class ReachingFrankaBC(SingleArmEnv):
             return observables
 
     def _reset_internal(self):
+        print("reset internal START")
         """
         Resets simulation internal configurations.
         """
         super()._reset_internal()
 
-        # target position
-        # target_xpos = np.array((self.target_position[0], self.target_position[1], self.table_offset[2] + self.target_position[2] + self.target_half_size[1]))
+        # sample target position
+        if self.random_target:
+            self.target_position = np.concatenate((
+                np.random.uniform(self.workspace_x[0] + self.target_half_size[0], self.workspace_x[1] - self.target_half_size[0], 1), # x
+                np.random.uniform(self.workspace_y[0] + self.target_half_size[0], self.workspace_y[1] - self.target_half_size[1], 1), # y
+                np.random.uniform(self.workspace_z[0] + self.target_half_size[1], self.workspace_z[1] - self.target_half_size[1], 1)
+            ))
+        # set target position
         target_xpos = np.array((self.target_position[0], self.target_position[1], self.table_offset[2] + 0.001))
         target_xpos = np.concatenate((target_xpos, np.array((0, 0, 0, 1))))
         self.sim.data.set_joint_qpos(self.target.joints[0], target_xpos)
+        print("TARGET PLACED AT: ", target_xpos)
+
  
     def visualize(self, vis_settings):
         """
@@ -486,24 +497,11 @@ class ReachingFrankaBC(SingleArmEnv):
     
 
     def reset(self):
-        print("RESET")
         observations = super().reset()
 
-        # sample random target position
-        if self.random_target:
-            self.target_position = np.concatenate((
-                np.random.uniform(self.workspace_x[0] + self.target_half_size[0], self.workspace_x[1] - self.target_half_size[0], 1), # x
-                np.random.uniform(self.workspace_y[0] + self.target_half_size[0], self.workspace_y[1] - self.target_half_size[1], 1), # y
-                np.random.uniform(self.workspace_z[0] + self.target_half_size[1], self.workspace_z[1] - self.target_half_size[1], 1)
-            ))
-
-        if not self.random_init:
-            return observations
-
-        # sample random eef start position
-        else:
+        if self.random_init:
             # sample random position inside workspace
-            initial_pos = np.concatenate((
+            self.initial_eef_pos = np.concatenate((
                 np.random.uniform(self.workspace_x[0], self.workspace_x[1], 1),
                 np.random.uniform(self.workspace_y[0], self.workspace_y[1], 1),
                 np.random.uniform(self.workspace_z[0], self.workspace_z[1], 1)
@@ -511,22 +509,23 @@ class ReachingFrankaBC(SingleArmEnv):
 
             # sample again if start position is already inside or too close to the target
             thresh = (0.1, 0.1) # how far the starting position must be from target bounds (radius, height)
-            while (self._check_in_region(self.target_position + self.table_offset, self.target_half_size + (thresh[0], 0), initial_pos) and
-                self._check_in_region(self.target_position + self.table_offset, self.target_half_size + (0, thresh[0]), initial_pos)):
-                initial_pos = np.concatenate((
+            while (self._check_in_region(self.target_position + self.table_offset, self.target_half_size + (thresh[0], 0), self.initial_eef_pos) and
+                self._check_in_region(self.target_position + self.table_offset, self.target_half_size + (0, thresh[0]), self.initial_eef_pos)):
+                self.initial_eef_pos = np.concatenate((
                     np.random.uniform(self.workspace_x[0], self.workspace_x[1], 1),
                     np.random.uniform(self.workspace_y[0], self.workspace_y[1], 1),
                     np.random.uniform(self.workspace_z[0], self.workspace_z[1], 1)
                 ))
+
             # move the eef to the sampled initial position
             thresh = 0.005
-            while np.any(np.abs(self._eef_xpos - initial_pos) > thresh):
-                action = 4 * (initial_pos - self._eef_xpos) / np.linalg.norm(initial_pos - self._eef_xpos)
+            while np.any(np.abs(self._eef_xpos - self.initial_eef_pos) > thresh):
+                action = 4 * (self.initial_eef_pos - self._eef_xpos) / np.linalg.norm(self.initial_eef_pos - self._eef_xpos)
                 action = np.concatenate((action, np.array([0, 0, 0, -1])))
                 observations = self.step_no_count(action)
                 # print("error to initial pos ", initial_pos - self._eef_xpos)
+        print(f"EEF position {self.initial_eef_pos} sampled based on target {self.target_position}")
 
-        pdb.set_trace()
         return observations
 
     def _post_action(self, action):
