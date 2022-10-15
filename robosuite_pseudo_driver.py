@@ -198,7 +198,7 @@ class SawyerReachingExperiment():
 class FrankaReachingExperiment():
     def __init__(
         self,
-        controller_config=load_controller_config(default_controller="OSC_POSITION"),
+        controller_config=load_controller_config(default_controller="OSC_POSE"),
         action_dof=2,
         target_half_size=(0.08, 0.15),
         camera_view="agentview",
@@ -227,7 +227,6 @@ class FrankaReachingExperiment():
         self.env = VisualizationWrapper(self.env, indicator_configs=None)
 
         obs = self.env.reset()
-        print(obs['robot0_eef_pos_xy'])
 
     ################# For Reaching Environment ###################
     # run simulation with spacemouse
@@ -241,7 +240,38 @@ class FrankaReachingExperiment():
 
         device.start_control()
         while True:
-            print(device.control)
+            # Reset environment
+            obs = self.env.reset()
+            self.env.modify_observable(observable_name="robot0_joint_pos", attribute="active", modifier=True)
+
+            # rendering setup
+            self.env.render()
+
+            # Initialize device control
+            device.start_control()
+
+            while True:
+                # set active robot
+                active_robot = self.env.robots[0]
+                # get action
+                action, grip = input2action(
+                    device=device,
+                    robot=active_robot,
+                )
+
+                # print("action", action)
+
+                # action = [x y z eef]
+
+                if action is None:
+                    break
+
+                # take step in simulation
+                obs, reward, done, info = self.env.step(action)
+                print("eef_pos ", obs["robot0_eef_pos"])
+                # print("delta ", obs["robot0_delta_to_target"])
+                print("target ", self.env.target_position)
+                self.env.render()
 
     # Run Simulation - Redis Mode
     def redis_control(self):
@@ -352,7 +382,6 @@ class FrankaReachingExperiment():
             print("eef pos", obs["robot0_eef_pos"])
 
         print("final position", obs['robot0_eef_pos'])
-
     
     def record_action_test(self, axis=0, n_steps=50, magnitude=0.05, back_scale=2):
 
@@ -542,7 +571,7 @@ def main():
     
     # change "target_half_size" in below line to change the size of the target region
     # currently, position of target region cannot be changed 
-    reaching_task = FrankaReachingExperiment(camera_view="frontview", random_init=False)
+    reaching_task = FrankaReachingExperiment(camera_view="sideview", random_init=True)
     reaching_task.spacemouse_control()
     # reaching_task.keyboard_input()
     # reaching_task.redis_control()

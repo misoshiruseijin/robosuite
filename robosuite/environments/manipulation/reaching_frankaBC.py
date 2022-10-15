@@ -154,7 +154,7 @@ class ReachingFrankaBC(SingleArmEnv):
         controller_configs=None,
         gripper_types="default",
         initialization_noise=None,
-        table_full_size=(0.76, 0.7, 0.05),
+        table_full_size=(0.65, 0.65, 0.15),
         table_friction=(1.0, 5e-3, 1e-4),
         use_camera_obs=True,
         use_object_obs=True,
@@ -177,11 +177,13 @@ class ReachingFrankaBC(SingleArmEnv):
         camera_segmentations=None,  # {None, instance, class, element}
         renderer="mujoco",
         renderer_config=None,
-        target_half_size=(0.025, 0.05), # target radius, half height
-        target_position=(0.0, 0.0, 0.2), # target position (height above the table)
+        target_half_size=(0.1, 0.1), # target radius, half height
+        target_position=(0.3, 0.0, 0.2), # target position (height above the table)
         random_init=True,
+        random_target=True,
     ):
 
+        print("INIT")
         # settings for table top
         self.table_full_size = table_full_size
         self.table_friction = table_friction
@@ -196,10 +198,16 @@ class ReachingFrankaBC(SingleArmEnv):
 
         # target
         self.target_half_size = target_half_size
-        self.target_position = target_position
+        self.target_position = target_position + self.table_offset
 
-        # whether to use random eef position initialization
+        # whether to use random eef position and target position
         self.random_init = random_init
+        self.random_target = random_target
+
+        # workspace boundaries
+        self.workspace_x = (-0.27, 0.27)
+        self.workspace_y = (-0.3, 0.3)
+        self.workspace_z = (0.83, 1.4)
 
         super().__init__(
             robots=robots,
@@ -227,6 +235,7 @@ class ReachingFrankaBC(SingleArmEnv):
             renderer=renderer,
             renderer_config=renderer_config,
         )
+        pdb.set_trace()
 
 
     def reward(self, action=None): ### TODO ###
@@ -248,9 +257,9 @@ class ReachingFrankaBC(SingleArmEnv):
         """
         reward = 0.0
 
-        # # sparse completion reward
-        # if self._check_success():
-        #     reward = 10
+        # sparse completion reward
+        if self._check_success():
+            reward = 10
         
         # # Scale reward if requested
         # if self.reward_scale is not None:
@@ -267,7 +276,7 @@ class ReachingFrankaBC(SingleArmEnv):
         # Adjust base pose accordingly
         xpos = self.robots[0].robot_model.base_xpos_offset["table"](self.table_full_size[0])
         # xpos += np.array([-0.139, -0.159, 0])
-        xpos += np.array([-0.25, 0, 0])
+        # xpos += np.array([-0.25, 0, 0])
         self.robots[0].robot_model.set_base_xpos(xpos)
 
         # load model for table top workspace
@@ -280,12 +289,13 @@ class ReachingFrankaBC(SingleArmEnv):
         # Arena always gets set to zero origin
         mujoco_arena.set_origin([0, 0, 0])
 
-        # initialize target object - TODO
+        # initialize target object (thin disk on table markin target in x, y - z should be read from delta_to_target observation)
         self.target = CylinderObject(
             name="target",
-            size=self.target_half_size,
+            size=(self.target_half_size[0], 0.001),
+            # size=self.target_half_size,
             rgba=(1,0,0,0.5),
-            obj_type="visual"
+            obj_type="all"
         )
 
         # task includes arena, robot, and objects of interest
@@ -323,14 +333,14 @@ class ReachingFrankaBC(SingleArmEnv):
                 modality = "object"
 
                 @sensor(modality=modality)
-                def robot0_eef_pos_xy(obs_cache):
+                def robot0_delta_to_target(obs_cache):
                     return (
-                        obs_cache[f"{pf}eef_pos"][:2]
+                        obs_cache[f"{pf}eef_pos"] - self.target_position
                         if f"{pf}eef_pos" in obs_cache
-                        else np.zeros(2)
+                        else np.zeros(3)
                     )
 
-                sensors = [robot0_eef_pos_xy]
+                sensors = [robot0_delta_to_target]
                 names = [s.__name__ for s in sensors]
 
                 # Create observables
@@ -341,7 +351,6 @@ class ReachingFrankaBC(SingleArmEnv):
                         sampling_rate=self.control_freq,
                     )
     
-
             return observables
 
     def _reset_internal(self):
@@ -350,15 +359,12 @@ class ReachingFrankaBC(SingleArmEnv):
         """
         super()._reset_internal()
 
-        # grid position (fixed)
-        # grid_xpos = np.append(self.target_position, self.table_offset[2] + self.grid_thickness / 2)
-        # self.sim.data.set_joint_qpos(self.grid.joints[0], np.concatenate([grid_xpos, np.array([0, 0, 0, 1])]))
         # target position
-        target_xpos = np.array(self.target_position) + np.array((0, 0, self.table_offset[2]))
+        # target_xpos = np.array((self.target_position[0], self.target_position[1], self.table_offset[2] + self.target_position[2] + self.target_half_size[1]))
+        target_xpos = np.array((self.target_position[0], self.target_position[1], self.table_offset[2] + 0.001))
         target_xpos = np.concatenate((target_xpos, np.array((0, 0, 0, 1))))
         self.sim.data.set_joint_qpos(self.target.joints[0], target_xpos)
-
-   
+ 
     def visualize(self, vis_settings):
         """
         In addition to super call, visualize gripper site proportional to the distance to the cube.
@@ -384,19 +390,19 @@ class ReachingFrankaBC(SingleArmEnv):
         """
        
         ##### Success = center point of end effector is within target cylinder #####
-        eef_in_x_range = self.target_position[0] - self.target_half_size[0] < self._eef_xpos[0] < self.target_position[0] + self.target_half_size[0]
-        eef_in_y_range = self.target_position[1] - self.target_half_size[0] < self._eef_xpos[1] < self.target_position[1] + self.target_half_size[0]
-        eef_in_z_range = self.target_position[2] - self.target_half_size[1] < self._eef_xpos[2] < self.target_position[2] + self.target_half_size[1]
-        return eef_in_x_range and eef_in_y_range and eef_in_z_range
+        success = self._check_in_region(
+            region_center = self.target_position,
+            region_bounds = self.target_half_size,
+            coord = self._eef_xpos
+        )
 
+        return success
 
     def _check_terminated(self):
         """
         Check if the task has completed one way or another. The following conditions lead to termination:
 
-            - Collision
             - Task completion
-            - Joint Limit reached
 
         Returns:
             bool: True if episode is terminated
@@ -404,47 +410,123 @@ class ReachingFrankaBC(SingleArmEnv):
 
         terminated = False
 
-        # # Prematurely terminate if contacting the table with the arm
-        # if self.check_contact(self.robots[0].robot_model):
-        #     terminated = True
-
         # Prematurely terminate if task is success
         if self._check_success():
             print("~~~~~~~~in target~~~~~~~~~~~~~~")
             terminated = True
 
-        # # Prematurely terminate if joint limits are reached
-        # if self.robots[0].check_q_limits():
-        #     terminated = True
-
         return terminated
     
+    def _check_in_region(self, region_center, region_bounds, coord):
+        """
+        Check if input coordinate is inside the target
+
+        Args
+            region_center (array): 3d coordiante of region center
+            region_bounds (array): defines bounds of region
+                cylinder (radius, half height)
+            coord (array): 3d coordinate to check
+        """
+
+        in_xy = (coord[0] - region_center[0])**2 + (coord[1] - region_center[1])**2 < region_bounds[0]**2
+        in_z = region_center[2] - region_bounds[1] < coord[2] < region_center[2] + region_bounds[1]
+        print("in xy, in z ", in_xy, in_z)
+        return in_xy and in_z
+
     def step(self, action):
 
-        eef_x_in_bounds = -self.table_full_size[0] / 2 < self._eef_xpos[0] + 3 * action[0] / self.control_freq < self.table_full_size[0] / 2
-        eef_y_in_bounds = -self.table_full_size[1] / 2 < self._eef_xpos[1] + 3 * action[1] / self.control_freq < self.table_full_size[1] / 2
+        sf = 3 # safety factor to prevent robot from moving out of bounds
+        eef_x_in_bounds = self.workspace_x[0] < self._eef_xpos[0] + sf * action[0] / self.control_freq < self.workspace_x[1]
+        eef_y_in_bounds = self.workspace_y[0] < self._eef_xpos[1] + sf * action[1] / self.control_freq < self.workspace_y[1]
+        eef_z_in_bounds = self.workspace_z[0] < self._eef_xpos[2] + sf * action[2] / self.control_freq < self.workspace_z[1]
         
+        # ignore orientation inputs
+        action[3:6] = 0
+        # ignore gripper inputs
+        action[-1] = -1
+
         # if end effector position is off the table, ignore the action
-        if not eef_x_in_bounds or not eef_y_in_bounds:
+        if not (eef_x_in_bounds and eef_y_in_bounds and eef_z_in_bounds):
             action[:-1] = 0
-        print("eef position: ", self._eef_xpos)
+            print("Action out of bounds")
+        
+        # print("eef position: ", self._eef_xpos)
         return super().step(action)
 
-    def reset(self):
+    def step_no_count(self, action):
+        """
+        Modified version of step in base environment. Used for random initialization. 
+        Returns observations, but actions taken using this step function does not affect the number of steps, time, etc.
+        """
 
+        # Since the env.step frequency is slower than the mjsim timestep frequency, the internal controller will output
+        # multiple torque commands in between new high level action commands. Therefore, we need to denote via
+        # 'policy_step' whether the current step we're taking is simply an internal update of the controller,
+        # or an actual policy update
+        policy_step = True
+
+        # Loop through the simulation at the model timestep rate until we're ready to take the next policy step
+        # (as defined by the control frequency specified at the environment level)
+        for i in range(int(self.control_timestep / self.model_timestep)):
+            self.sim.forward()
+            self._pre_action(action, policy_step)
+            self.sim.step()
+            self._update_observables()
+            policy_step = False
+
+        reward = 0
+        done = False
+        info = {}
+
+        if self.viewer is not None and self.renderer != "mujoco":
+            self.viewer.update()
+
+        observations = self.viewer._get_observations() if self.viewer_get_obs else self._get_observations()
+        return observations, reward, done, info
+    
+
+    def reset(self):
+        print("RESET")
         observations = super().reset()
 
+        # sample random target position
+        if self.random_target:
+            self.target_position = np.concatenate((
+                np.random.uniform(self.workspace_x[0] + self.target_half_size[0], self.workspace_x[1] - self.target_half_size[0], 1), # x
+                np.random.uniform(self.workspace_y[0] + self.target_half_size[0], self.workspace_y[1] - self.target_half_size[1], 1), # y
+                np.random.uniform(self.workspace_z[0] + self.target_half_size[1], self.workspace_z[1] - self.target_half_size[1], 1)
+            ))
+
         if not self.random_init:
-            # if not requested to initialize eef position randomly, return result of parent function
             return observations
 
-        # otherwise, apply random noise to starting eef position
-        noise_strength = 0.05
-        for i in range(100):
-            noise = noise_strength * np.random.uniform(-1, 1, 2)
-            action = np.array(np.append(noise, np.array([0, -1])))
-            observations, reward, done, info = self.step(action)
+        # sample random eef start position
+        else:
+            # sample random position inside workspace
+            initial_pos = np.concatenate((
+                np.random.uniform(self.workspace_x[0], self.workspace_x[1], 1),
+                np.random.uniform(self.workspace_y[0], self.workspace_y[1], 1),
+                np.random.uniform(self.workspace_z[0], self.workspace_z[1], 1)
+            ))
 
+            # sample again if start position is already inside or too close to the target
+            thresh = (0.1, 0.1) # how far the starting position must be from target bounds (radius, height)
+            while (self._check_in_region(self.target_position + self.table_offset, self.target_half_size + (thresh[0], 0), initial_pos) and
+                self._check_in_region(self.target_position + self.table_offset, self.target_half_size + (0, thresh[0]), initial_pos)):
+                initial_pos = np.concatenate((
+                    np.random.uniform(self.workspace_x[0], self.workspace_x[1], 1),
+                    np.random.uniform(self.workspace_y[0], self.workspace_y[1], 1),
+                    np.random.uniform(self.workspace_z[0], self.workspace_z[1], 1)
+                ))
+            # move the eef to the sampled initial position
+            thresh = 0.005
+            while np.any(np.abs(self._eef_xpos - initial_pos) > thresh):
+                action = 4 * (initial_pos - self._eef_xpos) / np.linalg.norm(initial_pos - self._eef_xpos)
+                action = np.concatenate((action, np.array([0, 0, 0, -1])))
+                observations = self.step_no_count(action)
+                # print("error to initial pos ", initial_pos - self._eef_xpos)
+
+        pdb.set_trace()
         return observations
 
     def _post_action(self, action):
