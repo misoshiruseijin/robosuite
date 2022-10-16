@@ -5,6 +5,131 @@ from robosuite import load_controller_config
 from  robosuite.devices import Keyboard, SpaceMouse
 from robosuite.utils.input_utils import input2action
 from robosuite.wrappers import VisualizationWrapper
+import pdb
+############### For BallBasket Environment #################
+class BallBasketExperiment():
+    def __init__(
+        self,
+        controller_config=load_controller_config(default_controller="OSC_POSITION"),
+        action_dof=4,
+        basket_half_size=(0.06, 0.06, 0.05), # size of rectangular basket
+        stage_half_size=(0.07,0.07,0.1), # size of floating stage
+        fix_basket_pos=(0.1, 0), # fixed position of basket on table (x, y)
+    ):
+
+        self.action_dof = action_dof # eef [dx, dy]
+
+        # initialize environment
+        self.env = suite.make(
+            env_name="BallBasket",
+            controller_configs=controller_config,
+            robots="Sawyer",
+            has_renderer=True,
+            has_offscreen_renderer=False,
+            render_camera="frontview",
+            use_camera_obs=False,
+            control_freq=20,
+            ignore_done=True,
+            prehensile=False, # whether to start the experiment with the ball in the gripper (False = start with ball in gripper)
+            random_init=False,
+        )
+
+        self.env = VisualizationWrapper(self.env, indicator_configs=None)
+
+        obs = self.env.reset()
+
+        
+    # Run Simulation - keyboard input mode
+    def keyboard_input(self):
+        # raise(NotImplementedError)
+
+        # Initialize Device (keyboard)
+        device = Keyboard(pos_sensitivity=0.3, rot_sensitivity=1.0)
+        self.env.viewer.add_keypress_callback("any", device.on_press)
+        self.env.viewer.add_keyup_callback("any", device.on_release)
+        self.env.viewer.add_keyrepeat_callback("any", device.on_press)
+
+        while True:
+            # Reset environment
+            obs = self.env.reset()
+            self.env.modify_observable(observable_name="robot0_joint_pos", attribute="active", modifier=True)
+
+            # rendering setup
+            cam_id = 0
+            num_cam = len(self.env.sim.model.camera_names)
+            self.env.render()
+
+            action = np.zeros(4)
+            # action[-1] = 1
+
+            # Initialize device control
+            device.start_control()
+
+            while True:
+                # set active robot
+                active_robot = self.env.robots[0]
+                # get action
+                action, grasp = input2action(
+                    device=device,
+                    robot=active_robot,
+                )
+
+                # action = [x y z eef]
+
+                if action is None:
+                    break
+
+                # take step in simulation
+                obs, reward, done, info = self.env.step(action)
+                # print(obs.keys())
+                print("EE_POS_XYZ", obs['robot0_eef_pos'])
+                # print("EE_ORIENTATION", self.env.robots[0]._hand_orn)
+                # print("JOINT_CONFIG", obs["robot0_joint_pos"])
+                # print("BASKET_POS", obs["basket_pos"])
+                # print("REWARD", reward)
+
+                # if done:
+                #     print("------terminating--------")
+                #     break
+
+                self.env.render()
+
+
+    # Run Simulation - Redis Mode
+    def redis_control(self):
+        
+        # redis setup
+        r = redis.Redis()
+
+        # read keys
+        self.ACTION_KEY = "action"
+        
+        while True:
+            # Reset environment
+            r.set("action", "0, 0, 0, 0") # reset action to neutral
+
+            obs = self.env.reset()
+            self.env.modify_observable(observable_name="robot0_joint_pos", attribute="active", modifier=True)
+
+            self.env.render()
+
+            # change below while loop condition to terminate session after certain number of steps
+            while True: 
+                action = r.get(self.ACTION_KEY)
+                action = str2ndarray(action, (self.action_dof, ))
+                
+                obs, reward, done, info = self.env.step(action)
+
+                if done:
+                    print("--- termination condition met ---")
+                    break
+
+                # print(obs)
+                print(obs['eef_xyz_gripper'])
+                # print("EE_POS_XYZ", obs['robot0_eef_pos']) # end effector cartesian position wrt world origin
+                # print("REWARD", reward) # reward (1 when ball is inside basket and end effector is not gripping anything)
+
+                self.env.render()
 
 class SawyerReachingExperiment():
     def __init__(
@@ -225,53 +350,10 @@ class FrankaReachingExperiment():
 
 
         self.env = VisualizationWrapper(self.env, indicator_configs=None)
-
+        # self.env.set_visualization_setting("robots", False)
         obs = self.env.reset()
 
     ################# For Reaching Environment ###################
-    # run simulation with spacemouse
-    def spacemouse_control(self):
-        device = SpaceMouse(
-            vendor_id=9583,
-            product_id=50734,
-            pos_sensitivity=1.0,
-            rot_sensitivity=1.0,
-        )
-
-        device.start_control()
-        while True:
-            # Reset environment
-            obs = self.env.reset()
-            self.env.modify_observable(observable_name="robot0_joint_pos", attribute="active", modifier=True)
-
-            # rendering setup
-            self.env.render()
-
-            # Initialize device control
-            device.start_control()
-
-            while True:
-                # set active robot
-                active_robot = self.env.robots[0]
-                # get action
-                action, grip = input2action(
-                    device=device,
-                    robot=active_robot,
-                )
-
-                # print("action", action)
-
-                # action = [x y z eef]
-
-                if action is None:
-                    break
-
-                # take step in simulation
-                obs, reward, done, info = self.env.step(action)
-                print("eef_pos ", obs["robot0_eef_pos"])
-                # print("delta ", obs["robot0_delta_to_target"])
-                print("target ", self.env.target_position)
-                self.env.render()
 
     # Run Simulation - Redis Mode
     def redis_control(self):
@@ -425,62 +507,23 @@ class FrankaReachingExperiment():
         np.savetxt(f"actions{axis}.txt", np.array(action_hist), delimiter=',', newline='\n', fmt='%1.5f')
         np.savetxt(f"robosuite_states{axis}.txt", np.array(state_hist), delimiter=',', newline='\n', fmt="%1.5f")
         
-
-############### For BallBasket Environment #################
-class BallBasketExperiment():
-    def __init__(
-        self,
-        controller_config=load_controller_config(default_controller="OSC_POSITION"),
-        action_dof=4,
-        basket_half_size=(0.06, 0.06, 0.05), # size of rectangular basket
-        stage_half_size=(0.07,0.07,0.1), # size of floating stage
-        fix_basket_pos=(0.1, 0), # fixed position of basket on table (x, y)
-    ):
-
-        self.action_dof = action_dof # eef [dx, dy]
-
-        # initialize environment
-        self.env = suite.make(
-            env_name="BallBasket",
-            controller_configs=controller_config,
-            robots="Sawyer",
-            has_renderer=True,
-            has_offscreen_renderer=False,
-            render_camera="frontview",
-            use_camera_obs=False,
-            control_freq=20,
-            ignore_done=True,
-            prehensile=False, # whether to start the experiment with the ball in the gripper (False = start with ball in gripper)
-            random_init=False,
+    # run simulation with spacemouse
+    def spacemouse_control(self):
+        device = SpaceMouse(
+            vendor_id=9583,
+            product_id=50734,
+            pos_sensitivity=1.0,
+            rot_sensitivity=1.0,
         )
 
-        self.env = VisualizationWrapper(self.env, indicator_configs=None)
-
-        obs = self.env.reset()
-
-        
-    # Run Simulation - keyboard input mode
-    def keyboard_input(self):
-        # raise(NotImplementedError)
-
-        # Initialize Device (keyboard)
-        device = Keyboard(pos_sensitivity=0.3, rot_sensitivity=1.0)
-        self.env.viewer.add_keypress_callback("any", device.on_press)
-        self.env.viewer.add_keyup_callback("any", device.on_release)
-        self.env.viewer.add_keyrepeat_callback("any", device.on_press)
-
+        device.start_control()
         while True:
             # Reset environment
             obs = self.env.reset()
             self.env.modify_observable(observable_name="robot0_joint_pos", attribute="active", modifier=True)
 
             # rendering setup
-            cam_id = 0
-            num_cam = len(self.env.sim.model.camera_names)
             self.env.render()
-
-            action = np.zeros(4)
-            # action[-1] = 1
 
             # Initialize device control
             device.start_control()
@@ -489,67 +532,21 @@ class BallBasketExperiment():
                 # set active robot
                 active_robot = self.env.robots[0]
                 # get action
-                action, grasp = input2action(
+                action, grip = input2action(
                     device=device,
                     robot=active_robot,
                 )
-
-                # action = [x y z eef]
 
                 if action is None:
                     break
 
                 # take step in simulation
                 obs, reward, done, info = self.env.step(action)
-                # print(obs.keys())
-                print("EE_POS_XYZ", obs['robot0_eef_pos'])
-                # print("EE_ORIENTATION", self.env.robots[0]._hand_orn)
-                # print("JOINT_CONFIG", obs["robot0_joint_pos"])
-                # print("BASKET_POS", obs["basket_pos"])
-                # print("REWARD", reward)
-
-                # if done:
-                #     print("------terminating--------")
-                #     break
-
+                print("eef_pos ", obs["robot0_eef_pos"])
+                # print("delta ", obs["robot0_delta_to_target"])
+                print("target ", self.env.target_position)
                 self.env.render()
 
-
-    # Run Simulation - Redis Mode
-    def redis_control(self):
-        
-        # redis setup
-        r = redis.Redis()
-
-        # read keys
-        self.ACTION_KEY = "action"
-        
-        while True:
-            # Reset environment
-            r.set("action", "0, 0, 0, 0") # reset action to neutral
-
-            obs = self.env.reset()
-            self.env.modify_observable(observable_name="robot0_joint_pos", attribute="active", modifier=True)
-
-            self.env.render()
-
-            # change below while loop condition to terminate session after certain number of steps
-            while True: 
-                action = r.get(self.ACTION_KEY)
-                action = str2ndarray(action, (self.action_dof, ))
-                
-                obs, reward, done, info = self.env.step(action)
-
-                if done:
-                    print("--- termination condition met ---")
-                    break
-
-                # print(obs)
-                print(obs['eef_xyz_gripper'])
-                # print("EE_POS_XYZ", obs['robot0_eef_pos']) # end effector cartesian position wrt world origin
-                # print("REWARD", reward) # reward (1 when ball is inside basket and end effector is not gripping anything)
-
-                self.env.render()
 
 
 def str2ndarray(array_str, shape):

@@ -12,6 +12,8 @@ import numpy as np
 from robosuite.utils.mjcf_utils import new_body, new_geom, new_site
 from robosuite.wrappers import Wrapper
 
+import pdb
+
 DEFAULT_INDICATOR_SITE_CONFIG = {
     "type": "sphere",
     "size": [0.03],
@@ -68,10 +70,10 @@ class VisualizationWrapper(Wrapper):
 
         # Create internal dict to store visualization settings (set to True by default)
         self._vis_settings = {vis: True for vis in self.env._visualizations}
-
+        
         # Add the post-processor to make sure indicator objects get added to model before it's actually loaded in sim
         self.env.set_model_postprocessor(postprocessor=self._add_indicators_to_model)
-
+        
         # Conduct a (hard) reset to make sure visualization changes propagate
         reset_mode = self.env.hard_reset
         self.env.hard_reset = True

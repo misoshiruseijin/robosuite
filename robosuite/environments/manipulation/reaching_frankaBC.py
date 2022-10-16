@@ -18,6 +18,7 @@ from robosuite.utils.transform_utils import convert_quat
 
 from robosuite.controllers import load_controller_config
 import pdb
+import time
 
 class ReachingFrankaBC(SingleArmEnv):
     """
@@ -212,6 +213,8 @@ class ReachingFrankaBC(SingleArmEnv):
         self.workspace_y = (-0.3, 0.3)
         self.workspace_z = (0.83, 1.4)
 
+        self.reset_ready = False # hack to fix target initialized in wrong position issue
+
         super().__init__(
             robots=robots,
             env_configuration=env_configuration,
@@ -356,7 +359,7 @@ class ReachingFrankaBC(SingleArmEnv):
             return observables
 
     def _reset_internal(self):
-        print("reset internal START")
+        print("START reset internal")
         """
         Resets simulation internal configurations.
         """
@@ -373,9 +376,11 @@ class ReachingFrankaBC(SingleArmEnv):
         target_xpos = np.array((self.target_position[0], self.target_position[1], self.table_offset[2] + 0.001))
         target_xpos = np.concatenate((target_xpos, np.array((0, 0, 0, 1))))
         self.sim.data.set_joint_qpos(self.target.joints[0], target_xpos)
-        print("TARGET PLACED AT: ", target_xpos)
 
- 
+        self.reset_ready = True
+        print("TARGET PLACED AT: ", self.target_position)
+        print("END reset internal")
+
     def visualize(self, vis_settings):
         """
         In addition to super call, visualize gripper site proportional to the distance to the cube.
@@ -441,7 +446,7 @@ class ReachingFrankaBC(SingleArmEnv):
 
         in_xy = (coord[0] - region_center[0])**2 + (coord[1] - region_center[1])**2 < region_bounds[0]**2
         in_z = region_center[2] - region_bounds[1] < coord[2] < region_center[2] + region_bounds[1]
-        print("in xy, in z ", in_xy, in_z)
+        # print("in xy, in z ", in_xy, in_z)
         return in_xy and in_z
 
     def step(self, action):
@@ -461,7 +466,9 @@ class ReachingFrankaBC(SingleArmEnv):
             action[:-1] = 0
             print("Action out of bounds")
         
-        # print("eef position: ", self._eef_xpos)
+        print("eefpos ", self._eef_xpos)
+        print("target ", self.target_position)
+
         return super().step(action)
 
     def step_no_count(self, action):
@@ -495,9 +502,13 @@ class ReachingFrankaBC(SingleArmEnv):
         observations = self.viewer._get_observations() if self.viewer_get_obs else self._get_observations()
         return observations, reward, done, info
     
-
     def reset(self):
+        print("Start reset")
         observations = super().reset()
+
+        # wait for reset_internal to run
+        while not self.reset_ready:
+            pass
 
         if self.random_init:
             # sample random position inside workspace
@@ -524,8 +535,10 @@ class ReachingFrankaBC(SingleArmEnv):
                 action = np.concatenate((action, np.array([0, 0, 0, -1])))
                 observations = self.step_no_count(action)
                 # print("error to initial pos ", initial_pos - self._eef_xpos)
+        
+        self.reset_ready = False
         print(f"EEF position {self.initial_eef_pos} sampled based on target {self.target_position}")
-
+        print("End reset")
         return observations
 
     def _post_action(self, action):
