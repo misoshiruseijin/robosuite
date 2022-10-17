@@ -306,6 +306,8 @@ class MujocoModel(object):
         # Loop through all visualization geoms and set their alpha values appropriately
         for vis_g in self.sites:
             vis_g_id = sim.model.site_name2id(vis_g)
+            # if vis_g == "gripper0_grip_site_cylinder":
+            #     sim.model.site_rgba[vis_g_id][3] = 0
             if (visible and sim.model.site_rgba[vis_g_id][3] < 0) or (
                 not visible and sim.model.site_rgba[vis_g_id][3] > 0
             ):

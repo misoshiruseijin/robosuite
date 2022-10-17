@@ -327,7 +327,7 @@ class FrankaReachingExperiment():
         action_dof=2,
         target_half_size=(0.08, 0.15),
         camera_view="agentview",
-        random_init=True,
+        random_init=False,
     ):
 
         self.action_dof = action_dof # eef [dx, dy]
@@ -348,9 +348,8 @@ class FrankaReachingExperiment():
             random_init=random_init,
         )
 
-
         self.env = VisualizationWrapper(self.env, indicator_configs=None)
-        # self.env.set_visualization_setting("robots", False)
+        # self.env.set_visualization_setting("grippers", False)
         obs = self.env.reset()
 
     ################# For Reaching Environment ###################
@@ -568,7 +567,7 @@ def main():
     
     # change "target_half_size" in below line to change the size of the target region
     # currently, position of target region cannot be changed 
-    reaching_task = FrankaReachingExperiment(camera_view="sideview", random_init=True)
+    reaching_task = FrankaReachingExperiment(camera_view="sideview", random_init=False)
     reaching_task.spacemouse_control()
     # reaching_task.keyboard_input()
     # reaching_task.redis_control()

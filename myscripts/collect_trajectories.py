@@ -35,7 +35,7 @@ def collect_human_trajectory(env, device, arm, env_configuration):
         arms (str): which arm to control (eg bimanual) 'right' or 'left'
         env_configuration (str): specified environment configuration
     """
-
+    pdb.set_trace()
     env.reset()
 
     # ID = 2 always corresponds to agentview
@@ -61,7 +61,8 @@ def collect_human_trajectory(env, device, arm, env_configuration):
             break
 
         # Run environment step
-        env.step(action)
+        observations, reward, done, info = env.step(action)
+        print("delta ", observations["robot0_delta_to_target"])
         env.render()
 
         # Also break if we complete the task
@@ -79,7 +80,6 @@ def collect_human_trajectory(env, device, arm, env_configuration):
 
     # cleanup for end of data collection episodes
     env.close()
-    print("----------saved npz files------------")
 
 
 def gather_demonstrations_as_hdf5(directory, out_dir, env_info):

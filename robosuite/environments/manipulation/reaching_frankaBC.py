@@ -10,7 +10,7 @@ import robosuite.utils.transform_utils as T
 
 from robosuite.environments.manipulation.single_arm_env import SingleArmEnv
 from robosuite.models.arenas import TableArena
-from robosuite.models.objects import CylinderObject, FloatingStageObject
+from robosuite.models.objects import CylinderObject, CanObject, TargetMarker3dObject
 
 from robosuite.models.tasks import ManipulationTask
 from robosuite.utils.observables import Observable, sensor
@@ -178,8 +178,8 @@ class ReachingFrankaBC(SingleArmEnv):
         camera_segmentations=None,  # {None, instance, class, element}
         renderer="mujoco",
         renderer_config=None,
-        target_half_size=(0.05, 0.1), # target radius, half height
-        target_position=(0.3, 0.0, 0.2), # target position (height above the table)
+        target_half_size=(0.05, 0.05), # target radius, half height
+        target_position=(0.0, 0.0, 0.5), # target position (height above the table)
         random_init=True,
         random_target=True,
     ):
@@ -295,12 +295,18 @@ class ReachingFrankaBC(SingleArmEnv):
         mujoco_arena.set_origin([0, 0, 0])
 
         # initialize target object (thin disk on table markin target in x, y - z should be read from delta_to_target observation)
-        self.target = CylinderObject(
+        # self.target = CylinderObject(
+        #     name="target",
+        #     size=(self.target_half_size[0], 0.001),
+        #     # size=self.target_half_size,
+        #     rgba=(1,0,0,0.5),
+        #     obj_type="all"
+        # )
+        # self.target = CanObject(name="target")
+        self.target = TargetMarker3dObject(
             name="target",
-            size=(self.target_half_size[0], 0.001),
-            # size=self.target_half_size,
-            rgba=(1,0,0,0.5),
-            obj_type="all"
+            target_half_size=self.target_half_size,
+            target_height=0.2,
         )
 
         # task includes arena, robot, and objects of interest
@@ -345,7 +351,11 @@ class ReachingFrankaBC(SingleArmEnv):
                         else np.zeros(3)
                     )
 
-                sensors = [robot0_delta_to_target]
+                @sensor(modality=modality)
+                def target_pos(obs_cache):
+                    return self.target_position
+
+                sensors = [robot0_delta_to_target, target_pos]
                 names = [s.__name__ for s in sensors]
 
                 # Create observables
@@ -466,8 +476,8 @@ class ReachingFrankaBC(SingleArmEnv):
             action[:-1] = 0
             print("Action out of bounds")
         
-        print("eefpos ", self._eef_xpos)
-        print("target ", self.target_position)
+        # print("eefpos ", self._eef_xpos)
+        # print("target ", self.target_position)
 
         return super().step(action)
 
