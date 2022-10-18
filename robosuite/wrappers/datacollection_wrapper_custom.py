@@ -129,6 +129,9 @@ class CustomDataCollectionWrapper(Wrapper):
         )
         self.states = []
         self.action_infos = []
+        self.rewards = []
+        self.dones = []
+        self.obs_infos = []
 
     def reset(self):
         """

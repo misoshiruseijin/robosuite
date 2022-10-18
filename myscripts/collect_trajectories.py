@@ -137,10 +137,9 @@ def gather_demonstrations_as_hdf5(directory, out_dir, env_info):
             for ai in dic["action_infos"]:
                 actions.append(ai["actions"])
             
-            observations = dic["obs_infos"]
-            rewards = dic["rewards"]
-            dones = dic["dones"]
-            # pdb.set_trace()
+            observations.extend(dic["obs_infos"])
+            rewards.extend(dic["rewards"])
+            dones.extend(dic["dones"])
 
         if len(states) == 0:
             continue
@@ -152,7 +151,7 @@ def gather_demonstrations_as_hdf5(directory, out_dir, env_info):
         assert len(states) == len(actions)
 
         num_eps += 1
-        pdb.set_trace()
+
         ep_data_grp = grp.create_group("demo_{}".format(num_eps))
 
         # store model xml as an attribute
@@ -161,15 +160,13 @@ def gather_demonstrations_as_hdf5(directory, out_dir, env_info):
             xml_str = f.read()
         ep_data_grp.attrs["model_file"] = xml_str
 
-        # write datasets for states and actions
+        # write datasets for states, actions, rewards, dones, obs, next_obs
         ep_data_grp.create_dataset("states", data=np.array(states))
         ep_data_grp.create_dataset("actions", data=np.array(actions))
         ep_data_grp.create_dataset("rewards", data=np.array(rewards))
         ep_data_grp.create_dataset("dones", data=np.array(dones))
+
         obs = {key : observations[0][key] for key in observations[0].keys()}
-        # for observation in observations:
-        #     for key in obs:
-        #         obs[key] = np.vstack((obs[key], observation[key]))
         for key in obs:
             for observation in observations:
                 obs[key] = np.vstack((obs[key], observation[key]))
@@ -272,13 +269,7 @@ if __name__ == "__main__":
     new_dir = os.path.join(args.directory, "{}_{}".format(t1, t2))
     os.makedirs(new_dir)
 
-    # create hdf5 file
-    # hdf5_path = os.path.join(new_dir, "demo.hdf5")
-    # f = h5py.File(hdf5_path, "a")
-    # f.create_group("data")
-
     # collect demonstrations
     for _ in range(2):
         collect_human_trajectory(env, device, args.arm, args.config)
     gather_demonstrations_as_hdf5(tmp_directory, new_dir, env_info)
-    pdb.set_trace()
