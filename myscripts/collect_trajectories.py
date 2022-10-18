@@ -20,7 +20,7 @@ import numpy as np
 import robosuite as suite
 from robosuite import load_controller_config
 from robosuite.utils.input_utils import input2action
-from robosuite.wrappers import DataCollectionWrapper, VisualizationWrapper
+from robosuite.wrappers import CustomDataCollectionWrapper, VisualizationWrapper
 import pdb
 
 def collect_human_trajectory(env, device, arm, env_configuration):
@@ -35,7 +35,6 @@ def collect_human_trajectory(env, device, arm, env_configuration):
         arms (str): which arm to control (eg bimanual) 'right' or 'left'
         env_configuration (str): specified environment configuration
     """
-    pdb.set_trace()
     env.reset()
 
     # ID = 2 always corresponds to agentview
@@ -74,7 +73,7 @@ def collect_human_trajectory(env, device, arm, env_configuration):
             if task_completion_hold_count > 0:
                 task_completion_hold_count -= 1  # latched state, decrement count
             else:
-                task_completion_hold_count = 10  # reset count on first success timestep
+                task_completion_hold_count = 25  # reset count on first success timestep
         else:
             task_completion_hold_count = -1  # null the counter if there's no success
 
@@ -114,6 +113,7 @@ def gather_demonstrations_as_hdf5(directory, out_dir, env_info):
     f = h5py.File(hdf5_path, "w")
 
     # store some metadata in the attributes of one group
+    # if "data" not in f.keys():
     grp = f.create_group("data")
 
     num_eps = 0
@@ -124,6 +124,10 @@ def gather_demonstrations_as_hdf5(directory, out_dir, env_info):
         state_paths = os.path.join(directory, ep_directory, "state_*.npz")
         states = []
         actions = []
+        observations = []
+        next_obs = []
+        rewards = []
+        dones = []
 
         for state_file in sorted(glob(state_paths)):
             dic = np.load(state_file, allow_pickle=True)
@@ -132,6 +136,11 @@ def gather_demonstrations_as_hdf5(directory, out_dir, env_info):
             states.extend(dic["states"])
             for ai in dic["action_infos"]:
                 actions.append(ai["actions"])
+            
+            observations = dic["obs_infos"]
+            rewards = dic["rewards"]
+            dones = dic["dones"]
+            # pdb.set_trace()
 
         if len(states) == 0:
             continue
@@ -143,6 +152,7 @@ def gather_demonstrations_as_hdf5(directory, out_dir, env_info):
         assert len(states) == len(actions)
 
         num_eps += 1
+        pdb.set_trace()
         ep_data_grp = grp.create_group("demo_{}".format(num_eps))
 
         # store model xml as an attribute
@@ -154,6 +164,17 @@ def gather_demonstrations_as_hdf5(directory, out_dir, env_info):
         # write datasets for states and actions
         ep_data_grp.create_dataset("states", data=np.array(states))
         ep_data_grp.create_dataset("actions", data=np.array(actions))
+        ep_data_grp.create_dataset("rewards", data=np.array(rewards))
+        ep_data_grp.create_dataset("dones", data=np.array(dones))
+        obs = {key : observations[0][key] for key in observations[0].keys()}
+        # for observation in observations:
+        #     for key in obs:
+        #         obs[key] = np.vstack((obs[key], observation[key]))
+        for key in obs:
+            for observation in observations:
+                obs[key] = np.vstack((obs[key], observation[key]))
+            ep_data_grp[f"obs/{key}"] = obs[key][:-1]
+            ep_data_grp[f"next_obs/{key}"] = obs[key][1:]
 
     # write dataset attributes (metadata)
     now = datetime.datetime.now()
@@ -181,7 +202,7 @@ if __name__ == "__main__":
         "--config", type=str, default="single-arm-opposed", help="Specified environment configuration if necessary"
     )
     parser.add_argument("--arm", type=str, default="right", help="Which arm to control (eg bimanual) 'right' or 'left'")
-    parser.add_argument("--camera", type=str, default="agentview", help="Which camera to use for collecting demos")
+    parser.add_argument("--camera", type=str, default="frontview", help="Which camera to use for collecting demos")
     parser.add_argument(
         "--controller", type=str, default="OSC_POSE", help="Choice of controller. Can be 'IK_POSE' or 'OSC_POSE'"
     )
@@ -224,7 +245,7 @@ if __name__ == "__main__":
 
     # wrap the environment with data collection wrapper
     tmp_directory = "/tmp/{}".format(str(time.time()).replace(".", "_"))
-    env = DataCollectionWrapper(env, tmp_directory)
+    env = CustomDataCollectionWrapper(env, tmp_directory)
 
     # initialize device
     if args.device == "keyboard":
@@ -251,7 +272,13 @@ if __name__ == "__main__":
     new_dir = os.path.join(args.directory, "{}_{}".format(t1, t2))
     os.makedirs(new_dir)
 
+    # create hdf5 file
+    # hdf5_path = os.path.join(new_dir, "demo.hdf5")
+    # f = h5py.File(hdf5_path, "a")
+    # f.create_group("data")
+
     # collect demonstrations
-    while True:
+    for _ in range(2):
         collect_human_trajectory(env, device, args.arm, args.config)
-        gather_demonstrations_as_hdf5(tmp_directory, new_dir, env_info)
+    gather_demonstrations_as_hdf5(tmp_directory, new_dir, env_info)
+    pdb.set_trace()

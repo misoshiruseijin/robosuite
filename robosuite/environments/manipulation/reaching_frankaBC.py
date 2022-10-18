@@ -209,7 +209,7 @@ class ReachingFrankaBC(SingleArmEnv):
         self.random_target = random_target
 
         # workspace boundaries
-        self.workspace_x = (-0.27, 0.27)
+        self.workspace_x = (-0.25, 0.25)
         self.workspace_y = (-0.3, 0.3)
         self.workspace_z = (0.83, 1.4)
 
@@ -326,7 +326,6 @@ class ReachingFrankaBC(SingleArmEnv):
         super()._setup_references()
 
         # Additional object references from this env
-        # self.grid_body_id = self.sim.model.body_name2id(self.grid.root_body)
         self.target_body_id = self.sim.model.body_name2id(self.target.root_body)
 
     def _setup_observables(self):

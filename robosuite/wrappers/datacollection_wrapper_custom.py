@@ -12,7 +12,7 @@ from robosuite.utils.mjcf_utils import save_sim_model
 from robosuite.wrappers import Wrapper
 import pdb
 
-class DataCollectionWrapper(Wrapper):
+class CustomDataCollectionWrapper(Wrapper):
     def __init__(self, env, directory, collect_freq=1, flush_freq=100):
         """
         Initializes the data collection wrapper.
@@ -31,6 +31,9 @@ class DataCollectionWrapper(Wrapper):
         # in-memory cache for simulation states and action info
         self.states = []
         self.action_infos = []  # stores information about actions taken - list of dicts
+        self.obs_infos = []
+        self.rewards = []
+        self.dones = []
 
         # how often to save simulation state, in terms of environment steps
         self.collect_freq = collect_freq
@@ -119,6 +122,9 @@ class DataCollectionWrapper(Wrapper):
             state_path,
             states=np.array(self.states),
             action_infos=self.action_infos,
+            obs_infos=self.obs_infos,
+            rewards=self.rewards,
+            dones=self.dones,
             env=env_name,
         )
         self.states = []
@@ -151,6 +157,7 @@ class DataCollectionWrapper(Wrapper):
                 - (dict) misc information
         """
         ret = super().step(action)
+        obs, reward, done, info = ret
         self.t += 1
 
         # on the first time step, make directories for logging
@@ -165,6 +172,10 @@ class DataCollectionWrapper(Wrapper):
             info = {}
             info["actions"] = np.array(action)
             self.action_infos.append(info)
+
+            self.obs_infos.append(obs)
+            self.rewards.append(reward)
+            self.dones.append(done)
 
         # flush collected data to disk if necessary
         if self.t % self.flush_freq == 0:
