@@ -328,6 +328,7 @@ class FrankaReachingExperiment():
         target_half_size=(0.08, 0.15),
         camera_view="agentview",
         random_init=False,
+        random_target=False,
     ):
 
         self.action_dof = action_dof # eef [dx, dy]
@@ -346,10 +347,11 @@ class FrankaReachingExperiment():
             ignore_done=True,
             # target_half_size=self.target_half_size,
             random_init=random_init,
+            random_target=random_target,
         )
 
         self.env = VisualizationWrapper(self.env, indicator_configs=None)
-        # self.env.set_visualization_setting("grippers", False)
+        self.env.set_visualization_setting("grippers", False)
         obs = self.env.reset()
 
     ################# For Reaching Environment ###################
@@ -376,7 +378,7 @@ class FrankaReachingExperiment():
             r.set("action", "0, 0") # reset action to neutral
 
             obs = self.env.reset()
-            self.env.modify_observable(observable_name="robot0_joint_pos", attribute="active", modifier=True)
+            self.env.modify_observable(observable_name="robot0_joint_pos", attribute="active", modifier=False)
 
             self.env.render()
 
@@ -561,13 +563,13 @@ def str2ndarray(array_str, shape):
     return output
 
 def main():
-
+    import time
     # Setup printing options for numbers
     np.set_printoptions(formatter={"float": lambda x: "{0:0.3f}".format(x)})
     
     # change "target_half_size" in below line to change the size of the target region
     # currently, position of target region cannot be changed 
-    reaching_task = FrankaReachingExperiment(camera_view="sideview", random_init=False)
+    reaching_task = FrankaReachingExperiment(camera_view="frontview", random_init=False, random_target=True)
     reaching_task.spacemouse_control()
     # reaching_task.keyboard_input()
     # reaching_task.redis_control()

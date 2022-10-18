@@ -2,8 +2,8 @@ import numpy as np
 
 import robosuite.utils.transform_utils as T
 from robosuite.models.objects import CompositeObject
-from robosuite.utils.mjcf_utils import RED, add_to_dict
-
+from robosuite.utils.mjcf_utils import GREEN, add_to_dict, array_to_string
+import pdb
 
 class TargetMarker3dObject(CompositeObject):
     """
@@ -27,7 +27,7 @@ class TargetMarker3dObject(CompositeObject):
     def __init__(
         self,
         name,
-        base_half_size=(0.05, 0.001),
+        base_half_size=(0.05, 0.01),
         target_half_size=(0.025, 0.05),
         target_height=0.2,
         density=1000,
@@ -41,10 +41,7 @@ class TargetMarker3dObject(CompositeObject):
         self.target_half_size = target_half_size
         self.target_height = target_height
         self.density = density
-        self.rgba = np.array(rgba) if rgba else RED
-
-        # # Element references to be filled when generated
-        # self.top_surface = None
+        self.rgba = np.array(rgba) if rgba else GREEN
 
         # Other private attributes
         self._important_sites = {}
@@ -67,7 +64,8 @@ class TargetMarker3dObject(CompositeObject):
             (
                 body_radius,
                 body_radius,
-                0.5 * self.base_half_size[1] + self.target_height + self.target_half_size[1]
+                # 0.5 * self.base_half_size[1] + self.target_height + self.target_half_size[1]
+                self.base_half_size[1]
             )
         )
         # Initialize dict of obj args that we'll pass to the CompositeObject constructor
@@ -101,21 +99,29 @@ class TargetMarker3dObject(CompositeObject):
         base_site.update(
             {
                 "name": center_name,
-                "pos": "0 0 " + str(self.target_height),
-                "size": str(self.target_half_size[0]) + " " + str(self.target_half_size[1]),
+                "size": "0.005",
+            }
+        )
+        site_attrs.append(base_site)
+        self._important_sites["center"] = self.naming_prefix + center_name
+
+        target_site = self.get_site_attrib_template()
+        target_center_name = "target"
+        target_site.update(
+            {
+                "name": target_center_name,
+                "pos": "0 0 " + str(self.target_height - self.base_half_size[1]),
+                "size": array_to_string(self.target_half_size),
                 "type": "cylinder",
                 "rgba": "0 1 0 0.3",
                 "group": "1",
             }
         )
-        site_attrs.append(base_site)
+        site_attrs.append(target_site)
+        self._important_sites[target_center_name] = self.naming_prefix + target_center_name
 
-        # Add to important sites
-        self._important_sites["center"] = self.naming_prefix + center_name
-
-        # Add back in base args and site args
         obj_args.update(base_args)
-        obj_args["sites"] = site_attrs  # All sites are part of main (top) body
+        obj_args["sites"] = site_attrs
 
         # Return this dict
         return obj_args

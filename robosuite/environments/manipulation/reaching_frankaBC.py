@@ -156,7 +156,7 @@ class ReachingFrankaBC(SingleArmEnv):
         gripper_types="default",
         initialization_noise=None,
         table_full_size=(0.65, 0.65, 0.15),
-        table_friction=(1.0, 5e-3, 1e-4),
+        table_friction=(100, 100, 100),
         use_camera_obs=True,
         use_object_obs=True,
         reward_scale=1.0,
@@ -179,7 +179,7 @@ class ReachingFrankaBC(SingleArmEnv):
         renderer="mujoco",
         renderer_config=None,
         target_half_size=(0.05, 0.05), # target radius, half height
-        target_position=(0.0, 0.0, 0.5), # target position (height above the table)
+        target_position=(0.0, 0.0, 0.2), # target position (height above the table)
         random_init=True,
         random_target=True,
     ):
@@ -214,6 +214,7 @@ class ReachingFrankaBC(SingleArmEnv):
         self.workspace_z = (0.83, 1.4)
 
         self.reset_ready = False # hack to fix target initialized in wrong position issue
+        self.loadmodel_ready = False
 
         super().__init__(
             robots=robots,
@@ -276,6 +277,7 @@ class ReachingFrankaBC(SingleArmEnv):
         """
         Loads an xml model, puts it in self.model
         """
+
         super()._load_model()
 
         # Adjust base pose accordingly
@@ -294,19 +296,18 @@ class ReachingFrankaBC(SingleArmEnv):
         # Arena always gets set to zero origin
         mujoco_arena.set_origin([0, 0, 0])
 
-        # initialize target object (thin disk on table markin target in x, y - z should be read from delta_to_target observation)
-        # self.target = CylinderObject(
-        #     name="target",
-        #     size=(self.target_half_size[0], 0.001),
-        #     # size=self.target_half_size,
-        #     rgba=(1,0,0,0.5),
-        #     obj_type="all"
-        # )
-        # self.target = CanObject(name="target")
+        # Initialize target object
+        if self.random_target: # sample target position if using random target initialization
+            self.target_position = np.concatenate((
+                np.random.uniform(self.workspace_x[0] + self.target_half_size[0], self.workspace_x[1] - self.target_half_size[0], 1), # x
+                np.random.uniform(self.workspace_y[0] + self.target_half_size[0], self.workspace_y[1] - self.target_half_size[1], 1), # y
+                np.random.uniform(self.workspace_z[0] + self.target_half_size[1], self.workspace_z[1] - self.target_half_size[1], 1), # z
+            ))
+        
         self.target = TargetMarker3dObject(
             name="target",
             target_half_size=self.target_half_size,
-            target_height=0.2,
+            target_height=self.target_position[2] - self.table_offset[2],
         )
 
         # task includes arena, robot, and objects of interest
@@ -375,19 +376,12 @@ class ReachingFrankaBC(SingleArmEnv):
         """
         super()._reset_internal()
 
-        # sample target position
-        if self.random_target:
-            self.target_position = np.concatenate((
-                np.random.uniform(self.workspace_x[0] + self.target_half_size[0], self.workspace_x[1] - self.target_half_size[0], 1), # x
-                np.random.uniform(self.workspace_y[0] + self.target_half_size[0], self.workspace_y[1] - self.target_half_size[1], 1), # y
-                np.random.uniform(self.workspace_z[0] + self.target_half_size[1], self.workspace_z[1] - self.target_half_size[1], 1)
-            ))
-        # set target position
-        target_xpos = np.array((self.target_position[0], self.target_position[1], self.table_offset[2] + 0.001))
-        target_xpos = np.concatenate((target_xpos, np.array((0, 0, 0, 1))))
+        target_xpos = np.concatenate((self.target_position, np.array([0, 0, 0, 1])))
+        target_xpos[2] = self.table_offset[2] + self.target.base_half_size[1]
         self.sim.data.set_joint_qpos(self.target.joints[0], target_xpos)
 
         self.reset_ready = True
+
         print("TARGET PLACED AT: ", self.target_position)
         print("END reset internal")
 
@@ -461,6 +455,7 @@ class ReachingFrankaBC(SingleArmEnv):
 
     def step(self, action):
 
+        # pdb.set_trace()
         sf = 3 # safety factor to prevent robot from moving out of bounds
         eef_x_in_bounds = self.workspace_x[0] < self._eef_xpos[0] + sf * action[0] / self.control_freq < self.workspace_x[1]
         eef_y_in_bounds = self.workspace_y[0] < self._eef_xpos[1] + sf * action[1] / self.control_freq < self.workspace_y[1]
