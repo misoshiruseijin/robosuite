@@ -7,13 +7,13 @@ import pdb
 
 class TargetMarker3dObject(CompositeObject):
     """
-    Generates a floating target marker with a disk-shaped base (has collision) that sits on a surface
+    Generates a floating target marker with a square base (has collision) that sits on a surface
     and target (no collision) floating above the base
 
     Args:
         name (str): Name of this target object
 
-        base_half_size (2-array of float): If specified, defines the base dimensions (radius, half height)
+        base_half_size (2-array of float): If specified, defines the base dimensions (side-lengths, thickness)
 
         target_half_size (n-array of float): If specified, defines the target dimensions
         
@@ -27,7 +27,7 @@ class TargetMarker3dObject(CompositeObject):
     def __init__(
         self,
         name,
-        base_half_size=(0.05, 0.01),
+        base_half_size=(0.05, 0.005),
         target_half_size=(0.025, 0.05),
         target_height=0.2,
         density=1000,
@@ -83,16 +83,15 @@ class TargetMarker3dObject(CompositeObject):
         self.base = [name]
         add_to_dict(
             dic=obj_args,
-            geom_types="cylinder",
+            geom_types="box",
             geom_locations=(0, 0, self.base_half_size[1]),
             geom_quats=(0, 0, 0, 1),
-            geom_sizes=self.base_half_size,
+            geom_sizes=(self.base_half_size[0], self.base_half_size[0], self.base_half_size[1]),
             geom_names=name,
             geom_rgbas=self.rgba,
             geom_frictions=None,
             density=self.density,
         )
-
         # Add body site
         base_site = self.get_site_attrib_template()
         center_name = "center"

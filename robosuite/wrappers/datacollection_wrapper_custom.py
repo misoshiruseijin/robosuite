@@ -126,6 +126,7 @@ class CustomDataCollectionWrapper(Wrapper):
             rewards=self.rewards,
             dones=self.dones,
             env=env_name,
+            num_samples=self.t,
         )
         self.states = []
         self.action_infos = []

@@ -13,6 +13,7 @@ import os
 import shutil
 import time
 from glob import glob
+import copy
 
 import h5py
 import numpy as np
@@ -113,11 +114,13 @@ def gather_demonstrations_as_hdf5(directory, out_dir, env_info):
     f = h5py.File(hdf5_path, "w")
 
     # store some metadata in the attributes of one group
-    # if "data" not in f.keys():
     grp = f.create_group("data")
+    grp_mask = f.create_group("mask")
 
     num_eps = 0
     env_name = None  # will get populated at some point
+    total_samples = 0
+    demo_names = []
 
     for ep_directory in os.listdir(directory):
 
@@ -125,9 +128,9 @@ def gather_demonstrations_as_hdf5(directory, out_dir, env_info):
         states = []
         actions = []
         observations = []
-        next_obs = []
         rewards = []
         dones = []
+        num_samples = 0
 
         for state_file in sorted(glob(state_paths)):
             dic = np.load(state_file, allow_pickle=True)
@@ -141,6 +144,9 @@ def gather_demonstrations_as_hdf5(directory, out_dir, env_info):
             rewards.extend(dic["rewards"])
             dones.extend(dic["dones"])
 
+            num_samples += dic["num_samples"]
+            total_samples += dic["num_samples"]
+
         if len(states) == 0:
             continue
 
@@ -153,12 +159,16 @@ def gather_demonstrations_as_hdf5(directory, out_dir, env_info):
         num_eps += 1
 
         ep_data_grp = grp.create_group("demo_{}".format(num_eps))
+        demo_names.append(f"demo_{num_eps}")
 
         # store model xml as an attribute
         xml_path = os.path.join(directory, ep_directory, "model.xml")
         with open(xml_path, "r") as f:
             xml_str = f.read()
         ep_data_grp.attrs["model_file"] = xml_str
+
+        # store number of samples in this episode
+        ep_data_grp.attrs["num_samples"] = num_samples
 
         # write datasets for states, actions, rewards, dones, obs, next_obs
         ep_data_grp.create_dataset("states", data=np.array(states))
@@ -167,20 +177,31 @@ def gather_demonstrations_as_hdf5(directory, out_dir, env_info):
         ep_data_grp.create_dataset("dones", data=np.array(dones))
 
         obs = {key : observations[0][key] for key in observations[0].keys()}
+        # pdb.set_trace()
+        
         for key in obs:
             for observation in observations:
                 obs[key] = np.vstack((obs[key], observation[key]))
             ep_data_grp[f"obs/{key}"] = obs[key][:-1]
             ep_data_grp[f"next_obs/{key}"] = obs[key][1:]
+        # pdb.set_trace()
 
     # write dataset attributes (metadata)
-    now = datetime.datetime.now()
-    grp.attrs["date"] = "{}-{}-{}".format(now.month, now.day, now.year)
-    grp.attrs["time"] = "{}:{}:{}".format(now.hour, now.minute, now.second)
-    grp.attrs["repository_version"] = suite.__version__
-    grp.attrs["env"] = env_name
-    grp.attrs["env_info"] = env_info
-
+    # now = datetime.datetime.now()
+    # grp.attrs["date"] = "{}-{}-{}".format(now.month, now.day, now.year)
+    # grp.attrs["time"] = "{}:{}:{}".format(now.hour, now.minute, now.second)
+    # grp.attrs["repository_version"] = suite.__version__
+    grp.attrs["env_name"] = env_name
+    grp.attrs["type"] = 1
+    grp.attrs["env_args"] = env_info
+    grp.attrs["total"] = total_samples
+    # pdb.set_trace()
+    
+    # write masks
+    np.random.shuffle(demo_names)
+    n_valid = max(num_eps // 10, 1)
+    grp_mask.create_dataset("train", data=demo_names[n_valid:], dtype="S8")
+    grp_mask.create_dataset("valid", data=demo_names[:n_valid], dtype="S8")
     print("===============Saved hdf5=============")
     f.close()
 
@@ -238,7 +259,25 @@ if __name__ == "__main__":
     env = VisualizationWrapper(env)
 
     # Grab reference to controller config and convert it to json-encoded string
-    env_info = json.dumps(config)
+    # env_info = json.dumps(config)
+
+    # rearrange dictionary to match robomimic requirements
+    env_args = copy.deepcopy(config)
+    env_args["type"] = 1 # add type (1 = robosuite)
+    env_kwargs = {}
+    for key in config:
+        if key == "type" or key == "env_name":
+            continue
+        env_kwargs[key] = config[key]
+        del env_args[key]
+    env_args["env_kwargs"] = env_kwargs
+
+    env_info = json.dumps(env_args)
+    # pdb.set_trace()
+
+    # file = h5py.File("/home/ayanoh/robosuite/robosuite/models/assets/demonstrations/franka_reaching_robosuite/franka_reaching_robosuite_50.hdf5", "r+")
+    # file["data"].attrs["env_args"] = json.dumps(env_args)
+    # file.close()
 
     # wrap the environment with data collection wrapper
     tmp_directory = "/tmp/{}".format(str(time.time()).replace(".", "_"))
@@ -267,9 +306,12 @@ if __name__ == "__main__":
     # make a new timestamped directory
     t1, t2 = str(time.time()).split(".")
     new_dir = os.path.join(args.directory, "{}_{}".format(t1, t2))
+
     os.makedirs(new_dir)
 
     # collect demonstrations
-    for _ in range(2):
-        collect_human_trajectory(env, device, args.arm, args.config)
+    n_eps_to_collect = 5
+    for i in range(n_eps_to_collect):
+        print(f"----------{i}------------")
+        collect_human_trajectory(env, device, args.arm, args.config)    
     gather_demonstrations_as_hdf5(tmp_directory, new_dir, env_info)

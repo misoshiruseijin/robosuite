@@ -209,9 +209,9 @@ class ReachingFrankaBC(SingleArmEnv):
         self.random_target = random_target
 
         # workspace boundaries
-        self.workspace_x = (-0.25, 0.25)
+        self.workspace_x = (-0.2, 0.2)
         self.workspace_y = (-0.3, 0.3)
-        self.workspace_z = (0.83, 1.4)
+        self.workspace_z = (0.83, 1.3)
 
         self.reset_ready = False # hack to fix target initialized in wrong position issue
         self.loadmodel_ready = False
