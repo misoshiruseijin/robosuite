@@ -2,61 +2,55 @@ import h5py
 import pdb
 import random
 
-path = "/home/ayanoh/robosuite/robosuite/models/assets/demonstrations/franka_reaching_robosuite/franka_reaching_robosuite_50.hdf5"
-f = h5py.File(path, "r+")
-f2 = h5py.File("/home/ayanoh/robomimic/datasets/lift/ph/low_dim.hdf5", "r")
+import robosuite
 
-pdb.set_trace()
-# print("myfile")
-# for i in range(1, 51):
-#     print(f"demo_{i}")
-#     print(f[f"data/demo_{i}/actions"][0])
-#     print(f[f"data/demo_{i}/obs/robot0_eef_pos"][0])
-#     print(f[f"data/demo_{i}/obs/robot0_delta_to_target"][0])
-#     print(f[f"data/demo_{i}/next_obs/robot0_eef_pos"][0])
-#     print(f[f"data/demo_{i}/next_obs/robot0_delta_to_target"][0])
-#     print(f[f"data/demo_{i}/rewards"][0])
-#     print(f[f"data/demo_{i}/dones"][0])
-#     print(f[f"data/demo_{i}/states"][0])
+def do_nothing(hdf5_path):
+    f = h5py.File(hdf5_path)
+    pdb.set_trace()
 
-# pdb.set_trace()
-# print("example file")
-# for i in range(1, 51):
-#     print(f"demo_{i}")
-#     print(f2[f"data/demo_{i}/actions"][0])
-#     print(f2[f"data/demo_{i}/obs/robot0_eef_pos"][0])
-#     print(f2[f"data/demo_{i}/next_obs/robot0_eef_pos"][0])
-#     print(f2[f"data/demo_{i}/rewards"][0])
-#     print(f2[f"data/demo_{i}/dones"][0])
-#     print(f2[f"data/demo_{i}/states"][0])
-# for i in range(1, 51):
-#     print(f"demo_{i}")
-#     print(f[f"data/demo_{i}/actions"].shape)
-#     print(f[f"data/demo_{i}/obs/robot0_eef_pos"].shape)
-#     print(f[f"data/demo_{i}/obs/robot0_delta_to_target"].shape)
-#     print(f[f"data/demo_{i}/next_obs/robot0_eef_pos"].shape)
-#     print(f[f"data/demo_{i}/next_obs/robot0_delta_to_target"].shape)
-#     print(f[f"data/demo_{i}/rewards"].shape)
-#     print(f[f"data/demo_{i}/dones"].shape)
-#     print(f[f"data/demo_{i}/states"].shape)
+def update_num_samples(hdf5_path):
+    f = h5py.File(hdf5_path, "r+")
+    total = 0
+    for key in f["data"].keys():
+        num_samples = f["data"][key]["actions"].shape[0]
+        total += num_samples
+        f["data"][key].attrs["num_samples"] = num_samples
 
-# pdb.set_trace()
+    f["data"].attrs["total"] = total
+    pdb.set_trace()
+    f.close()
 
-# print("example file")
+def copy_model_file(hdf5_path):
+    f = h5py.File(hdf5_path)
+    model_file = f["data/demo_1"].attrs["model_file"]
+    for key in f["data"].keys():
+        f["data"][key].attrs["model_file"] = model_file
 
-# for i in range(1, 51):
-#     print(f"demo_{i}")
-#     print(f2[f"data/demo_{i}/actions"].shape)
-#     print(f2[f"data/demo_{i}/obs/robot0_eef_pos"].shape)
-#     print(f2[f"data/demo_{i}/next_obs/robot0_eef_pos"].shape)
-#     print(f2[f"data/demo_{i}/rewards"].shape)
-#     print(f2[f"data/demo_{i}/dones"].shape)
-#     print(f2[f"data/demo_{i}/states"].shape)
+# def concat_hdf5_files(hdf5_path1, hdf5_path2):
+#     f1 = h5py.File(hdf5_path1, "r+")
+#     f2 = h5py.File(hdf5_path2, "r+")
+#     # pdb.set_trace()
+#     n = len(f1["data"].keys()) + 1
+#     n_added = 0
+#     for key in f2["data"].keys():
+#         f1["data"].create_group(f"demo_{n}")
+#         f2.copy(f2["data"][key], f1[f"data/demo_{n}"])
+#         f1[f"data/demo_{n}"].attrs["model_file"] = f2["data"][key].attrs["model_file"]
+#         f1[f"data/demo_{n}"].attrs["num_samples"] = f2["data"][key].attrs["num_samples"]
+#         n_added += f2["data"][key].attrs["num_samples"]
+#         n += 1
+#     f1["data"].attrs["total"] = f1["data"].attrs["total"] + n_added
+
+#     pdb.set_trace()
+#     f1.close()
+#     f2.close()
 
 
-# pdb.set_trace()
+path1 = "/home/ayanoh/robosuite/robosuite/models/assets/demonstrations/franka_reaching_robosuite/reaching_100.hdf5"
+path2 = "/home/ayanoh/robosuite/robosuite/models/assets/demonstrations/franka_reaching_robosuite/reaching_50_2.hdf5"
 
-
+# do_nothing(path1)
+update_num_samples(path1)
 
 # if "mask" in f.keys():
 #     del f["mask"]

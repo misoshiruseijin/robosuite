@@ -171,7 +171,7 @@ class ReachingFrankaBC(SingleArmEnv):
         horizon=1000,
         ignore_done=False,
         hard_reset=True,
-        camera_names="agentview",
+        camera_names="frontview",
         camera_heights=256,
         camera_widths=256,
         camera_depths=False,
@@ -537,7 +537,7 @@ class ReachingFrankaBC(SingleArmEnv):
             while np.any(np.abs(self._eef_xpos - self.initial_eef_pos) > thresh):
                 action = 4 * (self.initial_eef_pos - self._eef_xpos) / np.linalg.norm(self.initial_eef_pos - self._eef_xpos)
                 action = np.concatenate((action, np.array([0, 0, 0, -1])))
-                observations = self.step_no_count(action)
+                observations, reward, done, info = self.step_no_count(action)
                 # print("error to initial pos ", initial_pos - self._eef_xpos)
         
         self.reset_ready = False

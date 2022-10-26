@@ -3,6 +3,7 @@ import numpy as np
 import redis
 from robosuite import load_controller_config
 from  robosuite.devices import Keyboard, SpaceMouse
+from robosuite.environments.manipulation.reaching_2d import Reaching2D
 from robosuite.utils.input_utils import input2action
 from robosuite.wrappers import VisualizationWrapper
 import pdb
@@ -324,14 +325,12 @@ class FrankaReachingExperiment():
     def __init__(
         self,
         controller_config=load_controller_config(default_controller="OSC_POSE"),
-        action_dof=2,
         target_half_size=(0.08, 0.15),
         camera_view="agentview",
         random_init=False,
         random_target=False,
     ):
 
-        self.action_dof = action_dof # eef [dx, dy]
         self.target_half_size = target_half_size
 
         # initialize environment
@@ -355,159 +354,6 @@ class FrankaReachingExperiment():
         obs = self.env.reset()
 
     ################# For Reaching Environment ###################
-
-    # Run Simulation - Redis Mode
-    def redis_control(self):
-        """
-        Runs simulation in redis mode.
-        Reads action of form "dx, dy" from redis, and executes the action.
-        Session terminates and restarts when one of the below termination conditions are met:
-            - Arm collides with the table (should not happen since z is constant)
-            - Joint limits are reached
-            - Task is successfully completed
-        """
-        
-        # redis setup
-        r = redis.Redis()
-
-        # read keys
-        self.ACTION_KEY = "action"
-        
-        while True:
-            # Reset environment
-            r.set("action", "0, 0") # reset action to neutral
-
-            obs = self.env.reset()
-            self.env.modify_observable(observable_name="robot0_joint_pos", attribute="active", modifier=False)
-
-            self.env.render()
-
-            # change below while loop condition to terminate session after certain number of steps
-            while True: 
-                action = r.get(self.ACTION_KEY)
-                action = str2ndarray(action, (self.action_dof, ))
-                action = np.append(action, np.array([0, -1]))
-                
-                obs, reward, done, info = self.env.step(action)
-                if done:
-                    print("--- termination condition met ---")
-                    break
-
-                print("EE_POS_XY", obs['robot0_eef_pos'][:-1]) # end effector cartesian position wrt robot base
-                print("REWARD", reward) # reward (1 when ball is inside basket and end effector is not gripping anything)
-
-                self.env.render()
-
-    def keyboard_input(self):
-        """
-        Run simulation in keyboard input mode
-        NOTE: This function is mostly for testing purposes.
-        """
-
-        # Initialize Device (keyboard)
-        device = Keyboard(pos_sensitivity=0.3, rot_sensitivity=1.0)
-        self.env.viewer.add_keypress_callback("any", device.on_press)
-        self.env.viewer.add_keyup_callback("any", device.on_release)
-        self.env.viewer.add_keyrepeat_callback("any", device.on_press)
-
-        while True:
-            # Reset environment
-            obs = self.env.reset()
-            self.env.modify_observable(observable_name="robot0_joint_pos", attribute="active", modifier=True)
-
-            # rendering setup
-            self.env.render()
-
-            # Initialize device control
-            device.start_control()
-
-            while True:
-                # set active robot
-                active_robot = self.env.robots[0]
-                # get action
-                action, grip = input2action(
-                    device=device,
-                    robot=active_robot,
-                )
-
-                print("action", action)
-
-                # action = [x y z eef]
-
-                if action is None:
-                    break
-
-                # take step in simulation
-                obs, reward, done, info = self.env.step(action)
-                # print("EE_POS_XY", obs['robot0_eef_pos'][:-1])
-                # print("REWARD", reward)
-                # print(obs)
-                # print("EEF_XY", obs['robot0_eef_pos_xy'])
-
-                if done:
-                    print("--------Termination Condition Met-------------")
-                    break
-
-                self.env.render()
-
-    def test_step(self):
-
-        action = np.array([0.05, 0, 0, 1])
-        self.env.render()
-        obs = self.env.reset()
-        print("initial position", obs["robot0_eef_pos"])
-        print("action", action)
-
-        for i in range(20):
-            obs, reward, done, info = self.env.step(action)
-            # print("action", action)
-            print(f"step {i}")
-            print("eef pos", obs["robot0_eef_pos"])
-
-        print("final position", obs['robot0_eef_pos'])
-    
-    def record_action_test(self, axis=0, n_steps=50, magnitude=0.05, back_scale=2):
-
-        import imageio
-
-        # Reset environment
-        obs = self.env.reset()
-        self.env.render()
-        self.env.modify_observable(observable_name="robot0_joint_pos", attribute="active", modifier=True)
-
-        action_hist = []
-        state_hist = []
-
-        action = np.zeros(4)
-        action[axis] = magnitude
-
-        for i in range(n_steps):
-            # generate random action in action space [0.1, 0.1]
-            # action = np.random.uniform(-1, 1, 4)
-            # action[:-1] = 0.1 * action[:-1]
-            action_hist.append(action)
-
-            obs, reward, _, _ = self.env.step(action)
-            state_hist.append(obs['robot0_eef_pos'][:2])
-
-            self.env.render()
-
-        action = -action
-        for i in range(int(back_scale*n_steps)):
-
-            action_hist.append(action)
-
-            obs, reward, _, _ = self.env.step(action)
-            state_hist.append(obs['robot0_eef_pos'][:2])
-
-            self.env.render()
-
-        for i in range(2*n_steps):
-            pass
-
-        np.savetxt(f"actions{axis}.txt", np.array(action_hist), delimiter=',', newline='\n', fmt='%1.5f')
-        np.savetxt(f"robosuite_states{axis}.txt", np.array(state_hist), delimiter=',', newline='\n', fmt="%1.5f")
-        
     # run simulation with spacemouse
     def spacemouse_control(self):
         device = SpaceMouse(
@@ -548,6 +394,80 @@ class FrankaReachingExperiment():
                 print("target ", self.env.target_position)
                 self.env.render()
 
+class Franka2DReachingExperiment():
+    def __init__(
+        self,
+        controller_config=load_controller_config(default_controller="OSC_POSITION"),
+        target_half_size=(0.05, 0.05, 0.001),
+        camera_view="agentview",
+        random_init=False,
+        random_target=False,
+    ):
+
+        self.target_half_size = target_half_size
+
+        # initialize environment
+        self.env = suite.make(
+            env_name="Reaching2D",
+            controller_configs=controller_config,
+            robots="Panda",
+            has_renderer=True,
+            has_offscreen_renderer=False,
+            render_camera=camera_view,
+            use_camera_obs=False,
+            control_freq=20,
+            ignore_done=True,
+            target_half_size=self.target_half_size,
+            random_init=random_init,
+            random_target=random_target,
+        )
+
+        self.env = VisualizationWrapper(self.env, indicator_configs=None)
+        # self.env.set_visualization_setting("grippers", False)
+        obs = self.env.reset()
+
+    ################# For Reaching Environment ###################
+    # run simulation with spacemouse
+    def spacemouse_control(self):
+        device = SpaceMouse(
+            vendor_id=9583,
+            product_id=50734,
+            pos_sensitivity=1.0,
+            rot_sensitivity=1.0,
+        )
+
+        device.start_control()
+        while True:
+            # Reset environment
+            obs = self.env.reset()
+            self.env.modify_observable(observable_name="robot0_joint_pos", attribute="active", modifier=True)
+
+            # rendering setup
+            self.env.render()
+
+            # Initialize device control
+            device.start_control()
+
+            while True:
+                # set active robot
+                active_robot = self.env.robots[0]
+                # get action
+                action, grip = input2action(
+                    device=device,
+                    robot=active_robot,
+                )
+                action = action[:4]
+
+                if action is None:
+                    break
+
+                # take step in simulation
+                obs, reward, done, info = self.env.step(action)
+                print("eef_pos ", obs["robot0_eef_pos"])
+                # print("delta ", obs["robot0_delta_to_target"])
+                print("target ", self.env.target_position)
+                self.env.render()
+
 
 
 def str2ndarray(array_str, shape):
@@ -569,7 +489,8 @@ def main():
     
     # change "target_half_size" in below line to change the size of the target region
     # currently, position of target region cannot be changed 
-    reaching_task = FrankaReachingExperiment(camera_view="frontview", random_init=False, random_target=True)
+    # reaching_task = FrankaReachingExperiment(camera_view="frontview", random_init=False, random_target=True)
+    reaching_task = Franka2DReachingExperiment(camera_view="frontview", random_init=True, random_target=True)
     reaching_task.spacemouse_control()
     # reaching_task.keyboard_input()
     # reaching_task.redis_control()

@@ -4,6 +4,9 @@ to generate a learning curriculum (see `demo_learning_curriculum.py`).
 
 The demonstrations can be played back using the `playback_demonstrations_from_pkl.py`
 script.
+
+!!!!!!!!!!! NOTE !!!!!!!!!!!!!!!
+Fix issue with num_samples and total attributes before collecting next dataset!
 """
 
 import argparse
@@ -310,7 +313,7 @@ if __name__ == "__main__":
     os.makedirs(new_dir)
 
     # collect demonstrations
-    n_eps_to_collect = 5
+    n_eps_to_collect = 120
     for i in range(n_eps_to_collect):
         print(f"----------{i}------------")
         collect_human_trajectory(env, device, args.arm, args.config)    
