@@ -179,6 +179,7 @@ class Reaching2D(SingleArmEnv):
     ):
 
         print("INIT")
+
         # settings for table top
         self.table_full_size = table_full_size
         self.table_friction = table_friction
@@ -362,7 +363,7 @@ class Reaching2D(SingleArmEnv):
             return observables
 
     def _reset_internal(self):
-        print("START reset internal")
+        # print("START reset internal")
         """
         Resets simulation internal configurations.
         """
@@ -375,7 +376,7 @@ class Reaching2D(SingleArmEnv):
         self.reset_ready = True
 
         print("TARGET PLACED AT: ", self.target_position)
-        print("END reset internal")
+        # print("END reset internal")
 
     def visualize(self, vis_settings):
         """
@@ -443,19 +444,28 @@ class Reaching2D(SingleArmEnv):
         in_y = region_center[1] - region_bounds[1] < coord[1] < region_center[1] + region_bounds[1]
         return in_x and in_y
 
-    def step(self, action):
+    def _check_action_in_bounds(self, action):
 
         sf = 3 # safety factor to prevent robot from moving out of bounds
-        eef_x_in_bounds = self.workspace_x[0] < self._eef_xpos[0] + sf * action[0] / self.control_freq < self.workspace_x[1]
-        eef_y_in_bounds = self.workspace_y[0] < self._eef_xpos[1] + sf * action[1] / self.control_freq < self.workspace_y[1]
-        
+        x_in_bounds = self.workspace_x[0] < self._eef_xpos[0] + sf * action[0] / self.control_freq < self.workspace_x[1]
+        y_in_bounds = self.workspace_y[0] < self._eef_xpos[1] + sf * action[1] / self.control_freq < self.workspace_y[1]
+        return x_in_bounds and y_in_bounds
+
+    def step(self, action):
+
+        # sf = 3 # safety factor to prevent robot from moving out of bounds
+        # eef_x_in_bounds = self.workspace_x[0] < self._eef_xpos[0] + sf * action[0] / self.control_freq < self.workspace_x[1]
+        # eef_y_in_bounds = self.workspace_y[0] < self._eef_xpos[1] + sf * action[1] / self.control_freq < self.workspace_y[1]
+        action_in_bounds = self._check_action_in_bounds(action)
+
         # ignore z axis and orientation inputs
         action[2:6] = 0
         # ignore gripper inputs
         action[-1] = -1
 
         # if end effector position is off the table, ignore the action
-        if not (eef_x_in_bounds and eef_y_in_bounds):
+        # if not (eef_x_in_bounds and eef_y_in_bounds):
+        if not action_in_bounds:
             action[:-1] = 0
             print("Action out of bounds")
         
@@ -496,7 +506,7 @@ class Reaching2D(SingleArmEnv):
         return observations, reward, done, info
     
     def reset(self):
-        print("Start reset")
+        print("Resetting....")
         observations = super().reset()
 
         # wait for reset_internal to run
@@ -528,7 +538,7 @@ class Reaching2D(SingleArmEnv):
         
         self.reset_ready = False
         print(f"EEF position {self.initial_eef_pos} sampled based on target {self.target_position}")
-        print("End reset")
+        # print("End reset")
         return observations
 
     def _post_action(self, action):
@@ -551,3 +561,7 @@ class Reaching2D(SingleArmEnv):
         done = done or self._check_terminated()
 
         return reward, done, info
+
+    @property
+    def target_pos(self):
+        return self.target_position

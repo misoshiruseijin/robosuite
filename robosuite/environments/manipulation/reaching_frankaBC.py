@@ -351,11 +351,7 @@ class ReachingFrankaBC(SingleArmEnv):
                         else np.zeros(3)
                     )
 
-                @sensor(modality=modality)
-                def target_pos(obs_cache):
-                    return self.target_position
-
-                sensors = [robot0_delta_to_target, target_pos]
+                sensors = [robot0_delta_to_target]
                 names = [s.__name__ for s in sensors]
 
                 # Create observables
@@ -369,7 +365,7 @@ class ReachingFrankaBC(SingleArmEnv):
             return observables
 
     def _reset_internal(self):
-        print("START reset internal")
+        # print("START reset internal")
         """
         Resets simulation internal configurations.
         """
@@ -382,7 +378,7 @@ class ReachingFrankaBC(SingleArmEnv):
         self.reset_ready = True
 
         print("TARGET PLACED AT: ", self.target_position)
-        print("END reset internal")
+        # print("END reset internal")
 
     def visualize(self, vis_settings):
         """
@@ -542,7 +538,7 @@ class ReachingFrankaBC(SingleArmEnv):
         
         self.reset_ready = False
         print(f"EEF position {self.initial_eef_pos} sampled based on target {self.target_position}")
-        print("End reset")
+        # print("End reset")
         return observations
 
     def _post_action(self, action):
