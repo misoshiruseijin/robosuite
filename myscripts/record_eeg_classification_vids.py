@@ -8,9 +8,6 @@ Example:
     $ python demo_video_recording.py --environment Lift --robots Panda
 """
 
-import argparse
-from operator import is_
-
 import imageio
 import numpy as np
 
@@ -20,6 +17,8 @@ from robosuite.wrappers.visualization_wrapper import VisualizationWrapper
 from robosuite.controllers import load_controller_config
 
 import pandas as pd
+import os
+from pathlib import Path
 
 import pdb
 # Set the image convention to opencv so that the images are automatically rendered "right side up" when using imageio
@@ -72,10 +71,7 @@ def is_in_target(target_pos, target_half_size, eef_pos):
         and target_pos[1] - target_half_size[1] < eef_pos[1] < target_pos[1] + target_half_size[1]
     )
 
-if __name__ == "__main__":
-
-    generate_action(np.array((0, 0)), np.array((1,1)), np.array((0.05, 0.05)), False)
-    # pdb.set_trace()
+def record_videos():
     camera_names = "frontview"
     target_half_size = np.array((0.05, 0.05, 0.001))
     terminate_on_success = False
@@ -185,3 +181,91 @@ if __name__ == "__main__":
         df.to_csv(f"videos/video{vid}.csv", index=False)
         # pdb.set_trace()
 
+def trim_video(vid_path, csv_path, save_folder, use_prefix=False, len_thresh=30):
+    import skvideo.io
+
+    # read video and csv
+    vid = skvideo.io.vread(vid_path)
+    df = pd.read_csv(csv_path)
+    goods = df["good"]
+    start_frame = 0
+    clip = 0
+
+    csv_save_path = os.path.join(save_folder, "csvs")
+    vid_save_path = os.path.join(save_folder, "mp4s")
+    os.makedirs(csv_save_path, exist_ok=True)
+    os.makedirs(vid_save_path, exist_ok=True)
+
+    for i in range(1, len(goods)):
+        if not (goods[i] == goods[i-1]): # if behavior changed
+            clip_len = i - start_frame
+            if clip_len >= len_thresh: # skip if clip is too short
+
+                # cut csv and video, save them
+                vid_name = f"clip{clip}_len{clip_len}.mp4"
+                csv_name = f"clip{clip}_len{clip_len}.csv"
+                
+                if use_prefix:
+                    vid_name = Path(vid_path).stem + "_" + vid_name
+                    csv_name = Path(vid_path).stem + "_" + csv_name
+
+                skvideo.io.vwrite(os.path.join(vid_save_path, vid_name), vid[start_frame:i])
+                df_clip = df[start_frame:i]
+                df_clip["step"] = np.arange(len(df_clip["step"]))
+                df_clip.to_csv(os.path.join(csv_save_path, csv_name), index=False)
+                clip += 1
+
+            start_frame = i
+
+    # write last clip
+    clip_len = len(goods) - start_frame
+    if clip_len >= len_thresh:
+        vid_name = f"clip{clip}_len{clip_len}.mp4"
+        csv_name = f"clip{clip}_len{clip_len}.csv"
+
+        if use_prefix:
+            vid_name = Path(vid_path).stem + "_" + vid_name
+            csv_name = Path(vid_path).stem + "_" + csv_name
+        
+        skvideo.io.vwrite(os.path.join(vid_save_path, vid_name), vid[start_frame:])
+        df_clip = df[start_frame:]
+        df_clip["step"] = np.arange(len(df_clip["step"]))
+        df_clip.to_csv(os.path.join(csv_save_path, csv_name), index=False)
+        df[start_frame:].to_csv(os.path.join(csv_save_path, csv_name), index=False)
+
+
+if __name__ == "__main__":
+    
+    source_dir = "/home/ayanoh/robosuite/myscripts/videos/good_bad_mix"
+    save_dir = "/home/ayanoh/robosuite/myscripts/videos/trimmed_30steps"
+
+    csv_source_dir = os.path.join(source_dir, "csvs")
+    vid_source_dir = os.path.join(source_dir, "mp4s")
+    csv_files = os.listdir(csv_source_dir)
+    vid_files = os.listdir(vid_source_dir)
+    csv_files.sort()
+    vid_files.sort()
+
+    # pdb.set_trace()
+    if not len(csv_files) == len(vid_files):
+        raise Exception("every video file must have corresponding csv file")
+
+    os.makedirs(save_dir, exist_ok=True)
+
+    for vid, csv in zip(vid_files, csv_files):
+        print(f"============Vid {vid}, CSV {csv}================")
+
+        vid_name = Path(vid).stem
+        if not vid_name == Path(csv).stem:
+            raise Exception("wrong vid-csv combination")
+
+        # save_folder = os.path.join(save_dir, vid_name)
+        # os.makedirs(save_folder)
+
+
+        trim_video(
+            vid_path=os.path.join(vid_source_dir, vid),
+            csv_path=os.path.join(csv_source_dir, csv),
+            save_folder=save_dir,
+            use_prefix=True
+        )        
