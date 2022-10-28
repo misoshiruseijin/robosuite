@@ -237,7 +237,7 @@ def trim_video(vid_path, csv_path, save_folder, use_prefix=False, len_thresh=30)
 if __name__ == "__main__":
     
     source_dir = "/home/ayanoh/robosuite/myscripts/videos/good_bad_mix"
-    save_dir = "/home/ayanoh/robosuite/myscripts/videos/trimmed_30steps"
+    save_dir = "/home/ayanoh/robosuite/myscripts/videos/trimmed_100steps"
 
     csv_source_dir = os.path.join(source_dir, "csvs")
     vid_source_dir = os.path.join(source_dir, "mp4s")
@@ -267,5 +267,6 @@ if __name__ == "__main__":
             vid_path=os.path.join(vid_source_dir, vid),
             csv_path=os.path.join(csv_source_dir, csv),
             save_folder=save_dir,
-            use_prefix=True
+            use_prefix=True,
+            len_thresh=100
         )        
