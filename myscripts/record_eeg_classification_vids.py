@@ -233,40 +233,67 @@ def trim_video(vid_path, csv_path, save_folder, use_prefix=False, len_thresh=30)
         df_clip.to_csv(os.path.join(csv_save_path, csv_name), index=False)
         df[start_frame:].to_csv(os.path.join(csv_save_path, csv_name), index=False)
 
+def liststr_to_list(liststr, delimiter):
+    from ast import literal_eval
+    liststr = liststr[:1] + liststr[2:]
+    delimiter_idx = liststr.find(delimiter)
+    return literal_eval(liststr[:delimiter_idx] + "," + liststr[delimiter_idx:])
+
+def add_eef_in_target_to_csv(csv_path, target_half_size=(0.05, 0.05)):
+    
+    df = pd.read_csv(csv_path)
+    target_pos = liststr_to_list(df["target_pos"][0], delimiter=" ")
+    in_target = []
+
+    for elem in df["eef_pos"]:
+        eef_pos = liststr_to_list(elem, delimiter=" ")
+        if is_in_target(target_pos, target_half_size, eef_pos):
+            in_target.append(True)
+        else:
+            in_target.append(False)
+
+    df["in_target"] = in_target
+    df.to_csv(csv_path, index=False)
+
 
 if __name__ == "__main__":
     
-    source_dir = "/home/ayanoh/robosuite/myscripts/videos/good_bad_mix"
-    save_dir = "/home/ayanoh/robosuite/myscripts/videos/trimmed_100steps"
+    csv_path = "/home/ayanoh/robosuite/myscripts/videos/trimmed_100steps/csvs"
+    csv_files = os.listdir(csv_path)
+    for file in csv_files:
+        add_eef_in_target_to_csv(os.path.join(csv_path, file))
 
-    csv_source_dir = os.path.join(source_dir, "csvs")
-    vid_source_dir = os.path.join(source_dir, "mp4s")
-    csv_files = os.listdir(csv_source_dir)
-    vid_files = os.listdir(vid_source_dir)
-    csv_files.sort()
-    vid_files.sort()
+    # source_dir = "/home/ayanoh/robosuite/myscripts/videos/good_bad_mix"
+    # save_dir = "/home/ayanoh/robosuite/myscripts/videos/trimmed_100steps"
 
-    # pdb.set_trace()
-    if not len(csv_files) == len(vid_files):
-        raise Exception("every video file must have corresponding csv file")
+    # csv_source_dir = os.path.join(source_dir, "csvs")
+    # vid_source_dir = os.path.join(source_dir, "mp4s")
+    # csv_files = os.listdir(csv_source_dir)
+    # vid_files = os.listdir(vid_source_dir)
+    # csv_files.sort()
+    # vid_files.sort()
 
-    os.makedirs(save_dir, exist_ok=True)
+    # # pdb.set_trace()
+    # if not len(csv_files) == len(vid_files):
+    #     raise Exception("every video file must have corresponding csv file")
 
-    for vid, csv in zip(vid_files, csv_files):
-        print(f"============Vid {vid}, CSV {csv}================")
+    # os.makedirs(save_dir, exist_ok=True)
 
-        vid_name = Path(vid).stem
-        if not vid_name == Path(csv).stem:
-            raise Exception("wrong vid-csv combination")
+    # for vid, csv in zip(vid_files, csv_files):
+    #     print(f"============Vid {vid}, CSV {csv}================")
 
-        # save_folder = os.path.join(save_dir, vid_name)
-        # os.makedirs(save_folder)
+    #     vid_name = Path(vid).stem
+    #     if not vid_name == Path(csv).stem:
+    #         raise Exception("wrong vid-csv combination")
+
+    #     # save_folder = os.path.join(save_dir, vid_name)
+    #     # os.makedirs(save_folder)
 
 
-        trim_video(
-            vid_path=os.path.join(vid_source_dir, vid),
-            csv_path=os.path.join(csv_source_dir, csv),
-            save_folder=save_dir,
-            use_prefix=True,
-            len_thresh=100
-        )        
+    #     trim_video(
+    #         vid_path=os.path.join(vid_source_dir, vid),
+    #         csv_path=os.path.join(csv_source_dir, csv),
+    #         save_folder=save_dir,
+    #         use_prefix=True,
+    #         len_thresh=100
+    #     )        
