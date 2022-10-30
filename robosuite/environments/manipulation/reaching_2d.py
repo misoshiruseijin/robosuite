@@ -209,7 +209,7 @@ class Reaching2D(SingleArmEnv):
         self.workspace_z = (0.83, 1.3)
 
         self.reset_ready = False # hack to fix target initialized in wrong position issue
-        self.loadmodel_ready = False
+        # self.loadmodel_ready = False
 
         super().__init__(
             robots=robots,
@@ -277,8 +277,6 @@ class Reaching2D(SingleArmEnv):
 
         # Adjust base pose accordingly
         xpos = self.robots[0].robot_model.base_xpos_offset["table"](self.table_full_size[0])
-        # xpos += np.array([-0.139, -0.159, 0])
-        # xpos += np.array([-0.25, 0, 0])
         self.robots[0].robot_model.set_base_xpos(xpos)
 
         # load model for table top workspace

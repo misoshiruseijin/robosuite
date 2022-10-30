@@ -282,8 +282,6 @@ class ReachingFrankaBC(SingleArmEnv):
 
         # Adjust base pose accordingly
         xpos = self.robots[0].robot_model.base_xpos_offset["table"](self.table_full_size[0])
-        # xpos += np.array([-0.139, -0.159, 0])
-        # xpos += np.array([-0.25, 0, 0])
         self.robots[0].robot_model.set_base_xpos(xpos)
 
         # load model for table top workspace

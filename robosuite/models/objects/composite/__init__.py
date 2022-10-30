@@ -5,3 +5,5 @@ from .grid import GridObject
 from .rectangular_basket import RectangularBasketObject
 from .floating_stage import FloatingStageObject
 from .target_marker_3d import TargetMarker3dObject
+from .block import BlockObject
+from .stage import StageObject

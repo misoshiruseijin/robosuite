@@ -14,6 +14,7 @@ from robosuite.environments.manipulation.ball_basket import BallBasket
 from robosuite.environments.manipulation.reaching_saywerEF import ReachingSawyerEF
 from robosuite.environments.manipulation.reaching_frankaBC import ReachingFrankaBC
 from robosuite.environments.manipulation.reaching_2d import Reaching2D
+from robosuite.environments.manipulation.drop import Drop
 
 from robosuite.environments import ALL_ENVIRONMENTS
 from robosuite.controllers import ALL_CONTROLLERS, load_controller_config
