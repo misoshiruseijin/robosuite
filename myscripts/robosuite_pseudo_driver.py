@@ -491,7 +491,8 @@ class FrankaDropExperiment():
             use_camera_obs=False,
             control_freq=20,
             ignore_done=True,
-            random_init=False,
+            random_init=True,
+            random_stage=True,
         )
 
         self.env = VisualizationWrapper(self.env, indicator_configs=None)
@@ -529,7 +530,7 @@ class FrankaDropExperiment():
                     robot=active_robot,
                 )
                 action = action[:4]
-                # action[-1] = 1
+                action[-1] = 1
                 if action is None:
                     break
 

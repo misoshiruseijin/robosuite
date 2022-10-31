@@ -94,7 +94,7 @@ class StageObject(CompositeObject):
             geom_types="box",
             geom_locations=(0, 0, 0),
             geom_quats=(1, 0, 0, 0),
-            geom_sizes=np.array([0.025, 0.025, 2*self.body_half_size[2] - self.thickness]),
+            geom_sizes=np.array([0.025, 0.025, self.body_half_size[2] - self.thickness]),
             geom_names=name,
             geom_rgbas=self.rgba,
             geom_frictions=None,
