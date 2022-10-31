@@ -308,7 +308,7 @@ class Drop(SingleArmEnv):
             name="block",
             body_half_size=(0.025,0.025,0.025),
             rgba=(1,0,0,1),
-            density=10
+            density=500
         )
 
         # initialize stage object
@@ -324,7 +324,6 @@ class Drop(SingleArmEnv):
             body_half_size=(self.stage_half_size[0], self.stage_half_size[1], self.stage_half_size[2]),
             rgba=(0,0,1,1)
         )
-        # TODO
 
         # task includes arena, robot, and objects of interest
         self.model = ManipulationTask(
@@ -433,10 +432,12 @@ class Drop(SingleArmEnv):
         obj_pos = self.sim.data.body_xpos[self.block_body_id]
         stage_pos = self.sim.data.body_xpos[self.stage_body_id] + np.array([0, 0, self.stage_half_size[2]])
         stage_size = self.stage_half_size
-
-        return (stage_pos[0] - stage_size[0] < obj_pos[0] < stage_pos[0] + stage_size[0]
+        above_stage = (stage_pos[0] - stage_size[0] < obj_pos[0] < stage_pos[0] + stage_size[0]
                 and stage_pos[1] - stage_size[1] < obj_pos[1] < stage_pos[1] + stage_size[1]
                 and obj_pos[2] > stage_pos[2])
+        # if above_stage:
+        #     print("Above Stage")
+        return above_stage
 
     def _check_grasping_obj(self):
         
@@ -488,16 +489,35 @@ class Drop(SingleArmEnv):
 
         # Prematurely terminate if task is success
         if self._check_success():
-            print("success")
+            # print("success")
             return True
 
         # Prematurely terminate if block is dropped off the stage
         if self._check_obj_dropped():
-            print("obj dropped")
+            # print("obj dropped")
             return True
 
         return False
   
+    def _check_action_in_bounds(self, action):
+
+        sf = 3 # safety factor to prevent robot from moving out of bounds
+
+        # within workspace bounds?
+        x_in_ws = self.workspace_x[0] < self._eef_xpos[0] + sf * action[0] / self.control_freq < self.workspace_x[1]
+        y_in_ws = self.workspace_y[0] < self._eef_xpos[1] + sf * action[1] / self.control_freq < self.workspace_y[1]
+        z_in_ws = self.workspace_z[0] < self._eef_xpos[2] + sf * action[2] / self.control_freq < self.workspace_z[1]
+        in_ws = x_in_ws and y_in_ws and z_in_ws
+
+        # in no-entry zone?
+        x_in_ne = self.ne_x[0] < self._eef_xpos[0] + sf * action[0] / self.control_freq < self.ne_x[1]
+        y_in_ne = self.ne_y[0] < self._eef_xpos[1] + sf * action[0] / self.control_freq < self.ne_y[1]
+        z_in_ne = self.ne_z[0] < self._eef_xpos[2] + sf * action[0] / self.control_freq < self.ne_z[1]
+        in_ne = x_in_ne and y_in_ne and z_in_ne
+
+        # print(f"in_ws {in_ws}, in_ne {in_ne}")
+        return in_ws and not in_ne
+
     def step_no_count(self, action):
         """
         Modified version of step in base environment. Used for random initialization. 
@@ -541,27 +561,16 @@ class Drop(SingleArmEnv):
         # safety factor - increase this to make robot "more cautious" of boundaries
         sf = 0.035
 
-        # no entry zone boundaries
+        # # no entry zone boundaries
         buf = (0.055, 0.11, 0.03)
-        ne_x = (self.stage_pos[0] - self.stage_half_size[0] - buf[0], self.stage_pos[0] + self.stage_half_size[0] + buf[1])
-        ne_y = (self.stage_pos[1] - self.stage_half_size[1] - buf[1], self.stage_pos[1] + self.stage_half_size[1] + buf[1])
-        ne_z = (self.table_offset[2], self.stage_pos[2] + self.stage_half_size[2] + buf[2])
-        x, y, z = self._eef_xpos + (sf * action[:-1])
-        # pdb.set_trace()
-        # check workspace limits (True = action DOES NOT send eef out of bounds)
-        in_ws = (
-            (self.workspace_x[0] < x < self.workspace_x[1])
-                and (self.workspace_y[0] < y < self.workspace_y[1])
-                and (self.workspace_z[0] < z < self.workspace_z[1])
-        )
-
-        # check no entry zone violation (True = action DOES send eef into no entry zone)
-        in_ne = (ne_x[0] < x < ne_x[1]) and (ne_y[0] < y < ne_y[1]) and (ne_z[0] < z < ne_z[1])
+        self.ne_x = (self.stage_pos[0] - self.stage_half_size[0] - buf[0], self.stage_pos[0] + self.stage_half_size[0] + buf[1])
+        self.ne_y = (self.stage_pos[1] - self.stage_half_size[1] - buf[1], self.stage_pos[1] + self.stage_half_size[1] + buf[1])
+        self.ne_z = (self.table_offset[2], self.stage_pos[2] + self.stage_half_size[2] + buf[2])
 
         # ignore action?
-        if not in_ws or in_ne:
+        if not self._check_action_in_bounds(action):
             # set dx, dy, dz = 0
-            print(f"ignoring action: in_ws = {in_ws}, in_ne = {in_ne}")
+            print(f"Action ignored")
             action[:-1] = 0
 
         # update gripper state 
@@ -615,7 +624,7 @@ class Drop(SingleArmEnv):
                 print("sampled pos: ", self.initial_eef_pos)
 
             # move the eef to the sampled initial position
-            thresh = 0.005
+            thresh = 0.01
             while np.any(np.abs(self._eef_xpos - self.initial_eef_pos) > thresh):
                 action = 4 * (self.initial_eef_pos - self._eef_xpos) / np.linalg.norm(self.initial_eef_pos - self._eef_xpos)
                 action = np.concatenate((action, np.array([1])))
@@ -648,4 +657,7 @@ class Drop(SingleArmEnv):
 
             return reward, done, info
 
-
+    @property
+    def stage_top(self):
+        # return coordinate of stage top surface center
+        return self.stage_pos + np.array([0, 0, self.stage_half_size[2]])

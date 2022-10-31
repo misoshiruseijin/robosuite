@@ -521,6 +521,8 @@ class FrankaDropExperiment():
             # Initialize device control
             device.start_control()
 
+            done = False
+
             while True:
                 # set active robot
                 active_robot = self.env.robots[0]
@@ -530,14 +532,16 @@ class FrankaDropExperiment():
                     robot=active_robot,
                 )
                 action = action[:4]
-                action[-1] = 1
+                # action[-1] = 1
                 if action is None:
                     break
 
                 # take step in simulation
                 obs, reward, done, info = self.env.step(action)
                 print("action ", action)
-                print("eef_pos ", obs["robot0_eef_pos"])
+                # print("eef_pos ", obs["robot0_eef_pos"])
+                print("eef_pos ", obs["eef_xyz_gripper"])
+
                 # print("delta ", obs["robot0_delta_to_target"])
                 # print("target ", self.env.target_position)
                 self.env.render()

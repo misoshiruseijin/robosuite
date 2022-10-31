@@ -27,6 +27,7 @@ macros.IMAGE_CONVENTION = "opencv"
 
 np.random.seed(1)
 
+################## Franka 2D Reaching ###########################
 def generate_action(target_pos, eef_pos, target_half_size, sample_good=True):
     """
     Generate action that are clearly good or bad
@@ -179,7 +180,6 @@ def record_videos():
             }
         )
         df.to_csv(f"videos/video{vid}.csv", index=False)
-        # pdb.set_trace()
 
 def trim_video(vid_path, csv_path, save_folder, use_prefix=False, len_thresh=30):
     import skvideo.io
@@ -254,14 +254,163 @@ def add_eef_in_target_to_csv(csv_path, target_half_size=(0.05, 0.05)):
 
     df["in_target"] = in_target
     df.to_csv(csv_path, index=False)
+################## Franka 2D Reaching ###########################
+
+################## Franka Drop ##################################
+def generate_action_drop(drop_pos, stage_half_size, eef_pos, sample_good):
+    """
+    drop_pos: good position to drop object (somewhere above stage)
+    sample_good: whether generated action should be good
+    """
+    speed = 0.3
+    dropped = False # whether this action drops the object
+
+    # if eef height is not enough, move straight up
+    if eef_pos[2] < drop_pos[2]: 
+        action = speed * np.array([0, 0, 1, 1])
+        action[-1] = 1 # keep gripper closed
+
+    else:
+        eps = 0.02
+        should_drop = (
+            (drop_pos[0] - stage_half_size[0] + eps < eef_pos[0] < drop_pos[0] + stage_half_size[0] - eps)
+                and (drop_pos[1] - stage_half_size[1] + eps < eef_pos[1] < drop_pos[1] + stage_half_size[1] - eps)
+        )
+
+        good_u = (drop_pos - eef_pos) / np.linalg.norm(drop_pos - eef_pos) # good direction to move in
+
+        if sample_good:
+            # if good action is requested
+            if should_drop:
+                # drop
+                action = np.array([0, 0, 0, -1])
+                dropped = True
+            else:
+                # if not in good position to drop
+                action = speed * good_u
+                action = np.append(action, 1) # keep gripper closed
+        else:
+            # bad action is requested (should_drop should never be true)
+            theta = np.deg2rad(np.random.uniform(-45, 45, 1)[0]) # angle range
+            rot = np.array([ # rotation matrix
+                [np.cos(theta), -np.sin(theta), 0],
+                [np.sin(theta), np.cos(theta), 0],
+                [0, 0, 1]
+            ])
+            u_bad = np.dot(rot, -good_u) # unit vector in bad direction (clearly away from target)
+            action = 0.3 * (1 / np.max(np.abs(u_bad))) * u_bad
+            action = np.append(action, 1)
+    
+    return action, dropped
+
+
+
+def record_videos_drop():
+    camera_names = "frontview"
+    terminate_on_success = False
+
+    # initialize an environment with offscreen renderer
+    env = make(
+        env_name="Drop",
+        controller_configs=load_controller_config(default_controller="OSC_POSITION"),
+        robots="Panda",
+        has_offscreen_renderer=True,
+        render_camera="frontview",
+        use_camera_obs=True,
+        control_freq=20,
+        random_init=True,
+        random_stage=True,
+        has_renderer=False,
+        use_object_obs=False,
+        camera_names=camera_names,
+        camera_heights=512,
+        camera_widths=512,
+    )
+    env = VisualizationWrapper(env, indicator_configs=None)
+
+    # timesteps = 500
+    n_videos = 50
+    p_good = 0.5 # probability of sampling good action
+    # stage_half_size = env.stage_half_size
+
+    for vid in range(n_videos):
+        """
+        - choose good or bad
+        - get eef and stage surface position
+        - if start eef position is below the stage, move straight up 
+
+        Good Case:
+        - move to above stage, then release
+
+        Bad Case:
+        - move to somewhere other than above stage, then release
+        """
+
+        # good_hist = []
+        eef_state_hist = [] # x, y, z, gripper 
+        action_hist = []
+
+        print(f"----------video {vid}----------")
+
+        video_path = f"videos/video{vid}.mp4"
+
+        # create a video writer with imageio
+        writer = imageio.get_writer(video_path, fps=20)
+
+        obs = env.reset()
+        stage_pos = env.stage_top
+        stage_half_size = env.stage_half_size
+        drop_pos = stage_pos + np.array([0, 0, 0.08])
+
+        # choose if this clip is good
+        good = is_good(p_good)
+        print("Good: ", good)
+        done = False
+        steps_after_drop = 30 # how many steps to record after drop action is taken
+
+        # pdb.set_trace()
+        while steps_after_drop > 0:
+            
+            action, dropped = generate_action_drop(drop_pos, stage_half_size, obs["robot0_eef_pos"], good)
+            
+            # if action is out of bounds, drop
+            if not env._check_action_in_bounds(action):
+                action = np.array([0, 0, 0, -1])
+
+            obs, reward, done, info = env.step(action)
+
+            frame = obs[camera_names + "_image"]
+            writer.append_data(frame)
+
+            eef_state_hist.append(obs["robot0_eef_pos"])
+            action_hist.append(action)
+
+            if done:
+                steps_after_drop -= 1
+        
+        writer.close()
+        
+        # record target po, time, eef pos, actions
+        df = pd.DataFrame(
+            data={
+                "step" : np.arange(len(action_hist)),
+                "action" : pd.Series(action_hist),
+                "eef_pos" : pd.Series(eef_state_hist),
+                "good" : [good] * len(action_hist),
+                "drop_pos" : pd.Series([drop_pos] * len(action_hist)),
+            }
+        )
+        df.to_csv(f"videos/video{vid}.csv", index=False)
 
 
 if __name__ == "__main__":
+
+    record_videos_drop()
     
-    csv_path = "/home/ayanoh/robosuite/myscripts/videos/trimmed_100steps/csvs"
-    csv_files = os.listdir(csv_path)
-    for file in csv_files:
-        add_eef_in_target_to_csv(os.path.join(csv_path, file))
+    # csv_path = "/home/ayanoh/robosuite/myscripts/videos/trimmed_100steps/csvs"
+    # csv_files = os.listdir(csv_path)
+    # for file in csv_files:
+    #     add_eef_in_target_to_csv(os.path.join(csv_path, file))
 
     # source_dir = "/home/ayanoh/robosuite/myscripts/videos/good_bad_mix"
     # save_dir = "/home/ayanoh/robosuite/myscripts/videos/trimmed_100steps"
