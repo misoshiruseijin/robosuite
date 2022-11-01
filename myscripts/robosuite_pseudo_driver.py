@@ -473,8 +473,8 @@ class FrankaDropExperiment():
         self,
         controller_config=load_controller_config(default_controller="OSC_POSITION"),
         action_dof=4,
-        basket_half_size=(0.06, 0.06, 0.05), # size of rectangular basket
-        stage_half_size=(0.07,0.07,0.1), # size of floating stage
+        # basket_half_size=(0.06, 0.06, 0.05), # size of rectangular basket
+        stage_half_size=(0.07,0.07,0.05), # size of floating stage
         fix_basket_pos=(0.1, 0), # fixed position of basket on table (x, y)
     ):
 
@@ -493,6 +493,7 @@ class FrankaDropExperiment():
             ignore_done=True,
             random_init=True,
             random_stage=True,
+            stage_type="basket"
         )
 
         self.env = VisualizationWrapper(self.env, indicator_configs=None)

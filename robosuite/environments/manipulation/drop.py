@@ -3,13 +3,12 @@ from pkgutil import ModuleInfo
 from random import random
 
 import numpy as np
-from robosuite.models.objects.composite.stage import StageObject
 
 import robosuite.utils.transform_utils as T
 
 from robosuite.environments.manipulation.single_arm_env import SingleArmEnv
 from robosuite.models.arenas import TableArena
-from robosuite.models.objects import BlockObject
+from robosuite.models.objects import BlockObject, StageObject, RectangularBasketObject
 
 from robosuite.models.tasks import ManipulationTask
 from robosuite.utils.observables import Observable, sensor
@@ -173,11 +172,12 @@ class Drop(SingleArmEnv):
         camera_segmentations=None,  # {None, instance, class, element}
         renderer="mujoco",
         renderer_config=None,
-        stage_half_size=(0.05, 0.05, 0.075),
+        stage_half_size=(0.05, 0.05, 0.02),
         stage_pos=(0.0, 0.0, 0.15), # target position (height = table surface to stage top surface)
         prehensile=False, # start with obj in gripper if False * NOT USED
         random_init=True, # start in rondom position (somewhere inside sphere around home position)
         random_stage=True, # place stage at random location
+        stage_type="stage", # "stage" or "basket"
     ):
 
         # task setting: start obj in hand or not
@@ -225,6 +225,8 @@ class Drop(SingleArmEnv):
         self.gripper_state = 1 # 1 = closed, -1 = open
 
         self.reset_ready = False
+
+        self.stage_type = stage_type
 
         super().__init__(
             robots=robots,
@@ -311,19 +313,34 @@ class Drop(SingleArmEnv):
             density=500
         )
 
-        # initialize stage object
-        if self.random_stage: # sample target position if using random target initialization
-            self.stage_half_size[2] = np.random.uniform(0.05/2, 0.25/2, 1)[0]
+        if self.stage_type == "stage":
+            # initialize stage object
+            if self.random_stage: # sample target position if using random target initialization
+                self.stage_half_size[2] = np.random.uniform(0.05/2, 0.25/2, 1)[0]
+                self.stage_pos = np.concatenate((
+                    np.random.uniform(self.workspace_x[0] + self.stage_half_size[0], self.workspace_x[1] - self.stage_half_size[0], 1),
+                    np.random.uniform(self.workspace_y[0] + self.stage_half_size[1], self.workspace_y[1] - self.stage_half_size[1], 1),
+                    np.array([self.table_offset[2] + self.stage_half_size[2]])
+                ))
+            self.stage = StageObject(
+                name="stage",
+                body_half_size=(self.stage_half_size[0], self.stage_half_size[1], self.stage_half_size[2]),
+                rgba=(0.75,0.75,0.75,1)
+            )
+        
+        elif self.stage_type == "basket":
+            # initialize basket object
+            self.stage = RectangularBasketObject(
+                name="stage",
+                body_half_size=self.stage_half_size,
+                rgba=(0.75,0.75,0.75,1),
+                thickness=0.005
+            )
             self.stage_pos = np.concatenate((
                 np.random.uniform(self.workspace_x[0] + self.stage_half_size[0], self.workspace_x[1] - self.stage_half_size[0], 1),
                 np.random.uniform(self.workspace_y[0] + self.stage_half_size[1], self.workspace_y[1] - self.stage_half_size[1], 1),
                 np.array([self.table_offset[2] + self.stage_half_size[2]])
             ))
-        self.stage = StageObject(
-            name="stage",
-            body_half_size=(self.stage_half_size[0], self.stage_half_size[1], self.stage_half_size[2]),
-            rgba=(0,0,1,1)
-        )
 
         # task includes arena, robot, and objects of interest
         self.model = ManipulationTask(
@@ -489,7 +506,7 @@ class Drop(SingleArmEnv):
 
         # Prematurely terminate if task is success
         if self._check_success():
-            # print("success")
+            print("success")
             return True
 
         # Prematurely terminate if block is dropped off the stage
@@ -605,10 +622,11 @@ class Drop(SingleArmEnv):
 
         if self.random_init:
             # sample random position inside workspace
+            c = 1
             self.initial_eef_pos = np.concatenate((
-                np.random.uniform(self.workspace_x[0], self.workspace_x[1], 1),
-                np.random.uniform(self.workspace_y[0], self.workspace_y[1], 1),
-                np.random.uniform(self.workspace_z[0], self.workspace_z[1], 1)
+                np.random.uniform(c*self.workspace_x[0], c*self.workspace_x[1], 1),
+                np.random.uniform(c*self.workspace_y[0], c*self.workspace_y[1], 1),
+                np.random.uniform(c*self.workspace_z[0], c*self.workspace_z[1], 1)
             ))
 
             # sample again if start position collides with stage or is too close 

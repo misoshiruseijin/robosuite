@@ -289,6 +289,7 @@ def generate_action_drop(drop_pos, stage_half_size, eef_pos, sample_good):
                 # if not in good position to drop
                 action = speed * good_u
                 action = np.append(action, 1) # keep gripper closed
+
         else:
             # bad action is requested (should_drop should never be true)
             theta = np.deg2rad(np.random.uniform(-45, 45, 1)[0]) # angle range
@@ -308,7 +309,6 @@ def generate_action_drop(drop_pos, stage_half_size, eef_pos, sample_good):
 def record_videos_drop():
     camera_names = "frontview"
     terminate_on_success = False
-
     # initialize an environment with offscreen renderer
     env = make(
         env_name="Drop",
@@ -320,6 +320,7 @@ def record_videos_drop():
         control_freq=20,
         random_init=True,
         random_stage=True,
+        stage_type="basket",
         has_renderer=False,
         use_object_obs=False,
         camera_names=camera_names,
@@ -349,6 +350,8 @@ def record_videos_drop():
         # good_hist = []
         eef_state_hist = [] # x, y, z, gripper 
         action_hist = []
+        success = []
+        failure = []
 
         print(f"----------video {vid}----------")
 
@@ -361,6 +364,7 @@ def record_videos_drop():
         stage_pos = env.stage_top
         stage_half_size = env.stage_half_size
         drop_pos = stage_pos + np.array([0, 0, 0.08])
+        dropped = False
 
         # choose if this clip is good
         good = is_good(p_good)
@@ -371,11 +375,13 @@ def record_videos_drop():
         # pdb.set_trace()
         while steps_after_drop > 0:
             
-            action, dropped = generate_action_drop(drop_pos, stage_half_size, obs["robot0_eef_pos"], good)
+            if not dropped:
+                action, dropped = generate_action_drop(drop_pos, stage_half_size, obs["robot0_eef_pos"], good)
             
             # if action is out of bounds, drop
             if not env._check_action_in_bounds(action):
                 action = np.array([0, 0, 0, -1])
+                dropped = True
 
             obs, reward, done, info = env.step(action)
 
@@ -384,6 +390,15 @@ def record_videos_drop():
 
             eef_state_hist.append(obs["robot0_eef_pos"])
             action_hist.append(action)
+
+            if dropped and good:
+                success.append(True)
+            else:
+                success.append(False)
+            if dropped and not good:
+                failure.append(True)
+            else:
+                failure.append(False)
 
             if done:
                 steps_after_drop -= 1
@@ -398,6 +413,8 @@ def record_videos_drop():
                 "eef_pos" : pd.Series(eef_state_hist),
                 "good" : [good] * len(action_hist),
                 "drop_pos" : pd.Series([drop_pos] * len(action_hist)),
+                "success": success,
+                "failure": failure,
             }
         )
         df.to_csv(f"videos/video{vid}.csv", index=False)
