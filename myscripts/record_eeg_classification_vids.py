@@ -304,8 +304,6 @@ def generate_action_drop(drop_pos, stage_half_size, eef_pos, sample_good):
     
     return action, dropped
 
-
-
 def record_videos_drop():
     camera_names = "frontview"
     terminate_on_success = False
@@ -422,12 +420,12 @@ def record_videos_drop():
 
 if __name__ == "__main__":
 
-    record_videos_drop()
+    # record_videos_drop()
     
-    # csv_path = "/home/ayanoh/robosuite/myscripts/videos/trimmed_100steps/csvs"
-    # csv_files = os.listdir(csv_path)
-    # for file in csv_files:
-    #     add_eef_in_target_to_csv(os.path.join(csv_path, file))
+    csv_path = "/home/ayanoh/robosuite/myscripts/videos/good_bad_mix/csvs"
+    csv_files = os.listdir(csv_path)
+    for file in csv_files:
+        add_eef_in_target_to_csv(os.path.join(csv_path, file))
 
     # source_dir = "/home/ayanoh/robosuite/myscripts/videos/good_bad_mix"
     # save_dir = "/home/ayanoh/robosuite/myscripts/videos/trimmed_100steps"
