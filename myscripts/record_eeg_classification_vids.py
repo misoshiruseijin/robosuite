@@ -417,15 +417,111 @@ def record_videos_drop():
         )
         df.to_csv(f"videos/video{vid}.csv", index=False)
 
+def record_videos_move_obj(initial_eef_pos, final_eef_pos, speed, video_path="video.mp4", csv_path="data.csv", camera_names="frontview", obj_rgba=(1,0,0,1)):
+
+    # initialize an environment with offscreen renderer
+    env = make(
+        env_name="Object_and_Table",
+        controller_configs=load_controller_config(default_controller="OSC_POSITION"),
+        robots="Panda",
+        has_renderer=False,
+        has_offscreen_renderer=True,
+        render_camera="frontview",
+        use_camera_obs=True,
+        control_freq=20,
+        ignore_done=True,
+        initial_eef_pos=initial_eef_pos, # where on the table eef should start from
+        obj_half_size=(0.025, 0.025, 0.025), # half size of object (cube)
+        obj_rgba=obj_rgba, # object rgba 
+        camera_names=camera_names,
+        camera_heights=512,
+        camera_widths=512,
+    )
+
+    obs = env.reset()
+    eef_pos = obs["robot0_eef_pos"]
+
+    # create a video writer with imageio
+    writer = imageio.get_writer(video_path, fps=20)
+
+    thresh = 0.03 # how close eef must be before recording stops
+    if speed > 0.9:
+        thresh = 0.1
+
+    eef_pos_hist = []
+    action_hist = []
+
+    final_eef_pos = final_eef_pos + np.array([0, 0, env.table_offset[2] + 0.04])
+    n_frames = 0
+
+    while np.any(np.abs(eef_pos - final_eef_pos) > thresh):
+        if n_frames % 100 == 0:
+            print("frame ", n_frames)
+        u = (final_eef_pos - eef_pos) / np.linalg.norm(final_eef_pos - eef_pos)
+        action = np.append(speed * u, 1)
+        obs, reward, done, info = env.step(action)
+        frame = obs[camera_names + "_image"]
+        writer.append_data(frame)
+
+        eef_pos = obs["robot0_eef_pos"]
+        eef_pos_hist.append(eef_pos)
+        action_hist.append(action)
+        # print("action ", action)
+        # print("eef pos ", eef_pos)
+        # print("error ", eef_pos - final_eef_pos)
+        n_frames += 1
+
+    writer.close()
+
+    df = pd.DataFrame(
+        data={
+            "step" : np.arange(len(action_hist)),
+            "action" : pd.Series(action_hist),
+            "eef_pos" : pd.Series(eef_pos_hist),
+        }
+    )
+    df.to_csv(csv_path, index=False)
+
+
 
 if __name__ == "__main__":
 
+    ########## Sliding Cube in All Directions ###############
+    import time
+    cases = {
+        "x_low2high": {"start_pos" : np.array([-0.25, 0, 0]), "end_pos" : np.array([0.25, 0, 0])},
+        "x_high2low": {"start_pos" : np.array([0.25, 0, 0]), "end_pos" : np.array([-0.25, 0, 0])},
+        "y_low2high": {"start_pos" : np.array([0, -0.35, 0]), "end_pos" : np.array([0, 0.35, 0])},
+        "y_high2low": {"start_pos" : np.array([0, 0.35, 0]), "end_pos" : np.array([0, -0.35, 0])},
+        "z_low2high": {"start_pos" : np.array([0, 0, 0]), "end_pos" : np.array([0, 0, 0.5])},
+        "z_high2low": {"start_pos" : np.array([0, 0, 0]), "end_pos" : np.array([0, 0, 0])},
+    }
+
+    speeds = (0.1, 0.25, 0.5, 1)
+    views = ("frontview", "sideview")
+    save_dir = "videos/cube_slide"
+    os.makedirs(save_dir, exist_ok=True)
+
+    for case in cases:
+        for speed in speeds:
+            print(f"recording {case} speed {speed}")
+            start_time = time.time()
+            record_videos_move_obj(
+                initial_eef_pos=cases[case]["start_pos"],
+                final_eef_pos=cases[case]["end_pos"],
+                speed=speed,
+                video_path=os.path.join(save_dir, f"{case}_speed{speed}.mp4"),
+                csv_path=os.path.join(save_dir, f"{case}_speed{speed}.csv"),
+                camera_names="frontview",
+            )
+            print("complete time ", time.time() - start_time)
+    
     # record_videos_drop()
     
-    csv_path = "/home/ayanoh/robosuite/myscripts/videos/good_bad_mix/csvs"
-    csv_files = os.listdir(csv_path)
-    for file in csv_files:
-        add_eef_in_target_to_csv(os.path.join(csv_path, file))
+    # csv_path = "/home/ayanoh/robosuite/myscripts/videos/good_bad_mix/csvs"
+    # csv_files = os.listdir(csv_path)
+    # for file in csv_files:
+    #     add_eef_in_target_to_csv(os.path.join(csv_path, file))
 
     # source_dir = "/home/ayanoh/robosuite/myscripts/videos/good_bad_mix"
     # save_dir = "/home/ayanoh/robosuite/myscripts/videos/trimmed_100steps"

@@ -267,7 +267,7 @@ class Object_and_Table(SingleArmEnv):
 
         # Adjust base pose accordingly
         xpos = self.robots[0].robot_model.base_xpos_offset["table"](self.table_full_size[0])
-        xpos += np.array([-0.1, 0, 0]) 
+        xpos += np.array([0.05, 0, 0]) 
         self.robots[0].robot_model.set_base_xpos(xpos)
 
         # load model for table top workspace
@@ -498,19 +498,21 @@ class Object_and_Table(SingleArmEnv):
         # move the eef to the initial position
         # in xy first
         thresh = 0.01
-        while np.any(np.abs(self._eef_xpos[:2] - self.initial_eef_pos[:2]) > thresh):
-            # print("cur pos ", self._eef_xpos)
-            # print("error: ", np.abs(self._eef_xpos - self.initial_eef_pos))
+        while np.any( np.abs(self._eef_xpos[:2] - self.initial_eef_pos[:2] ) > thresh):
             action = 4 * (self.initial_eef_pos[:2] - self._eef_xpos[:2]) / np.linalg.norm(self.initial_eef_pos - self._eef_xpos)
             action = np.concatenate((action, np.array([0, 1])))
             observations, reward, done, info = self.step_no_count(action)
-            # print("error to initial pos ", initial_pos - self._eef_xpos)
+            # print("cur pos ", self._eef_xpos)
+            # print("error: ", np.abs(self._eef_xpos - self.initial_eef_pos))
     
-        while self._eef_xpos[-1] - self.initial_eef_pos[-1] > thresh:
+        while np.any( np.abs(self._eef_xpos - self.initial_eef_pos) > thresh):
             action = 4 * (self.initial_eef_pos - self._eef_xpos) / np.linalg.norm(self.initial_eef_pos - self._eef_xpos)
             action = np.concatenate((action, np.array([1])))
             observations, reward, done, info = self.step_no_count(action)
-
+            # print("des ", self.initial_eef_pos)
+            # print("cur ", self._eef_xpos)
+            # print("error ", self.initial_eef_pos - self._eef_xpos)
+            
         self.reset_ready = False
         print(f"EEF position {self.initial_eef_pos} sampled")
         # print("End reset")
