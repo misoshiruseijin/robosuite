@@ -16,6 +16,7 @@ from robosuite.environments.manipulation.reaching_frankaBC import ReachingFranka
 from robosuite.environments.manipulation.reaching_2d import Reaching2D
 from robosuite.environments.manipulation.drop import Drop
 from robosuite.environments.manipulation.object_and_table import Object_and_Table
+from robosuite.environments.manipulation.lift2 import Lift2
 
 from robosuite.environments import ALL_ENVIRONMENTS
 from robosuite.controllers import ALL_CONTROLLERS, load_controller_config

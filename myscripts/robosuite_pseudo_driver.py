@@ -555,6 +555,7 @@ class FrankaDataCollection():
         initial_eef_pos=(0.0, 0.0, 0.0), # where on the table eef should start from
         obj_half_size=(0.025, 0.025, 0.025), # half size of object (cube)
         obj_rgba=(1.0,0.0,0.0,1.0), # object rgba 
+        view="frontview",
     ):
 
         self.action_dof = action_dof # eef [dx, dy]
@@ -566,7 +567,7 @@ class FrankaDataCollection():
             robots="Panda",
             has_renderer=True,
             has_offscreen_renderer=False,
-            render_camera="frontview",
+            render_camera=view,
             use_camera_obs=False,
             control_freq=20,
             ignore_done=True,
@@ -627,6 +628,82 @@ class FrankaDataCollection():
                 # print("target ", self.env.target_position)
                 self.env.render()
         
+class FrankaLift():
+    def __init__(
+        self,
+        controller_config=load_controller_config(default_controller="OSC_POSE"),
+        action_dof=4,
+        initial_eef_pos=(0.0, 0.0, 0.0), # where on the table eef should start from
+        view="frontview",
+    ):
+
+        self.action_dof = action_dof # eef [dx, dy]
+
+        # initialize environment
+        self.env = suite.make(
+            env_name="Lift2",
+            controller_configs=controller_config,
+            robots="Panda",
+            has_renderer=True,
+            has_offscreen_renderer=False,
+            render_camera=view,
+            use_camera_obs=False,
+            control_freq=20,
+            ignore_done=True,
+        )
+
+        self.env = VisualizationWrapper(self.env, indicator_configs=None)
+
+        obs = self.env.reset()
+    
+    
+    # run simulation with spacemouse
+    def spacemouse_control(self):
+        device = SpaceMouse(
+            vendor_id=9583,
+            product_id=50734,
+            pos_sensitivity=1.0,
+            rot_sensitivity=1.0,
+        )
+
+        device.start_control()
+        while True:
+            # Reset environment
+            obs = self.env.reset()
+            self.env.modify_observable(observable_name="robot0_joint_pos", attribute="active", modifier=True)
+
+            # rendering setup
+            self.env.render()
+
+            # Initialize device control
+            device.start_control()
+
+            done = False
+
+            while True:
+                # set active robot
+                active_robot = self.env.robots[0]
+                # get action
+                action, grip = input2action(
+                    device=device,
+                    robot=active_robot,
+                )
+                # action = action[:4]
+                action[3:5] = 0
+ 
+                if action is None:
+                    break
+
+                # take step in simulation
+                obs, reward, done, info = self.env.step(action)
+                print("action ", action)
+                print("eef_pos ", obs["robot0_eef_pos"])
+                # print("eef_pos ", obs["eef_xyz_gripper"])
+
+                # print("delta ", obs["robot0_delta_to_target"])
+                # print("target ", self.env.target_position)
+                self.env.render()
+        
 
 
 
@@ -647,8 +724,10 @@ def main():
     # Setup printing options for numbers
     np.set_printoptions(formatter={"float": lambda x: "{0:0.3f}".format(x)})
     
-    task = FrankaDataCollection(initial_eef_pos=(-0.35,0,0))
-    task.spacemouse_control(gripper_closed=True)
+    task = FrankaLift(view="agentview")
+    task.spacemouse_control()
+    # task = FrankaDataCollection(initial_eef_pos=(0,0,0), view="agentview2")
+    # task.spacemouse_control(gripper_closed=True)
     # change "target_half_size" in below line to change the size of the target region
     # currently, position of target region cannot be changed 
     # reaching_task = FrankaReachingExperiment(camera_view="frontview", random_init=False, random_target=True)

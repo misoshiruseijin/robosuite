@@ -28,6 +28,7 @@ class BlockObject(CompositeObject):
         body_half_size=(0.025, 0.025, 0.025),
         density=1000,
         rgba=None,
+        frictions=(1.0, 0.005, 0.0001),
     ):
         # Set name
         self._name = name
@@ -36,6 +37,7 @@ class BlockObject(CompositeObject):
         self.body_half_size = np.array(body_half_size)
         self.density = density
         self.rgba = np.array(rgba) if rgba else RED
+        self.frictions = frictions
 
         # Element references to be filled when generated
         self.top_surface = None
@@ -81,7 +83,7 @@ class BlockObject(CompositeObject):
             geom_sizes=self.body_half_size,
             geom_names=name,
             geom_rgbas=self.rgba,
-            geom_frictions=None,
+            geom_frictions=self.frictions,
             density=self.density,
         )
 

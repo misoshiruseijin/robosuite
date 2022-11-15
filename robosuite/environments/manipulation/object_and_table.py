@@ -502,6 +502,7 @@ class Object_and_Table(SingleArmEnv):
             action = 4 * (self.initial_eef_pos[:2] - self._eef_xpos[:2]) / np.linalg.norm(self.initial_eef_pos - self._eef_xpos)
             action = np.concatenate((action, np.array([0, 1])))
             observations, reward, done, info = self.step_no_count(action)
+            # print("goal pos ", self.initial_eef_pos)
             # print("cur pos ", self._eef_xpos)
             # print("error: ", np.abs(self._eef_xpos - self.initial_eef_pos))
     

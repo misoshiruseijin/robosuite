@@ -417,6 +417,7 @@ def record_videos_drop():
         )
         df.to_csv(f"videos/video{vid}.csv", index=False)
 
+################# Franka Cube Slide #####################
 def record_videos_move_obj(initial_eef_pos, final_eef_pos, speed, video_path="video.mp4", csv_path="data.csv", camera_names="frontview", obj_rgba=(1,0,0,1)):
 
     # initialize an environment with offscreen renderer
@@ -452,6 +453,8 @@ def record_videos_move_obj(initial_eef_pos, final_eef_pos, speed, video_path="vi
     action_hist = []
 
     final_eef_pos = final_eef_pos + np.array([0, 0, env.table_offset[2] + 0.04])
+    initial_eef_pos = initial_eef_pos + np.array([0, 0, env.table_offset[2] + 0.04])
+
     n_frames = 0
 
     while np.any(np.abs(eef_pos - final_eef_pos) > thresh):
@@ -482,39 +485,162 @@ def record_videos_move_obj(initial_eef_pos, final_eef_pos, speed, video_path="vi
     )
     df.to_csv(csv_path, index=False)
 
+################### Franka Lift #########################
+
+def record_videos_lift(video_path="video.mp4", csv_path="data.csv", camera_names="frontview", obj_rgba=(1,0,0,1)):
+
+    def generate_action_lift(target_pos, closed_gripper, noise_strength=0.02):
+        """
+        Args:
+            target_pos: good position to pick object up
+            eef_pos: current eef position
+
+        Returns:
+            action
+        """
+        thresh = 0.02
+        action_scale = 0.5
+        goal_pos = target_pos + noise_strength * np.random.uniform(-1, 1, 3)
+        closed = closed_gripper
+
+        u = (goal_pos - eef_pos) / np.linalg.norm(goal_pos - eef_pos)
+
+        if closed_gripper:
+            # lift object up
+            action = np.array([0, 0, 0.25, 0, 0, 0, 1])
+
+        elif np.all(np.abs(goal_pos - eef_pos) < thresh):
+            # close gripper if eef is at goal position
+            action = np.array([0, 0, 0, 0, 0, 0, 1])
+            closed = True
+
+        else:
+            # move towards goal
+            action = np.concatenate((action_scale*u, np.array([0, 0, 0, -1])))
+            
+        return action, closed
+
+    # initialize an environment with offscreen renderer
+    env = make(
+        env_name="Lift2",
+        controller_configs=load_controller_config(default_controller="OSC_POSE"),
+        robots="Panda",
+        has_renderer=False,
+        has_offscreen_renderer=True,
+        render_camera="frontview",
+        use_camera_obs=True,
+        control_freq=20,
+        ignore_done=False,
+        camera_names=camera_names,
+        camera_heights=512,
+        camera_widths=512,
+    )
+
+    obs = env.reset()
+    eef_pos = obs["robot0_eef_pos"]
+
+    # create a video writer with imageio
+    writer = imageio.get_writer(video_path, fps=20)
+
+    eef_pos_hist = []
+    action_hist = []
+    obj_pos_hist = []
+    success_hist = []
+
+    # get object initial position
+    obj_pos = obs["cube_pos"]
+
+    done = False
+    closed = False
+
+    n_frames = 0
+    lift_steps = 0
+
+    while not done and lift_steps < 30: # done checks for success, lift_steps make sure recording stops for failure case
+        if n_frames % 100 == 0:
+            print("frame ", n_frames)
+        
+        action, closed = generate_action_lift(obj_pos, closed, noise_strength=0.05)
+        obs, reward, done, info = env.step(action)
+        frame = obs[camera_names + "_image"]
+        writer.append_data(frame)
+
+        eef_pos = obs["robot0_eef_pos"]
+        eef_pos_hist.append(eef_pos)
+        action_hist.append(action)
+        obj_pos_hist.append(obs["cube_pos"])
+        success_hist.append(done)
+
+        # print("action ", action)
+        print("eef pos ", eef_pos)
+        # print("error ", eef_pos - final_eef_pos)
+        n_frames += 1
+        lift_steps += closed
+
+    writer.close()
+
+    df = pd.DataFrame(
+        data={
+            "step" : np.arange(len(action_hist)),
+            "action" : pd.Series(action_hist),
+            "eef_pos" : pd.Series(eef_pos_hist),
+            "obj_pos" : pd.Series(obj_pos_hist),
+            "success" : pd.Series(success_hist),
+        }
+    )
+    df.to_csv(csv_path, index=False)
 
 
 if __name__ == "__main__":
 
     ########## Sliding Cube in All Directions ###############
-    import time
-    cases = {
-        "x_low2high": {"start_pos" : np.array([-0.25, 0, 0]), "end_pos" : np.array([0.25, 0, 0])},
-        "x_high2low": {"start_pos" : np.array([0.25, 0, 0]), "end_pos" : np.array([-0.25, 0, 0])},
-        "y_low2high": {"start_pos" : np.array([0, -0.35, 0]), "end_pos" : np.array([0, 0.35, 0])},
-        "y_high2low": {"start_pos" : np.array([0, 0.35, 0]), "end_pos" : np.array([0, -0.35, 0])},
-        "z_low2high": {"start_pos" : np.array([0, 0, 0]), "end_pos" : np.array([0, 0, 0.5])},
-        "z_high2low": {"start_pos" : np.array([0, 0, 0]), "end_pos" : np.array([0, 0, 0])},
-    }
+    record_videos_lift()
 
-    speeds = (0.1, 0.25, 0.5, 1)
-    views = ("frontview", "sideview")
-    save_dir = "videos/cube_slide"
-    os.makedirs(save_dir, exist_ok=True)
+    ######### Record Cube Sliding Video ############
+    # import time
+    # cases = {
+    #     "x_low2high": {"start_pos" : np.array([-0.25, 0, 0]), "end_pos" : np.array([0.25, 0, 0])},
+    #     "x_high2low": {"start_pos" : np.array([0.25, 0, 0]), "end_pos" : np.array([-0.25, 0, 0])},
+    #     "y_low2high": {"start_pos" : np.array([0, -0.35, 0]), "end_pos" : np.array([0, 0.35, 0])},
+    #     "y_high2low": {"start_pos" : np.array([0, 0.35, 0]), "end_pos" : np.array([0, -0.35, 0])},
+    #     "z_low2high": {"start_pos" : np.array([0, 0, 0]), "end_pos" : np.array([0, 0, 0.5])},
+    #     "z_high2low": {"start_pos" : np.array([0, 0, 0.5]), "end_pos" : np.array([0, 0, 0])},
+    # }
 
-    for case in cases:
-        for speed in speeds:
-            print(f"recording {case} speed {speed}")
-            start_time = time.time()
-            record_videos_move_obj(
-                initial_eef_pos=cases[case]["start_pos"],
-                final_eef_pos=cases[case]["end_pos"],
-                speed=speed,
-                video_path=os.path.join(save_dir, f"{case}_speed{speed}.mp4"),
-                csv_path=os.path.join(save_dir, f"{case}_speed{speed}.csv"),
-                camera_names="frontview",
-            )
-            print("complete time ", time.time() - start_time)
+    # speeds = (1, 0.5, 0.25)
+    # # views = ["frontview", "sideview"]
+    # views = ["agentview2"]
+    # colors = {
+    #     "red" : (1,0,0,1),
+    #     "green" : (0,1,0,1),
+    #     "blue" : (0,0,1,1),
+    #     "yellow" : (1,1,0,1),
+    #     "gray" : (0.75,0.75,0.75,1),
+    # }
+
+    # obj_colors = ("red", "blue", "gray")
+
+    # save_root_dir = "videos/cube_slide"
+    # os.makedirs(save_root_dir, exist_ok=True)
+
+    # for view in views:
+    #     for color in obj_colors:
+    #         save_dir = os.path.join(save_root_dir, f"{view}_{color}")
+    #         os.makedirs(save_dir, exist_ok=True)
+    #         for case in cases:
+    #             for speed in speeds:
+    #                 print(f"recording {view} {color} {case} speed {speed}")
+    #                 start_time = time.time()
+    #                 record_videos_move_obj(
+    #                     initial_eef_pos=cases[case]["start_pos"],
+    #                     final_eef_pos=cases[case]["end_pos"],
+    #                     speed=speed,
+    #                     video_path=os.path.join(save_dir, f"{case}_speed{speed}.mp4"),
+    #                     csv_path=os.path.join(save_dir, f"{case}_speed{speed}.csv"),
+    #                     camera_names=view,
+    #                     obj_rgba=colors[color],
+    #                 )
+    #                 print("complete time ", time.time() - start_time)
     
     # record_videos_drop()
     
