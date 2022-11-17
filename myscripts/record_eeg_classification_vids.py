@@ -487,9 +487,9 @@ def record_videos_move_obj(initial_eef_pos, final_eef_pos, speed, video_path="vi
 
 ################### Franka Lift #########################
 
-def record_videos_lift(video_path="video.mp4", csv_path="data.csv", camera_names="frontview", obj_rgba=(1,0,0,1)):
+def record_videos_lift(video_path="video.mp4", csv_path="data.csv", camera_names="frontview", obj_rgba=(1,0,0,1), good=True):
 
-    def generate_action_lift(target_pos, closed_gripper, noise_strength=0.02):
+    def generate_action_lift(target_pos, closed_gripper):
         """
         Args:
             target_pos: good position to pick object up
@@ -498,19 +498,26 @@ def record_videos_lift(video_path="video.mp4", csv_path="data.csv", camera_names
         Returns:
             action
         """
-        thresh = 0.02
+        thresh = 0.01
         action_scale = 0.5
-        goal_pos = target_pos + noise_strength * np.random.uniform(-1, 1, 3)
+        # goal_pos = target_pos + np.array([0, 0, -0.01])
+
+        # if not good:
+        #     # if action should be "bad", add random offset to goal position
+        #     rand_direction = np.concatenate((np.random.uniform(-1, 1, 2), np.random.uniform(0, 1, 1)))
+        #     rand_direction = rand_direction / np.linalg.norm(rand_direction)
+        #     goal_pos = target_pos + 0.03 * rand_direction
+        
         closed = closed_gripper
 
         u = (goal_pos - eef_pos) / np.linalg.norm(goal_pos - eef_pos)
 
         if closed_gripper:
-            # lift object up
+            # lift
             action = np.array([0, 0, 0.25, 0, 0, 0, 1])
 
         elif np.all(np.abs(goal_pos - eef_pos) < thresh):
-            # close gripper if eef is at goal position
+            # grasp
             action = np.array([0, 0, 0, 0, 0, 0, 1])
             closed = True
 
@@ -534,6 +541,7 @@ def record_videos_lift(video_path="video.mp4", csv_path="data.csv", camera_names
         camera_names=camera_names,
         camera_heights=512,
         camera_widths=512,
+        obj_rgba=obj_rgba,
     )
 
     obs = env.reset()
@@ -549,18 +557,38 @@ def record_videos_lift(video_path="video.mp4", csv_path="data.csv", camera_names
 
     # get object initial position
     obj_pos = obs["cube_pos"]
+    goal_pos = obj_pos
+    if good:
+        goal_pos = goal_pos + np.array([0, 0, -0.005])
+    else:
+        rand_direction = np.concatenate((np.random.uniform(-1, 1, 2), np.random.uniform(0.5, 1, 1)))
+        rand_direction = rand_direction / np.linalg.norm(rand_direction)
+        goal_pos = goal_pos + 0.03 * rand_direction
 
-    done = False
+    success = False
     closed = False
 
     n_frames = 0
     lift_steps = 0
+    stop_steps = 0
+    lift_done = lift_steps >= 30
 
-    while not done and lift_steps < 30: # done checks for success, lift_steps make sure recording stops for failure case
+    while stop_steps < 30: # done checks for success, lift_steps make sure recording stops for failure case
+        # print("Stop steps ", stop_steps)
+        # print("lift_steps ", lift_steps)
+        # print("done ", done)
         if n_frames % 100 == 0:
             print("frame ", n_frames)
         
-        action, closed = generate_action_lift(obj_pos, closed, noise_strength=0.05)
+        if success or lift_done:
+            # record a few extra frames after lift is completed
+            action = np.array([0, 0, 0, 0, 0, 0, 1])
+            closed = True
+            stop_steps += 1
+
+        else:
+            action, closed = generate_action_lift(goal_pos, closed)
+
         obs, reward, done, info = env.step(action)
         frame = obs[camera_names + "_image"]
         writer.append_data(frame)
@@ -569,13 +597,18 @@ def record_videos_lift(video_path="video.mp4", csv_path="data.csv", camera_names
         eef_pos_hist.append(eef_pos)
         action_hist.append(action)
         obj_pos_hist.append(obs["cube_pos"])
-        success_hist.append(done)
+        success = reward > 0
+        success_hist.append(success)
 
         # print("action ", action)
-        print("eef pos ", eef_pos)
+        # print("eef pos ", eef_pos)
         # print("error ", eef_pos - final_eef_pos)
         n_frames += 1
         lift_steps += closed
+        lift_done = lift_steps >= 30
+        if n_frames > 400:
+            # something is wrong. stop
+            break
 
     writer.close()
 
@@ -593,9 +626,42 @@ def record_videos_lift(video_path="video.mp4", csv_path="data.csv", camera_names
 
 if __name__ == "__main__":
 
-    ########## Sliding Cube in All Directions ###############
-    record_videos_lift()
+    colors = {
+        "red" : (1,0,0,1),
+        "green" : (0,1,0,1),
+        "blue" : (0,0,1,1),
+        "yellow" : (1,1,0,1),
+        "gray" : (0.75,0.75,0.75,1),
+    }
 
+    ########## Record Lift ###############
+    n_videos = 15
+    obj_colors = ["blue", "gray", "red"]
+    save_root_dir = "videos/lift"
+    views = ["frontview", "sideview"]
+    for view in views:
+        for color in obj_colors:
+            good_dir = os.path.join(save_root_dir, f"{view}_{color}/good")
+            bad_dir = os.path.join(save_root_dir, f"{view}_{color}/bad")
+            os.makedirs(good_dir, exist_ok=True)
+            os.makedirs(bad_dir, exist_ok=True)
+            for i in range(n_videos):
+                print(f"recording good {view} {color} {i}")
+                record_videos_lift(
+                    video_path=os.path.join(good_dir, f"lift_good_{i}.mp4"),
+                    csv_path=os.path.join(good_dir, f"lift_good_{i}.csv"),
+                    camera_names=view,
+                    obj_rgba=colors[color],
+                    good=True,
+                )
+                print(f"recording bad {view} {color} {i}")
+                record_videos_lift(
+                    video_path=os.path.join(bad_dir, f"lift_bad_{i}.mp4"),
+                    csv_path=os.path.join(bad_dir, f"lift_bad_{i}.csv"),
+                    camera_names=view,
+                    obj_rgba=colors[color],
+                    good=False,
+                )
     ######### Record Cube Sliding Video ############
     # import time
     # cases = {
@@ -610,13 +676,6 @@ if __name__ == "__main__":
     # speeds = (1, 0.5, 0.25)
     # # views = ["frontview", "sideview"]
     # views = ["agentview2"]
-    # colors = {
-    #     "red" : (1,0,0,1),
-    #     "green" : (0,1,0,1),
-    #     "blue" : (0,0,1,1),
-    #     "yellow" : (1,1,0,1),
-    #     "gray" : (0.75,0.75,0.75,1),
-    # }
 
     # obj_colors = ("red", "blue", "gray")
 

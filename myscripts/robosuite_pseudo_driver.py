@@ -704,7 +704,83 @@ class FrankaLift():
                 # print("target ", self.env.target_position)
                 self.env.render()
         
+class FrankaGridWall():
+    def __init__(
+        self,
+        controller_config=load_controller_config(default_controller="OSC_POSE"),
+        action_dof=4,
+        initial_eef_pos=(0.0, 0.0, 0.0), # where on the table eef should start from
+        view="frontview",
+    ):
 
+        self.action_dof = action_dof # eef [dx, dy]
+
+        # initialize environment
+        self.env = suite.make(
+            env_name="GridWall",
+            controller_configs=controller_config,
+            robots="Panda",
+            has_renderer=True,
+            has_offscreen_renderer=False,
+            render_camera=view,
+            use_camera_obs=False,
+            control_freq=20,
+            ignore_done=True,
+            obj_intial_abs_state=1,
+        )
+
+        self.env = VisualizationWrapper(self.env, indicator_configs=None)
+
+        obs = self.env.reset()
+    
+    
+    # run simulation with spacemouse
+    def spacemouse_control(self):
+        device = SpaceMouse(
+            vendor_id=9583,
+            product_id=50734,
+            pos_sensitivity=1.0,
+            rot_sensitivity=1.0,
+        )
+
+        device.start_control()
+        while True:
+            # Reset environment
+            obs = self.env.reset()
+            self.env.modify_observable(observable_name="robot0_joint_pos", attribute="active", modifier=True)
+
+            # rendering setup
+            self.env.render()
+
+            # Initialize device control
+            device.start_control()
+
+            done = False
+
+            while True:
+                # set active robot
+                active_robot = self.env.robots[0]
+                # get action
+                action, grip = input2action(
+                    device=device,
+                    robot=active_robot,
+                )
+                # action = action[:4]
+                action[3:5] = 0
+ 
+                if action is None:
+                    break
+
+                # take step in simulation
+                obs, reward, done, info = self.env.step(action)
+                print("action ", action)
+                print("eef_pos ", obs["robot0_eef_pos"])
+                # print("eef_pos ", obs["eef_xyz_gripper"])
+
+                # print("delta ", obs["robot0_delta_to_target"])
+                # print("target ", self.env.target_position)
+                self.env.render()
+  
 
 
 def str2ndarray(array_str, shape):
@@ -724,29 +800,8 @@ def main():
     # Setup printing options for numbers
     np.set_printoptions(formatter={"float": lambda x: "{0:0.3f}".format(x)})
     
-    task = FrankaLift(view="agentview")
+    task = FrankaGridWall(view="agentview")
     task.spacemouse_control()
-    # task = FrankaDataCollection(initial_eef_pos=(0,0,0), view="agentview2")
-    # task.spacemouse_control(gripper_closed=True)
-    # change "target_half_size" in below line to change the size of the target region
-    # currently, position of target region cannot be changed 
-    # reaching_task = FrankaReachingExperiment(camera_view="frontview", random_init=False, random_target=True)
-    # reaching_task = Franka2DReachingExperiment(camera_view="frontview", random_init=True, random_target=True)
-    # reaching_task.spacemouse_control()
-    # reaching_task.keyboard_input()
-    # reaching_task.redis_control()
-    # reaching_task.test_step()
-    # bb_task = BallBasketExperiment()
-    # bb_task.redis_control()
-    # bb_task.keyboard_input()
-    # reaching_task = ReachingExperiment(camera_view="sideview", random_init=False)
-    # reaching_task.record_action_test(axis=0, n_steps=100, magnitude=0.05, back_scale=1.1)
-    
-    # reaching_task = ReachingExperiment(camera_view="frontview", random_init=False)
-    # reaching_task.record_action_test(axis=1, n_steps=50, magnitude=0.05)
-    # reaching_task.record_action_test(axis=2, n_steps=30, magnitude=0.05, back_scale=1.3)
-
-
 
 
 if __name__ == "__main__":

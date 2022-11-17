@@ -166,6 +166,7 @@ class Lift2(SingleArmEnv):
         camera_segmentations=None,  # {None, instance, class, element}
         renderer="mujoco",
         renderer_config=None,
+        obj_rgba=(1,0,0,1),
     ):
         # settings for table top
         self.table_full_size = table_full_size
@@ -181,6 +182,9 @@ class Lift2(SingleArmEnv):
 
         # object placement initializer
         self.placement_initializer = placement_initializer
+
+        # object color
+        self.obj_rgba = obj_rgba
 
         super().__init__(
             robots=robots,
@@ -299,7 +303,7 @@ class Lift2(SingleArmEnv):
         self.cube = BlockObject(
             name="cube",
             body_half_size=(0.025, 0.025, 0.025),
-            rgba=[1, 0, 0, 1],
+            rgba=self.obj_rgba,
         )
 
         # Create placement initializer
@@ -425,4 +429,4 @@ class Lift2(SingleArmEnv):
         table_height = self.model.mujoco_arena.table_offset[2]
 
         # cube is higher than the table top above a margin
-        return cube_height > table_height + 0.04
+        return cube_height > table_height + 0.10

@@ -7,3 +7,4 @@ from .floating_stage import FloatingStageObject
 from .target_marker_3d import TargetMarker3dObject
 from .block import BlockObject
 from .stage import StageObject
+from .grid_wall import GridWallObject
