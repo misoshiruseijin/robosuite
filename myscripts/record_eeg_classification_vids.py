@@ -28,39 +28,6 @@ macros.IMAGE_CONVENTION = "opencv"
 np.random.seed(1)
 
 ################## Franka 2D Reaching ###########################
-def generate_action(target_pos, eef_pos, target_half_size, sample_good=True):
-    """
-    Generate action that are clearly good or bad
-
-    Args:
-        target_pos (array): target position. dimension should match eef_pos
-        eef_pos (array): current eef position
-        sample_good (bool): if true, returns "good" action. If false returns "bad" action
-
-    Returns:
-        action (array): "good" actions move eef straight towards the target
-            "bad" actions clearly moves eef away from target 
-    """
-    u_good = (target_pos - eef_pos) / np.linalg.norm(target_pos - eef_pos) # unit vector in good direction (towards target)
-
-    if sample_good:
-        if is_in_target(target_pos, target_half_size, eef_pos):
-            # if the eef is already in target region, good action is to not move
-            action = np.zeros(2)
-        else:
-            action = 0.3 * (1 / np.max(np.abs(u_good))) * u_good # scale action to [-1,1] * 0.5
-    
-    else:
-        theta = np.deg2rad(np.random.uniform(-45, 45, 1)[0]) # angle range
-        rot = np.array([ # rotation matrix
-            [np.cos(theta), -np.sin(theta)],
-            [np.sin(theta), np.cos(theta)]
-        ])
-        u_bad = np.dot(rot, -u_good) # unit vector in bad direction (clearly away from target)
-        action = 0.3 * (1 / np.max(np.abs(u_bad))) * u_bad
-    
-    return np.concatenate((action, np.array([0, -1])))
-
 def is_good(p_good):
     if np.random.random() < p_good:
         return True
@@ -73,6 +40,38 @@ def is_in_target(target_pos, target_half_size, eef_pos):
     )
 
 def record_videos():
+    def generate_action(target_pos, eef_pos, target_half_size, sample_good=True):
+        """
+        Generate action that are clearly good or bad
+
+        Args:
+            target_pos (array): target position. dimension should match eef_pos
+            eef_pos (array): current eef position
+            sample_good (bool): if true, returns "good" action. If false returns "bad" action
+
+        Returns:
+            action (array): "good" actions move eef straight towards the target
+                "bad" actions clearly moves eef away from target 
+        """
+        u_good = (target_pos - eef_pos) / np.linalg.norm(target_pos - eef_pos) # unit vector in good direction (towards target)
+
+        if sample_good:
+            if is_in_target(target_pos, target_half_size, eef_pos):
+                # if the eef is already in target region, good action is to not move
+                action = np.zeros(2)
+            else:
+                action = 0.3 * (1 / np.max(np.abs(u_good))) * u_good # scale action to [-1,1] * 0.5
+        
+        else:
+            theta = np.deg2rad(np.random.uniform(-45, 45, 1)[0]) # angle range
+            rot = np.array([ # rotation matrix
+                [np.cos(theta), -np.sin(theta)],
+                [np.sin(theta), np.cos(theta)]
+            ])
+            u_bad = np.dot(rot, -u_good) # unit vector in bad direction (clearly away from target)
+            action = 0.3 * (1 / np.max(np.abs(u_bad))) * u_bad
+        
+        return np.concatenate((action, np.array([0, -1])))
     camera_names = "frontview"
     target_half_size = np.array((0.05, 0.05, 0.001))
     terminate_on_success = False
@@ -486,7 +485,6 @@ def record_videos_move_obj(initial_eef_pos, final_eef_pos, speed, video_path="vi
     df.to_csv(csv_path, index=False)
 
 ################### Franka Lift #########################
-
 def record_videos_lift(video_path="video.mp4", csv_path="data.csv", camera_names="frontview", obj_rgba=(1,0,0,1), good=True):
 
     def generate_action_lift(target_pos, closed_gripper):
@@ -623,6 +621,157 @@ def record_videos_lift(video_path="video.mp4", csv_path="data.csv", camera_names
     )
     df.to_csv(csv_path, index=False)
 
+################## Abstract States Stimulus ##############
+def record_video_abstract_states(start_state, end_state, video_path="video.mp4", csv_path="data.csv", camera_names="frontview", obj_rgba=(1,0,0,1)):
+
+    def generate_action(phase, speed=0.25):
+
+        if phase == 1 or phase == 5:
+            # reach xy (gripper open)
+            u = (obj_pos[:2] - eef_pos[:2]) / np.linalg.norm(obj_pos[:2] - eef_pos[:2])
+            action = 1.5 * speed * u
+            action = np.array([action[0], action[1], 0, 0, 0, 0, -1])
+            if phase == 5:
+                # gripper closed
+                action[-1] = 1
+            return action
+        if phase == 2 or phase == 6:
+            # move down (gripper open)
+            action = np.array([0, 0, -speed, 0, 0, 0, -1])
+            if phase == 6:
+                action[-1] = 1
+            return action
+        if phase == 3:
+            # grip
+            return np.array([0, 0, 0, 0, 0, 0, 1])
+        if phase == 4:
+            # move up
+            return np.array([0, 0, speed, 0, 0, 0, 1])
+        if phase == 7:
+            # release
+            return np.array([0, 0, 0, 0, 0, 0, -1])
+        if phase == 8:
+            # do nothing
+            return np.array([0, 0, 0, 0, 0, 0, -1])
+
+    assert (1 <= start_state <= 9 and 1 <= end_state <= 9)
+
+    """
+    phases
+    1. move to cube initial position
+    2. move down
+    3. grip
+    4. move up
+    5. move to final position
+    6. move down, release
+    7. move up
+    8. stop
+    """
+
+    env = make(
+        env_name="GridWall",
+        controller_configs=load_controller_config(default_controller="OSC_POSE"),
+        robots="Panda",
+        has_renderer=False,
+        has_offscreen_renderer=True,
+        render_camera="frontview",
+        use_camera_obs=True,
+        control_freq=20,
+        ignore_done=False,
+        camera_names=camera_names,
+        camera_heights=512,
+        camera_widths=512,
+        obj_rgba=obj_rgba,
+        obj_intial_abs_state=start_state,
+    )
+
+    obs = env.reset()
+    eef_pos = obs["robot0_eef_pos"]
+    obj_pos = obs["obj_pos"]
+    lift_height = eef_pos[2]
+    pick_place_height = env.table_offset[2] + env.obj_half_size[2]
+    goal_pos = env.abstract_states[end_state]
+    thresh = 0.005
+
+    # create a video writer with imageio
+    writer = imageio.get_writer(video_path, fps=20)
+
+    eef_pos_hist = []
+    action_hist = []
+    obj_pos_hist = []
+    eef_state_hist = []
+    obj_state_hist = []
+
+    n_frames = 0
+    lift_steps = 0
+    stop_steps = 0
+
+    phase = 1
+    action = generate_action(phase=1)
+
+    while stop_steps < 30: # done checks for success, lift_steps make sure recording stops for failure case
+
+        if n_frames % 100 == 0:
+            print("frame ", n_frames)
+
+        if (
+            (phase == 1 and np.all(np.abs(eef_pos[:2] - obj_pos[:2]) < thresh))
+            or
+            (phase == 2 and np.abs(eef_pos[2] - pick_place_height) < thresh)
+            or
+            (phase == 3 and env.gripper_state == 1)
+            or
+            (phase == 4 and np.abs(eef_pos[2] - pick_place_height) < thresh)
+            or
+            (phase == 5 and np.all(np.abs(eef_pos[:2] - goal_pos[:2]) < thresh))
+            or
+            (phase == 6 and np.abs(eef_pos[2] - pick_place_height) < thresh)
+            or
+            (phase == 7 and env.gripper_state == -1)
+        ):
+            phase += 1
+        action = generate_action(phase=phase)
+
+        if phase == 8:
+            stop_steps += 1
+
+        obs, reward, done, info = env.step(action)
+        frame = obs[camera_names + "_image"]
+        writer.append_data(frame)
+
+        eef_pos = obs["robot0_eef_pos"]
+        eef_pos_hist.append(obs["eef_xyz_gripper"])
+        action_hist.append(action)
+        obj_pos_hist.append(obs["obj_pos"])
+        eef_state_hist.append(np.where(obs["eef_abstract_state"] == True)[0])
+        obj_state_hist.append(np.where(obs["obj_abstract_state"] == True)[0])
+
+        print("action ", action)
+        print("phase ", phase)
+        print("eef pos ", eef_pos)
+        print("goal ", goal_pos)
+        print("obj pos ", obj_pos)
+
+        n_frames += 1
+        if n_frames > 500:
+            # something is wrong. stop
+            break
+
+    writer.close()
+
+    df = pd.DataFrame(
+        data={
+            "step" : np.arange(len(action_hist)),
+            "action" : pd.Series(action_hist),
+            "eef_pos" : pd.Series(eef_pos_hist),
+            "obj_pos" : pd.Series(obj_pos_hist),
+            "eef_abstract_state" : pd.Series(eef_state_hist),
+            "obj_abstract_state" : pd.Series(obj_state_hist),
+            "grid_half_size" : [env.grid_half_size] * len(action_hist)
+        }
+    )
+    df.to_csv(csv_path, index=False)
+
 
 if __name__ == "__main__":
 
@@ -634,34 +783,38 @@ if __name__ == "__main__":
         "gray" : (0.75,0.75,0.75,1),
     }
 
+    ############# Record Abstract State Stimulus ###############
+    record_video_abstract_states(start_state=1, end_state=2)
+
     ########## Record Lift ###############
-    n_videos = 15
-    obj_colors = ["blue", "gray", "red"]
-    save_root_dir = "videos/lift"
-    views = ["frontview", "sideview"]
-    for view in views:
-        for color in obj_colors:
-            good_dir = os.path.join(save_root_dir, f"{view}_{color}/good")
-            bad_dir = os.path.join(save_root_dir, f"{view}_{color}/bad")
-            os.makedirs(good_dir, exist_ok=True)
-            os.makedirs(bad_dir, exist_ok=True)
-            for i in range(n_videos):
-                print(f"recording good {view} {color} {i}")
-                record_videos_lift(
-                    video_path=os.path.join(good_dir, f"lift_good_{i}.mp4"),
-                    csv_path=os.path.join(good_dir, f"lift_good_{i}.csv"),
-                    camera_names=view,
-                    obj_rgba=colors[color],
-                    good=True,
-                )
-                print(f"recording bad {view} {color} {i}")
-                record_videos_lift(
-                    video_path=os.path.join(bad_dir, f"lift_bad_{i}.mp4"),
-                    csv_path=os.path.join(bad_dir, f"lift_bad_{i}.csv"),
-                    camera_names=view,
-                    obj_rgba=colors[color],
-                    good=False,
-                )
+    # n_videos = 15
+    # obj_colors = ["blue", "gray", "red"]
+    # save_root_dir = "videos/lift"
+    # views = ["frontview", "sideview"]
+    # for view in views:
+    #     for color in obj_colors:
+    #         good_dir = os.path.join(save_root_dir, f"{view}_{color}/good")
+    #         bad_dir = os.path.join(save_root_dir, f"{view}_{color}/bad")
+    #         os.makedirs(good_dir, exist_ok=True)
+    #         os.makedirs(bad_dir, exist_ok=True)
+    #         for i in range(n_videos):
+    #             print(f"recording good {view} {color} {i}")
+    #             record_videos_lift(
+    #                 video_path=os.path.join(good_dir, f"lift_good_{i}.mp4"),
+    #                 csv_path=os.path.join(good_dir, f"lift_good_{i}.csv"),
+    #                 camera_names=view,
+    #                 obj_rgba=colors[color],
+    #                 good=True,
+    #             )
+    #             print(f"recording bad {view} {color} {i}")
+    #             record_videos_lift(
+    #                 video_path=os.path.join(bad_dir, f"lift_bad_{i}.mp4"),
+    #                 csv_path=os.path.join(bad_dir, f"lift_bad_{i}.csv"),
+    #                 camera_names=view,
+    #                 obj_rgba=colors[color],
+    #                 good=False,
+    #             )
+
     ######### Record Cube Sliding Video ############
     # import time
     # cases = {

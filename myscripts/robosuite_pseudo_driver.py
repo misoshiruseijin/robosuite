@@ -773,12 +773,11 @@ class FrankaGridWall():
 
                 # take step in simulation
                 obs, reward, done, info = self.env.step(action)
-                print("action ", action)
-                print("eef_pos ", obs["robot0_eef_pos"])
-                # print("eef_pos ", obs["eef_xyz_gripper"])
+                # print("action ", action)
+                # print("eef_pos ", obs["robot0_eef_pos"])
+                # print("eef state ", obs["eef_abstract_state"])
+                # print("obj state ", obs["obj_abstract_state"])
 
-                # print("delta ", obs["robot0_delta_to_target"])
-                # print("target ", self.env.target_position)
                 self.env.render()
   
 
@@ -800,7 +799,7 @@ def main():
     # Setup printing options for numbers
     np.set_printoptions(formatter={"float": lambda x: "{0:0.3f}".format(x)})
     
-    task = FrankaGridWall(view="agentview")
+    task = FrankaGridWall(view="sideview")
     task.spacemouse_control()
 
 
