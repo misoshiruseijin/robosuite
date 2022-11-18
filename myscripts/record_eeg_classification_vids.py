@@ -772,6 +772,124 @@ def record_video_abstract_states(start_state, end_state, video_path="video.mp4",
     )
     df.to_csv(csv_path, index=False)
 
+################## Drawer Open/Close Stimulus ###############
+def record_video_drawer(video_path="video.mp4", csv_path="data.csv", camera_names="frontview"):
+
+    env = make(
+        env_name="DrawerEnv",
+        controller_configs=load_controller_config(default_controller="OSC_POSE"),
+        robots="Panda",
+        has_renderer=False,
+        has_offscreen_renderer=True,
+        render_camera="frontview",
+        use_camera_obs=True,
+        control_freq=20,
+        ignore_done=False,
+        camera_names=camera_names,
+        camera_heights=512,
+        camera_widths=512,
+    )
+
+    obs = env.reset()
+    eef_pos_gripper = obs["eef_xyz_gripper"]
+    grip_height = 1.022
+    zero_pull_y = 0.017
+    full_pull_y = -0.128
+    thresh = 0.001
+    phase = 1
+
+    # create a video writer with imageio
+    writer = imageio.get_writer(video_path, fps=20)
+
+    eef_pos_hist = []
+    action_hist = []
+    obj_pos_hist = []
+    eef_state_hist = []
+    obj_state_hist = []
+
+    n_frames = 0
+    pre_record_steps = 0
+    post_record_steps = 0
+    transition_steps = 0
+    steps_to_idle = 50
+    idle_phase = 1
+
+    phase = 1
+
+    while post_record_steps < steps_to_idle: # done checks for success, lift_steps make sure recording stops for failure case
+
+        if n_frames % 100 == 0:
+            print("frame ", n_frames)
+
+        # get action
+        if phase == 1: # down
+            action = np.array([0, 0, -0.1, 0, 0, 0, -1])
+            if np.abs(obs["eef_xyz_gripper"][2] - grip_height) < thresh:
+                phase = 2
+        if phase == 2: # grip
+            action = np.array([0, 0, 0, 0, 0, 0, 1])
+            if obs["eef_xyz_gripper"][-1] == 1:
+                phase = 3
+        if phase == 3: # close
+            action = np.array([0, 0.1, 0, 0, 0, 0, 1])
+            if np.abs(obs["eef_xyz_gripper"][1] - zero_pull_y) < thresh:
+                phase = 5
+        if phase == 4: # open
+            action = np.array([0, -0.1, 0, 0, 0, 0, 1])
+            if np.abs(obs["eef_xyz_gripper"][1] - full_pull_y) < thresh:
+                phase = 5
+        if phase == 5: # idle
+            action = np.array([0, 0, 0, 0, 0, 0, 1])
+            if idle_phase == 1:
+                pre_record_steps += 1
+                if pre_record_steps >= steps_to_idle: # pre-recording
+                    phase = 4
+                    idle_phase += 1
+            elif idle_phase == 2: # between open and close
+                transition_steps += 1
+                if transition_steps >= steps_to_idle:
+                    phase = 3
+                    idle_phase += 1
+            elif idle_phase == 3:
+                post_record_steps += 1
+
+        obs, reward, done, info = env.step(action)
+        frame = obs[camera_names + "_image"]
+        writer.append_data(frame)
+
+        eef_pos = obs["robot0_eef_pos"]
+        eef_pos_hist.append(obs["eef_xyz_gripper"])
+        action_hist.append(action)
+        obj_pos_hist.append(obs["obj_pos"])
+        eef_state_hist.append(np.where(obs["eef_abstract_state"] == True)[0])
+        obj_state_hist.append(np.where(obs["obj_abstract_state"] == True)[0])
+
+        print("action ", action)
+        print("phase ", phase)
+        print("eef pos ", eef_pos)
+        print("goal ", goal_pos)
+        print("obj pos ", obj_pos)
+
+        n_frames += 1
+        if n_frames > 500:
+            # something is wrong. stop
+            break
+
+    writer.close()
+
+    df = pd.DataFrame(
+        data={
+            "step" : np.arange(len(action_hist)),
+            "action" : pd.Series(action_hist),
+            "eef_pos" : pd.Series(eef_pos_hist),
+            "obj_pos" : pd.Series(obj_pos_hist),
+            "eef_abstract_state" : pd.Series(eef_state_hist),
+            "obj_abstract_state" : pd.Series(obj_state_hist),
+            "grid_half_size" : [env.grid_half_size] * len(action_hist)
+        }
+    )
+    df.to_csv(csv_path, index=False)
+
 
 if __name__ == "__main__":
 
@@ -783,8 +901,11 @@ if __name__ == "__main__":
         "gray" : (0.75,0.75,0.75,1),
     }
 
+    ############## Record Drawer Stimulus ###############
+
+
     ############# Record Abstract State Stimulus ###############
-    record_video_abstract_states(start_state=1, end_state=2)
+    # record_video_abstract_states(start_state=1, end_state=2)
 
     ########## Record Lift ###############
     # n_videos = 15

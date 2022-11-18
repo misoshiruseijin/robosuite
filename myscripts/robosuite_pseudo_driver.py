@@ -938,6 +938,12 @@ class FrankaDrawer():
         thresh = 0.001
         phase = 1
 
+        n_frames = 0
+        pre_record_steps = 0
+        post_record_steps = 0
+        transition_steps = 0
+        idle_phase = 1
+
         while True:
             # Reset environment
             obs = self.env.reset()
@@ -957,20 +963,36 @@ class FrankaDrawer():
                 if phase == 1: # down
                     action = np.array([0, 0, -0.1, 0, 0, 0, -1])
                     if np.abs(obs["eef_xyz_gripper"][2] - grip_height) < thresh:
-                        phase += 1
+                        phase = 2
                 if phase == 2: # grip
                     action = np.array([0, 0, 0, 0, 0, 0, 1])
                     if obs["eef_xyz_gripper"][-1] == 1:
-                        phase += 1
+                        phase = 3
                 if phase == 3: # close
                     action = np.array([0, 0.1, 0, 0, 0, 0, 1])
                     if np.abs(obs["eef_xyz_gripper"][1] - zero_pull_y) < thresh:
-                        phase += 1
+                        phase = 5
                 if phase == 4: # open
                     action = np.array([0, -0.1, 0, 0, 0, 0, 1])
                     if np.abs(obs["eef_xyz_gripper"][1] - full_pull_y) < thresh:
-                        break
- 
+                        phase = 5
+                if phase == 5: # idle
+                    action = np.array([0, 0, 0, 0, 0, 0, 1])
+                    if idle_phase == 1:
+                        pre_record_steps += 1
+                        if pre_record_steps >= 50: # pre-recording
+                            phase = 4
+                            idle_phase += 1
+                    elif idle_phase == 2: # between open and close
+                        transition_steps += 1
+                        if transition_steps >= 50:
+                            phase = 3
+                            idle_phase += 1
+                    elif idle_phase == 3:
+                        post_record_steps += 1
+                        if post_record_steps >= 50:
+                            break
+
                 if action is None:
                     break
 
