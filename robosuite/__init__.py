@@ -18,6 +18,8 @@ from robosuite.environments.manipulation.drop import Drop
 from robosuite.environments.manipulation.object_and_table import Object_and_Table
 from robosuite.environments.manipulation.lift2 import Lift2
 from robosuite.environments.manipulation.grid_wall import GridWall
+from robosuite.environments.manipulation.hammer_place import HammerPlaceEnv
+from robosuite.environments.manipulation.drawer import DrawerEnv
 
 from robosuite.environments import ALL_ENVIRONMENTS
 from robosuite.controllers import ALL_CONTROLLERS, load_controller_config

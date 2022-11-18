@@ -227,8 +227,8 @@ class GridWallObject(CompositeObject):
             self.body_half_size[0]/3,
         ]
         self.wall_y = [
-            self.body_half_size[1]/3,
             -self.body_half_size[1]/3,
+            self.body_half_size[1]/3,
         ]
 
         # Element references to be filled when generated

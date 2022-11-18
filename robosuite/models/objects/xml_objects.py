@@ -3,6 +3,18 @@ import numpy as np
 from robosuite.models.objects import MujocoXMLObject
 from robosuite.utils.mjcf_utils import array_to_string, find_elements, xml_path_completion
 
+class CabinetObject(MujocoXMLObject):
+    """
+    Cabinet with drawer. From robosuite-task-zoo
+    """
+    def __init__(self, name):
+        super().__init__(
+            xml_path_completion("objects/cabinet.xml"),
+            name=name,
+            joints=[dict(type="free", damping="0.0005")],
+            obj_type="all",
+            duplicate_collision_geoms=True,
+        )
 
 class BottleObject(MujocoXMLObject):
     """

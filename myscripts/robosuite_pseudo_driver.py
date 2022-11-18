@@ -780,8 +780,208 @@ class FrankaGridWall():
 
                 self.env.render()
   
+class FrankaHammer():
+    def __init__(
+        self,
+        controller_config=load_controller_config(default_controller="OSC_POSE"),
+        action_dof=4,
+        initial_eef_pos=(0.0, 0.0, 0.0), # where on the table eef should start from
+        view="agentview",
+    ):
 
+        self.action_dof = action_dof # eef [dx, dy]
 
+        # initialize environment
+        self.env = suite.make(
+            env_name="HammerPlaceEnv",
+            controller_configs=controller_config,
+            robots="Panda",
+            has_renderer=True,
+            has_offscreen_renderer=False,
+            render_camera=view,
+            use_camera_obs=False,
+            control_freq=20,
+            ignore_done=True,
+        )
+
+        self.env = VisualizationWrapper(self.env, indicator_configs=None)
+
+        obs = self.env.reset()
+    
+    
+    # run simulation with spacemouse
+    def spacemouse_control(self):
+        device = SpaceMouse(
+            vendor_id=9583,
+            product_id=50734,
+            pos_sensitivity=1.0,
+            rot_sensitivity=1.0,
+        )
+
+        device.start_control()
+        while True:
+            # Reset environment
+            obs = self.env.reset()
+            self.env.modify_observable(observable_name="robot0_joint_pos", attribute="active", modifier=True)
+
+            # rendering setup
+            self.env.render()
+
+            # Initialize device control
+            device.start_control()
+
+            done = False
+
+            while True:
+                # set active robot
+                active_robot = self.env.robots[0]
+                # get action
+                action, grip = input2action(
+                    device=device,
+                    robot=active_robot,
+                )
+                # action = action[:4]
+                action[3:5] = 0
+ 
+                if action is None:
+                    break
+
+                # take step in simulation
+                obs, reward, done, info = self.env.step(action)
+                # print("action ", action)
+                # print("eef_pos ", obs["robot0_eef_pos"])
+                # print("eef state ", obs["eef_abstract_state"])
+                # print("obj state ", obs["obj_abstract_state"])
+
+                self.env.render()
+
+class FrankaDrawer():
+    def __init__(
+        self,
+        controller_config=load_controller_config(default_controller="OSC_POSE"),
+        action_dof=4,
+        initial_eef_pos=(0.0, 0.0, 0.0), # where on the table eef should start from
+        view="agentview",
+    ):
+
+        self.action_dof = action_dof # eef [dx, dy]
+
+        # initialize environment
+        self.env = suite.make(
+            env_name="DrawerEnv",
+            controller_configs=controller_config,
+            robots="Panda",
+            has_renderer=True,
+            has_offscreen_renderer=False,
+            render_camera=view,
+            use_camera_obs=False,
+            control_freq=20,
+            ignore_done=True,
+        )
+
+        self.env = VisualizationWrapper(self.env, indicator_configs=None)
+
+        obs = self.env.reset()
+    
+    
+    # run simulation with spacemouse
+    def spacemouse_control(self):
+        device = SpaceMouse(
+            vendor_id=9583,
+            product_id=50734,
+            pos_sensitivity=1.0,
+            rot_sensitivity=1.0,
+        )
+
+        device.start_control()
+        while True:
+            # Reset environment
+            obs = self.env.reset()
+            # pdb.set_trace()
+            self.env.modify_observable(observable_name="robot0_joint_pos", attribute="active", modifier=True)
+
+            # rendering setup
+            self.env.render()
+
+            # Initialize device control
+            device.start_control()
+
+            done = False
+
+            while True:
+                # set active robot
+                active_robot = self.env.robots[0]
+                # get action
+                action, grip = input2action(
+                    device=device,
+                    robot=active_robot,
+                )
+                # action = action[:4]
+                action[3:5] = 0
+ 
+                if action is None:
+                    break
+
+                # take step in simulation
+                obs, reward, done, info = self.env.step(action)
+                # print("action ", action)
+                print("eef_pos ", obs["robot0_eef_pos"])
+                # print("contact ", obs["robot0_contact"])
+
+                self.env.render()
+  
+    def hardcode_control(self):
+
+        grip_height = 1.022
+        zero_pull_y = 0.017
+        full_pull_y = -0.128
+        thresh = 0.001
+        phase = 1
+
+        while True:
+            # Reset environment
+            obs = self.env.reset()
+            # pdb.set_trace()
+            self.env.modify_observable(observable_name="robot0_joint_pos", attribute="active", modifier=True)
+
+            # rendering setup
+            self.env.render()
+
+            done = False
+
+            while True:
+                print("phase ", phase)
+                # set active robot
+                active_robot = self.env.robots[0]
+                # get action
+                if phase == 1: # down
+                    action = np.array([0, 0, -0.1, 0, 0, 0, -1])
+                    if np.abs(obs["eef_xyz_gripper"][2] - grip_height) < thresh:
+                        phase += 1
+                if phase == 2: # grip
+                    action = np.array([0, 0, 0, 0, 0, 0, 1])
+                    if obs["eef_xyz_gripper"][-1] == 1:
+                        phase += 1
+                if phase == 3: # close
+                    action = np.array([0, 0.1, 0, 0, 0, 0, 1])
+                    if np.abs(obs["eef_xyz_gripper"][1] - zero_pull_y) < thresh:
+                        phase += 1
+                if phase == 4: # open
+                    action = np.array([0, -0.1, 0, 0, 0, 0, 1])
+                    if np.abs(obs["eef_xyz_gripper"][1] - full_pull_y) < thresh:
+                        break
+ 
+                if action is None:
+                    break
+
+                # take step in simulation
+                obs, reward, done, info = self.env.step(action)
+                # print("action ", action)
+                print("eef_pos ", obs["robot0_eef_pos"])
+                # print("contact ", obs["robot0_contact"])
+
+                self.env.render()
+  
 def str2ndarray(array_str, shape):
     """
     Helper function to convert action read from redis to np array
@@ -795,12 +995,12 @@ def str2ndarray(array_str, shape):
     return output
 
 def main():
-    import time
     # Setup printing options for numbers
     np.set_printoptions(formatter={"float": lambda x: "{0:0.3f}".format(x)})
     
-    task = FrankaGridWall(view="sideview")
-    task.spacemouse_control()
+    task = FrankaDrawer(view="agentview")
+    # task.spacemouse_control()
+    task.hardcode_control()
 
 
 if __name__ == "__main__":

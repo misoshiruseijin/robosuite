@@ -153,7 +153,7 @@ class GridWall(SingleArmEnv):
         controller_configs=None,
         gripper_types="default",
         initialization_noise="default",
-        table_full_size=(0.8, 0.8, 0.15),
+        table_full_size=(0.5, 0.5, 0.15),
         table_friction=(0,0,0),
         use_camera_obs=True,
         use_object_obs=True,
@@ -191,7 +191,7 @@ class GridWall(SingleArmEnv):
         # settings for table top
         self.table_full_size = table_full_size
         self.table_friction = table_friction
-        self.table_offset = np.array((0, 0, 0.85))
+        self.table_offset = np.array((0, 0, 0.83))
 
         # workspace boundaries
         self.workspace_x = (-0.5 * self.table_full_size[0] + self.table_offset[0], 0.5 * self.table_full_size[0] + self.table_offset[0])
@@ -302,7 +302,7 @@ class GridWall(SingleArmEnv):
 
         # Adjust base pose accordingly
         xpos = self.robots[0].robot_model.base_xpos_offset["table"](self.table_full_size[0])
-        xpos += np.array([0.05, 0, 0]) 
+        xpos += np.array([-0.15, 0, 0]) 
         self.robots[0].robot_model.set_base_xpos(xpos)
 
         # load model for table top workspace
@@ -374,57 +374,57 @@ class GridWall(SingleArmEnv):
                     else np.zeros(4)
                 )
 
-            # @sensor(modality=modality)
-            # def eef_abstract_state(obs_cache):
-            #     if f"{pf}eef_pos" in obs_cache:
-            #         eef_pos = obs_cache[f"{pf}eef_pos"]
-            #         x_is_low = eef_pos[0] < self.grid.wall_x[0]
-            #         x_is_mid = self.grid.wall_x[0] < eef_pos[0] < self.grid.wall_x[1]
-            #         x_is_high = self.grid.wall_x[1] < eef_pos[0]
-            #         y_is_low = eef_pos[1] < self.grid.wall_y[0]
-            #         y_is_mid = self.grid.wall_y[0] < eef_pos[1] < self.grid.wall_y[1]
-            #         y_is_high = self.grid.wall_y[1] < eef_pos[1]
-            #         return np.array([
-            #             x_is_low and y_is_low,
-            #             x_is_low and y_is_mid,
-            #             x_is_low and y_is_high,
-            #             x_is_mid and y_is_low,
-            #             x_is_mid and y_is_mid,
-            #             x_is_mid and y_is_high,
-            #             x_is_high and y_is_low,
-            #             x_is_high and y_is_mid,
-            #             x_is_high and y_is_high,
-            #         ])
+            @sensor(modality=modality)
+            def eef_abstract_state(obs_cache):
+                if f"{pf}eef_pos" in obs_cache:
+                    eef_pos = obs_cache[f"{pf}eef_pos"]
+                    x_is_low = eef_pos[0] < self.grid.wall_x[0]
+                    x_is_mid = self.grid.wall_x[0] < eef_pos[0] < self.grid.wall_x[1]
+                    x_is_high = self.grid.wall_x[1] < eef_pos[0]
+                    y_is_low = eef_pos[1] < self.grid.wall_y[0]
+                    y_is_mid = self.grid.wall_y[0] < eef_pos[1] < self.grid.wall_y[1]
+                    y_is_high = self.grid.wall_y[1] < eef_pos[1]
+                    return np.array([
+                        x_is_low and y_is_low,
+                        x_is_low and y_is_mid,
+                        x_is_low and y_is_high,
+                        x_is_mid and y_is_low,
+                        x_is_mid and y_is_mid,
+                        x_is_mid and y_is_high,
+                        x_is_high and y_is_low,
+                        x_is_high and y_is_mid,
+                        x_is_high and y_is_high,
+                    ])
                     
-            #     else:
-            #         return np.zeros(9)
+                else:
+                    return np.zeros(9)
 
-            # @sensor(modality=modality)
-            # def obj_abstract_state(obs_cache):
-            #     if f"{pf}eef_pos" in obs_cache:
-            #         eef_pos = obs_cache[f"{pf}eef_pos"]
-            #         x_is_low = eef_pos[0] < self.grid.wall_x[0]
-            #         x_is_mid = self.grid.wall_x[0] < eef_pos[0] < self.grid.wall_x[1]
-            #         x_is_high = self.grid.wall_x[1] < eef_pos[0]
-            #         y_is_low = eef_pos[1] < self.grid.wall_y[0]
-            #         y_is_mid = self.grid.wall_y[0] < eef_pos[1] < self.grid.wall_y[1]
-            #         y_is_high = self.grid.wall_y[1] < eef_pos[1]
-            #         return np.array([
-            #             x_is_low and y_is_low,
-            #             x_is_low and y_is_mid,
-            #             x_is_low and y_is_high,
-            #             x_is_mid and y_is_low,
-            #             x_is_mid and y_is_mid,
-            #             x_is_mid and y_is_high,
-            #             x_is_high and y_is_low,
-            #             x_is_high and y_is_mid,
-            #             x_is_high and y_is_high,
-            #         ])
-                    
-            #     else:
-            #         return np.zeros(9)
+            @sensor(modality=modality)
+            def obj_abstract_state(obs_cache):
+                obj_pos = self.sim.data.body_xpos[self.object_body_id]
+                x_is_low = obj_pos[0] < self.grid.wall_x[0]
+                x_is_mid = self.grid.wall_x[0] < obj_pos[0] < self.grid.wall_x[1]
+                x_is_high = self.grid.wall_x[1] < obj_pos[0]
+                y_is_low = obj_pos[1] < self.grid.wall_y[0]
+                y_is_mid = self.grid.wall_y[0] < obj_pos[1] < self.grid.wall_y[1]
+                y_is_high = self.grid.wall_y[1] < obj_pos[1]
+                return np.array([
+                    x_is_low and y_is_low,
+                    x_is_low and y_is_mid,
+                    x_is_low and y_is_high,
+                    x_is_mid and y_is_low,
+                    x_is_mid and y_is_mid,
+                    x_is_mid and y_is_high,
+                    x_is_high and y_is_low,
+                    x_is_high and y_is_mid,
+                    x_is_high and y_is_high,
+                ])
 
-            sensors = [eef_xyz_gripper]#, basket_pos]
+            @sensor(modality=modality)
+            def obj_pos(obs_cache):
+                return self.sim.data.body_xpos[self.object_body_id]
+
+            sensors = [eef_xyz_gripper, eef_abstract_state, obj_abstract_state, obj_pos]
             names = [s.__name__ for s in sensors]
 
             # Create observables

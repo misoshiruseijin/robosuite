@@ -16,7 +16,9 @@ from .xml_objects import (
     CanVisualObject,
     PlateWithHoleObject,
     DoorObject,
+    # CabinetObject,
 )
 from .primitive import *
 from .composite import *
 from .composite_body import *
+from .zoo import *
