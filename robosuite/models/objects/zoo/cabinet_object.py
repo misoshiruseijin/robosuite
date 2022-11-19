@@ -15,7 +15,7 @@ class CabinetObject(MujocoXMLObject):
             name,
             joints=None):
 
-        super().__init__(str(absolute_path) + "/" + "cabinet.xml",
+        super().__init__(str(absolute_path) + "/" + "cabinet_large.xml",
                          name=name, joints=None, obj_type="all", duplicate_collision_geoms=True)
 
     @property

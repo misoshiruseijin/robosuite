@@ -773,7 +773,7 @@ def record_video_abstract_states(start_state, end_state, video_path="video.mp4",
     df.to_csv(csv_path, index=False)
 
 ################## Drawer Open/Close Stimulus ###############
-def record_video_drawer(video_path="video.mp4", csv_path="data.csv", camera_names="frontview"):
+def record_video_drawer(video_path="video.mp4", csv_path="data.csv", camera_names="frontview", thresh=0.001, speed=0.1):
 
     env = make(
         env_name="DrawerEnv",
@@ -791,11 +791,10 @@ def record_video_drawer(video_path="video.mp4", csv_path="data.csv", camera_name
     )
 
     obs = env.reset()
-    eef_pos_gripper = obs["eef_xyz_gripper"]
+    eef_pos = obs["robot0_eef_pos"]
     grip_height = 1.022
     zero_pull_y = 0.017
     full_pull_y = -0.128
-    thresh = 0.001
     phase = 1
 
     # create a video writer with imageio
@@ -803,9 +802,7 @@ def record_video_drawer(video_path="video.mp4", csv_path="data.csv", camera_name
 
     eef_pos_hist = []
     action_hist = []
-    obj_pos_hist = []
-    eef_state_hist = []
-    obj_state_hist = []
+    drawer_pos_hist = []
 
     n_frames = 0
     pre_record_steps = 0
@@ -813,12 +810,17 @@ def record_video_drawer(video_path="video.mp4", csv_path="data.csv", camera_name
     transition_steps = 0
     steps_to_idle = 50
     idle_phase = 1
+    recording = False
 
     phase = 1
-
+    # 1 (down) -> 2 (grip) -> 3 (close) -start recording-> 5 (idle) -> 4 (open) -> 5 idle -> 3 close -> 5 idle -> stop recording  
     while post_record_steps < steps_to_idle: # done checks for success, lift_steps make sure recording stops for failure case
 
-        if n_frames % 100 == 0:
+        if not recording: 
+            print("initializing...")
+            print("phase", phase)
+            print("eef pos ", eef_pos)
+        elif n_frames % 100 == 0:
             print("frame ", n_frames)
 
         # get action
@@ -831,11 +833,12 @@ def record_video_drawer(video_path="video.mp4", csv_path="data.csv", camera_name
             if obs["eef_xyz_gripper"][-1] == 1:
                 phase = 3
         if phase == 3: # close
-            action = np.array([0, 0.1, 0, 0, 0, 0, 1])
+            action = np.array([0, speed, 0, 0, 0, 0, 1])
             if np.abs(obs["eef_xyz_gripper"][1] - zero_pull_y) < thresh:
                 phase = 5
+                recording = True
         if phase == 4: # open
-            action = np.array([0, -0.1, 0, 0, 0, 0, 1])
+            action = np.array([0, -speed, 0, 0, 0, 0, 1])
             if np.abs(obs["eef_xyz_gripper"][1] - full_pull_y) < thresh:
                 phase = 5
         if phase == 5: # idle
@@ -854,26 +857,26 @@ def record_video_drawer(video_path="video.mp4", csv_path="data.csv", camera_name
                 post_record_steps += 1
 
         obs, reward, done, info = env.step(action)
-        frame = obs[camera_names + "_image"]
-        writer.append_data(frame)
-
         eef_pos = obs["robot0_eef_pos"]
-        eef_pos_hist.append(obs["eef_xyz_gripper"])
-        action_hist.append(action)
-        obj_pos_hist.append(obs["obj_pos"])
-        eef_state_hist.append(np.where(obs["eef_abstract_state"] == True)[0])
-        obj_state_hist.append(np.where(obs["obj_abstract_state"] == True)[0])
+        drawer_pos = eef_pos[1] - zero_pull_y
 
-        print("action ", action)
-        print("phase ", phase)
-        print("eef pos ", eef_pos)
-        print("goal ", goal_pos)
-        print("obj pos ", obj_pos)
+        if recording:
+            frame = obs[camera_names + "_image"]
+            writer.append_data(frame)
 
-        n_frames += 1
-        if n_frames > 500:
-            # something is wrong. stop
-            break
+            eef_pos_hist.append(obs["eef_xyz_gripper"])
+            action_hist.append(action)
+            drawer_pos_hist.append(drawer_pos)
+
+            # print("action ", action)
+            # print("phase ", phase)
+            # print("eef pos ", eef_pos)
+            print("drawer pos ", eef_pos[1] - zero_pull_y)
+
+            n_frames += 1
+            if n_frames > 500:
+                # something is wrong. stop
+                break
 
     writer.close()
 
@@ -882,10 +885,7 @@ def record_video_drawer(video_path="video.mp4", csv_path="data.csv", camera_name
             "step" : np.arange(len(action_hist)),
             "action" : pd.Series(action_hist),
             "eef_pos" : pd.Series(eef_pos_hist),
-            "obj_pos" : pd.Series(obj_pos_hist),
-            "eef_abstract_state" : pd.Series(eef_state_hist),
-            "obj_abstract_state" : pd.Series(obj_state_hist),
-            "grid_half_size" : [env.grid_half_size] * len(action_hist)
+            "drawer_pos " : pd.Series(drawer_pos_hist),
         }
     )
     df.to_csv(csv_path, index=False)
@@ -902,10 +902,23 @@ if __name__ == "__main__":
     }
 
     ############## Record Drawer Stimulus ###############
+    # views = ["frontview", "sideview", "agentview"]
+    # speeds = [0.1, 0.2, 0.3, 0.4]
+    # save_dir = "videos/drawer"
+    # os.makedirs(save_dir, exist_ok=True)
+    
+    # for view, speed in [(view, speed) for view in views for speed in speeds]:
+    #     print(f"recording {view}, {speed}")
+    #     record_video_drawer(
+    #         video_path=os.path.join(save_dir, f"{view}_speed{speed}.mp4"),
+    #         csv_path=os.path.join(save_dir, f"{view}_speed{speed}.csv"),
+    #         camera_names=view,
+    #         thresh=speed/100,
+    #         speed=speed,
+    #     )
 
-
-    ############# Record Abstract State Stimulus ###############
-    # record_video_abstract_states(start_state=1, end_state=2)
+    ############ Record Abstract State Stimulus ###############
+    record_video_abstract_states(start_state=1, end_state=2)
 
     ########## Record Lift ###############
     # n_videos = 15

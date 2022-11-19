@@ -1021,8 +1021,8 @@ def main():
     np.set_printoptions(formatter={"float": lambda x: "{0:0.3f}".format(x)})
     
     task = FrankaDrawer(view="agentview")
-    # task.spacemouse_control()
-    task.hardcode_control()
+    task.spacemouse_control()
+    # task.hardcode_control()
 
 
 if __name__ == "__main__":
