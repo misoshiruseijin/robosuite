@@ -934,7 +934,7 @@ class FrankaDrawer():
 
         grip_height = 1.022
         zero_pull_y = 0.017
-        full_pull_y = -0.128
+        full_pull_y = -0.304
         thresh = 0.001
         phase = 1
 
@@ -1021,8 +1021,8 @@ def main():
     np.set_printoptions(formatter={"float": lambda x: "{0:0.3f}".format(x)})
     
     task = FrankaDrawer(view="agentview")
-    task.spacemouse_control()
-    # task.hardcode_control()
+    # task.spacemouse_control()
+    task.hardcode_control()
 
 
 if __name__ == "__main__":

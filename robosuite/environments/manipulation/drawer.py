@@ -165,11 +165,11 @@ class DrawerEnv(SingleArmEnv):
             quat=[0.6380177736282349, 0.3048497438430786, 0.30484986305236816, 0.6380177736282349]
         )
 
-        # mujoco_arena.set_camera(
-        #     camera_name="sideview",
-        #     pos=[0.5586131746834771, 0.3, 1.2903500240372423],
-        #     quat=[0.4144233167171478, 0.3100920617580414, 0.49641484022140503, 0.6968992352485657]
-        # )
+        mujoco_arena.set_camera(
+            camera_name="sideview",
+            pos=[0.5586131746834771, 0.3, 1.2903500240372423],
+            quat=[0.4144233167171478, 0.3100920617580414, 0.49641484022140503, 0.6968992352485657]
+        )
         
         bread = CustomMaterial(
             texture="Bread",
@@ -246,7 +246,7 @@ class DrawerEnv(SingleArmEnv):
 
         self.cabinet_object = CabinetObject(
             name="CabinetObject")
-        cabinet_object = self.cabinet_object.get_obj(); cabinet_object.set("pos", array_to_string((0.05, 0.25, 0.03))); mujoco_arena.table_body.append(cabinet_object)
+        cabinet_object = self.cabinet_object.get_obj(); cabinet_object.set("pos", array_to_string((0.05, 0.27, 0.03))); mujoco_arena.table_body.append(cabinet_object)
         
         for obj_body in [
                 self.cabinet_object,

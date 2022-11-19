@@ -714,6 +714,36 @@ def record_video_abstract_states(start_state, end_state, video_path="video.mp4",
         if n_frames % 100 == 0:
             print("frame ", n_frames)
 
+
+        # if phase == 1 or phase == 5:
+        #     # reach xy (gripper open)
+        #     u = (obj_pos[:2] - eef_pos[:2]) / np.linalg.norm(obj_pos[:2] - eef_pos[:2])
+        #     action = 1.5 * speed * u
+        #     action = np.array([action[0], action[1], 0, 0, 0, 0, -1])
+        #     if phase == 5:
+        #         # gripper closed
+        #         action[-1] = 1
+        #     return action
+        # if phase == 2 or phase == 6:
+        #     # move down (gripper open)
+        #     action = np.array([0, 0, -speed, 0, 0, 0, -1])
+        #     if phase == 6:
+        #         action[-1] = 1
+        #     return action
+        # if phase == 3:
+        #     # grip
+        #     return np.array([0, 0, 0, 0, 0, 0, 1])
+        # if phase == 4:
+        #     # move up
+        #     return np.array([0, 0, speed, 0, 0, 0, 1])
+        # if phase == 7:
+        #     # release
+        #     return np.array([0, 0, 0, 0, 0, 0, -1])
+        # if phase == 8:
+        #     # do nothing
+        #     return np.array([0, 0, 0, 0, 0, 0, -1])
+
+
         if (
             (phase == 1 and np.all(np.abs(eef_pos[:2] - obj_pos[:2]) < thresh))
             or
@@ -792,9 +822,11 @@ def record_video_drawer(video_path="video.mp4", csv_path="data.csv", camera_name
 
     obs = env.reset()
     eef_pos = obs["robot0_eef_pos"]
+
     grip_height = 1.022
     zero_pull_y = 0.017
-    full_pull_y = -0.128
+    full_pull_y = -0.304
+
     phase = 1
 
     # create a video writer with imageio
@@ -874,7 +906,7 @@ def record_video_drawer(video_path="video.mp4", csv_path="data.csv", camera_name
             print("drawer pos ", eef_pos[1] - zero_pull_y)
 
             n_frames += 1
-            if n_frames > 500:
+            if n_frames > 1500:
                 # something is wrong. stop
                 break
 
@@ -902,23 +934,25 @@ if __name__ == "__main__":
     }
 
     ############## Record Drawer Stimulus ###############
-    # views = ["frontview", "sideview", "agentview"]
+    # views = ["sideview", "agentview"]
+    views = ["sideview"]
+    speeds = [0.4]
     # speeds = [0.1, 0.2, 0.3, 0.4]
-    # save_dir = "videos/drawer"
-    # os.makedirs(save_dir, exist_ok=True)
+    save_dir = "videos/drawer_large"
+    os.makedirs(save_dir, exist_ok=True)
     
-    # for view, speed in [(view, speed) for view in views for speed in speeds]:
-    #     print(f"recording {view}, {speed}")
-    #     record_video_drawer(
-    #         video_path=os.path.join(save_dir, f"{view}_speed{speed}.mp4"),
-    #         csv_path=os.path.join(save_dir, f"{view}_speed{speed}.csv"),
-    #         camera_names=view,
-    #         thresh=speed/100,
-    #         speed=speed,
-    #     )
+    for view, speed in [(view, speed) for view in views for speed in speeds]:
+        print(f"recording {view}, {speed}")
+        record_video_drawer(
+            video_path=os.path.join(save_dir, f"{view}_speed{speed}.mp4"),
+            csv_path=os.path.join(save_dir, f"{view}_speed{speed}.csv"),
+            camera_names=view,
+            thresh=speed/100,
+            speed=speed,
+        )
 
     ############ Record Abstract State Stimulus ###############
-    record_video_abstract_states(start_state=1, end_state=2)
+    # record_video_abstract_states(start_state=1, end_state=2)
 
     ########## Record Lift ###############
     # n_videos = 15
