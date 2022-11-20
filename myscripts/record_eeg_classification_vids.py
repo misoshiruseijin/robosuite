@@ -624,36 +624,6 @@ def record_videos_lift(video_path="video.mp4", csv_path="data.csv", camera_names
 ################## Abstract States Stimulus ##############
 def record_video_abstract_states(start_state, end_state, video_path="video.mp4", csv_path="data.csv", camera_names="frontview", obj_rgba=(1,0,0,1), speed=0.25):
 
-    def generate_action(phase, speed=0.25):
-
-        if phase == 1 or phase == 5:
-            # reach xy (gripper open)
-            u = (obj_pos[:2] - eef_pos[:2]) / np.linalg.norm(obj_pos[:2] - eef_pos[:2])
-            action = 1.5 * speed * u
-            action = np.array([action[0], action[1], 0, 0, 0, 0, -1])
-            if phase == 5:
-                # gripper closed
-                action[-1] = 1
-            return action
-        if phase == 2 or phase == 6:
-            # move down (gripper open)
-            action = np.array([0, 0, -speed, 0, 0, 0, -1])
-            if phase == 6:
-                action[-1] = 1
-            return action
-        if phase == 3:
-            # grip
-            return np.array([0, 0, 0, 0, 0, 0, 1])
-        if phase == 4:
-            # move up
-            return np.array([0, 0, speed, 0, 0, 0, 1])
-        if phase == 7:
-            # release
-            return np.array([0, 0, 0, 0, 0, 0, -1])
-        if phase == 8:
-            # do nothing
-            return np.array([0, 0, 0, 0, 0, 0, -1])
-
     assert (1 <= start_state <= 9 and 1 <= end_state <= 9)
 
     env = make(
@@ -763,8 +733,8 @@ def record_video_abstract_states(start_state, end_state, video_path="video.mp4",
         eef_pos_hist.append(obs["eef_xyz_gripper"])
         action_hist.append(action)
         obj_pos_hist.append(obs["obj_pos"])
-        eef_state_hist.append(np.where(obs["eef_abstract_state"] == True)[0][0])
-        obj_state_hist.append(np.where(obs["obj_abstract_state"] == True)[0][0])
+        eef_state_hist.append(np.where(obs["eef_abstract_state"] == True)[0][0] + 1)
+        obj_state_hist.append(np.where(obs["obj_abstract_state"] == True)[0][0] + 1)
 
         # print("action ", action)
         # print("phase ", phase)
@@ -923,6 +893,20 @@ if __name__ == "__main__":
         "gray" : (0.75,0.75,0.75,1),
     }
 
+    csv_path = "/home/ayanoh/robosuite/myscripts/csv/"
+    save_path = "/home/ayanoh/robosuite/myscripts/csv_new/"
+
+    csv_files = os.listdir(csv_path)
+    start_frame = 0
+    clip = 0
+    for file in csv_files:
+        file_path = os.path.join(csv_path, file)
+        df = pd.read_csv(file_path)
+        df["eef_abstract_state"] += 1
+        df["obj_abstract_state"] += 1
+        df.to_csv(file_path, index=False)
+
+
     ############## Record Drawer Stimulus ###############
     # views = ["sideview", "agentview"]
     # speeds = [0.1, 0.2, 0.3, 0.4]
@@ -940,34 +924,34 @@ if __name__ == "__main__":
     #     )
 
     ############ Record Abstract State Stimulus ###############
-    views = ["agentview"]
-    obj_colors = ["red"]
-    states = [1, 2, 3, 4, 5, 6, 7, 8, 9]
-    # start_states = [1]
-    # end_states = [4, 6]
-    speed = 0.15
-    save_root_dir = "videos/abstract_states_color_grid"
-    os.makedirs(save_root_dir, exist_ok=True)
+    # views = ["agentview"]
+    # obj_colors = ["red"]
+    # states = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    # # start_states = [1]
+    # # end_states = [4, 6]
+    # speed = 0.15
+    # save_root_dir = "videos/abstract_states_color_grid"
+    # os.makedirs(save_root_dir, exist_ok=True)
 
-    for view in views:
-        for color in obj_colors:
-            save_dir = os.path.join(save_root_dir, f"{view}_{color}")
-            os.makedirs(save_dir, exist_ok=True)
-            for start in start_states:
-                for end in end_states:
-                    if start == end:
-                        continue
-                    print(f"recording {view} {color} {start} to {end}")
-                    # record_video_abstract_states(start_state=1, end_state=2)
-                    record_video_abstract_states(
-                        start_state=start,
-                        end_state=end,
-                        video_path=os.path.join(save_dir, f"state{start}_to_{end}.mp4"),
-                        csv_path=os.path.join(save_dir, f"state{start}_to_{end}.csv"),
-                        camera_names=view,
-                        obj_rgba=colors[color],
-                        speed=speed,
-                    )
+    # for view in views:
+    #     for color in obj_colors:
+    #         save_dir = os.path.join(save_root_dir, f"{view}_{color}")
+    #         os.makedirs(save_dir, exist_ok=True)
+    #         for start in states:
+    #             for end in states:
+    #                 if start == end:
+    #                     continue
+    #                 print(f"recording {view} {color} {start} to {end}")
+    #                 # record_video_abstract_states(start_state=1, end_state=2)
+    #                 record_video_abstract_states(
+    #                     start_state=start,
+    #                     end_state=end,
+    #                     video_path=os.path.join(save_dir, f"state{start}_to_{end}.mp4"),
+    #                     csv_path=os.path.join(save_dir, f"state{start}_to_{end}.csv"),
+    #                     camera_names=view,
+    #                     obj_rgba=colors[color],
+    #                     speed=speed,
+    #                 )
 
     ########## Record Lift ###############
     # n_videos = 15
