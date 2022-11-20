@@ -274,7 +274,7 @@ class GridWallObject(CompositeObject):
             geom_quats=(0, 0, 0, 1),
             geom_sizes=np.array([self.body_half_size[0], self.wall_thickness/2, self.wall_height/2]),
             geom_names=name,
-            geom_rgbas=self.rgba,
+            geom_rgbas=(1,0,0,1),
             geom_frictions=None,
             density=self.density,
         )
@@ -288,7 +288,7 @@ class GridWallObject(CompositeObject):
             geom_quats=(0, 0, 0, 1),
             geom_sizes=np.array([self.body_half_size[0], self.wall_thickness/2, self.wall_height/2]),
             geom_names=name,
-            geom_rgbas=self.rgba,
+            geom_rgbas=(0,1,0,1),
             geom_frictions=None,
             density=self.density,
         )
@@ -302,7 +302,7 @@ class GridWallObject(CompositeObject):
             geom_quats=(0, 0, 0, 1),
             geom_sizes=np.array([self.wall_thickness/2, self.body_half_size[1], self.wall_height/2]),
             geom_names=name,
-            geom_rgbas=self.rgba,
+            geom_rgbas=(0,0,1,1),
             geom_frictions=None,
             density=self.density,
         )
@@ -316,7 +316,7 @@ class GridWallObject(CompositeObject):
             geom_quats=(0, 0, 0, 1),
             geom_sizes=np.array([self.wall_thickness/2, self.body_half_size[1], self.wall_height/2]),
             geom_names=name,
-            geom_rgbas=self.rgba,
+            geom_rgbas=(0,0,0,1),
             geom_frictions=None,
             density=self.density,
         )

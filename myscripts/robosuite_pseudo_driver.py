@@ -709,11 +709,14 @@ class FrankaGridWall():
         self,
         controller_config=load_controller_config(default_controller="OSC_POSE"),
         action_dof=4,
-        initial_eef_pos=(0.0, 0.0, 0.0), # where on the table eef should start from
+        initial_state=1,
+        final_state=2,
         view="frontview",
     ):
 
         self.action_dof = action_dof # eef [dx, dy]
+        self.initial_state = initial_state
+        self.final_state = final_state
 
         # initialize environment
         self.env = suite.make(
@@ -726,7 +729,7 @@ class FrankaGridWall():
             use_camera_obs=False,
             control_freq=20,
             ignore_done=True,
-            obj_intial_abs_state=1,
+            obj_intial_abs_state=initial_state,
         )
 
         self.env = VisualizationWrapper(self.env, indicator_configs=None)
@@ -779,81 +782,95 @@ class FrankaGridWall():
                 # print("obj state ", obs["obj_abstract_state"])
 
                 self.env.render()
-  
-class FrankaHammer():
-    def __init__(
-        self,
-        controller_config=load_controller_config(default_controller="OSC_POSE"),
-        action_dof=4,
-        initial_eef_pos=(0.0, 0.0, 0.0), # where on the table eef should start from
-        view="agentview",
-    ):
-
-        self.action_dof = action_dof # eef [dx, dy]
-
-        # initialize environment
-        self.env = suite.make(
-            env_name="HammerPlaceEnv",
-            controller_configs=controller_config,
-            robots="Panda",
-            has_renderer=True,
-            has_offscreen_renderer=False,
-            render_camera=view,
-            use_camera_obs=False,
-            control_freq=20,
-            ignore_done=True,
-        )
-
-        self.env = VisualizationWrapper(self.env, indicator_configs=None)
-
+    
+    def hardcode_control(self):
         obs = self.env.reset()
-    
-    
-    # run simulation with spacemouse
-    def spacemouse_control(self):
-        device = SpaceMouse(
-            vendor_id=9583,
-            product_id=50734,
-            pos_sensitivity=1.0,
-            rot_sensitivity=1.0,
-        )
+        eef_pos = obs["robot0_eef_pos"]
+        obj_pos = obs["obj_pos"]
+        lift_height = eef_pos[2]
+        pick_place_height = self.env.table_offset[2] + self.env.obj_half_size[2]
+        goal_pos = self.env.abstract_states[self.final_state]
+        thresh = 0.005
+        n_frames = 0
+        lift_steps = 0
+        stop_steps = 0
+        gripper_cnt = 0 # buffer to make sure object is gripped
 
-        device.start_control()
+        phase = 1
+
         while True:
             # Reset environment
             obs = self.env.reset()
+            # pdb.set_trace()
             self.env.modify_observable(observable_name="robot0_joint_pos", attribute="active", modifier=True)
 
             # rendering setup
             self.env.render()
 
-            # Initialize device control
-            device.start_control()
-
             done = False
+            speed = 0.15
 
             while True:
+                print("phase ", phase)
                 # set active robot
                 active_robot = self.env.robots[0]
+                
                 # get action
-                action, grip = input2action(
-                    device=device,
-                    robot=active_robot,
-                )
-                # action = action[:4]
-                action[3:5] = 0
- 
+                if phase == 1: # reach to pick pos
+                    print("obj pos ", obj_pos)
+                    print("error ", np.abs(eef_pos[:2] - obj_pos[:2]))
+                    u = (obj_pos[:2] - eef_pos[:2]) / np.linalg.norm(obj_pos[:2] - eef_pos[:2])
+                    action = speed * u
+                    action = np.array([action[0], action[1], 0, 0, 0, 0, -1])
+                    if np.all(np.abs(eef_pos[:2] - obj_pos[:2]) < thresh):
+                        phase = 2
+                if phase == 2: # move down (open)
+                    action = np.array([0, 0, -speed, 0, 0, 0, -1])
+                    if np.abs(eef_pos[2] - pick_place_height) < thresh:
+                        phase = 3
+                if phase == 3: # grip
+                    action = np.array([0, 0, 0, 0, 0, 0, 1])
+                    gripper_cnt += 1
+                    if gripper_cnt > 15:
+                        gripper_cnt = 0
+                        phase = 4
+                if phase == 4: # move up (close)
+                    action = np.array([0, 0, speed, 0, 0, 0, 1])
+                    if np.abs(eef_pos[2] - lift_height) < thresh:
+                        phase = 5
+                if phase == 5: # reach to drop pos
+                    u = (goal_pos[:2] - eef_pos[:2]) / np.linalg.norm(goal_pos[:2] - eef_pos[:2])
+                    action = speed * u
+                    action = np.array([action[0], action[1], 0, 0, 0, 0, 1])
+                    if np.all(np.abs(eef_pos[:2] - goal_pos[:2]) < thresh):
+                        phase = 6
+                if phase == 6: # move down (close)
+                    action = np.array([0, 0, -speed, 0, 0, 0, 1])
+                    if abs(eef_pos[2] - pick_place_height) < thresh:
+                        phase = 7
+                if phase == 7: # drop
+                    action = np.array([0, 0, 0, 0, 0, 0, -1])
+                    gripper_cnt += 1
+                    if gripper_cnt >= 15:
+                        gripper_cnt = 0
+                        phase = 8
+                if phase == 8: # move up (open)
+                    action = np.array([0, 0, speed, 0, 0, 0, -1])
+                    if np.abs(eef_pos[2] - lift_height) < thresh:
+                        break
+
                 if action is None:
                     break
 
                 # take step in simulation
                 obs, reward, done, info = self.env.step(action)
                 # print("action ", action)
-                # print("eef_pos ", obs["robot0_eef_pos"])
-                # print("eef state ", obs["eef_abstract_state"])
-                # print("obj state ", obs["obj_abstract_state"])
+                eef_pos = obs["robot0_eef_pos"]
+                print("eef_pos ", eef_pos)
+                # print("contact ", obs["robot0_contact"])
 
                 self.env.render()
+
 
 class FrankaDrawer():
     def __init__(
@@ -1020,7 +1037,7 @@ def main():
     # Setup printing options for numbers
     np.set_printoptions(formatter={"float": lambda x: "{0:0.3f}".format(x)})
     
-    task = FrankaDrawer(view="agentview")
+    task = FrankaGridWall(view="agentview")
     # task.spacemouse_control()
     task.hardcode_control()
 

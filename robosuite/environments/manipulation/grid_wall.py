@@ -191,7 +191,7 @@ class GridWall(SingleArmEnv):
         # settings for table top
         self.table_full_size = table_full_size
         self.table_friction = table_friction
-        self.table_offset = np.array((0, 0, 0.83))
+        self.table_offset = np.array((0, 0, 0.9))
 
         # workspace boundaries
         self.workspace_x = (-0.5 * self.table_full_size[0] + self.table_offset[0], 0.5 * self.table_full_size[0] + self.table_offset[0])

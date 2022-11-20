@@ -622,7 +622,7 @@ def record_videos_lift(video_path="video.mp4", csv_path="data.csv", camera_names
     df.to_csv(csv_path, index=False)
 
 ################## Abstract States Stimulus ##############
-def record_video_abstract_states(start_state, end_state, video_path="video.mp4", csv_path="data.csv", camera_names="frontview", obj_rgba=(1,0,0,1)):
+def record_video_abstract_states(start_state, end_state, video_path="video.mp4", csv_path="data.csv", camera_names="frontview", obj_rgba=(1,0,0,1), speed=0.25):
 
     def generate_action(phase, speed=0.25):
 
@@ -655,18 +655,6 @@ def record_video_abstract_states(start_state, end_state, video_path="video.mp4",
             return np.array([0, 0, 0, 0, 0, 0, -1])
 
     assert (1 <= start_state <= 9 and 1 <= end_state <= 9)
-
-    """
-    phases
-    1. move to cube initial position
-    2. move down
-    3. grip
-    4. move up
-    5. move to final position
-    6. move down, release
-    7. move up
-    8. stop
-    """
 
     env = make(
         env_name="GridWall",
@@ -705,65 +693,67 @@ def record_video_abstract_states(start_state, end_state, video_path="video.mp4",
     n_frames = 0
     lift_steps = 0
     stop_steps = 0
+    gripper_cnt = 0 # buffer to make sure object is gripped
 
     phase = 1
-    action = generate_action(phase=1)
 
     while stop_steps < 30: # done checks for success, lift_steps make sure recording stops for failure case
+        """
+        phases
+        1. move to cube initial position
+        2. move down
+        3. grip
+        4. move up
+        5. move to final position
+        6. move down, release
+        7. move up
+        8. stop
+        """
 
         if n_frames % 100 == 0:
             print("frame ", n_frames)
 
-
-        # if phase == 1 or phase == 5:
-        #     # reach xy (gripper open)
-        #     u = (obj_pos[:2] - eef_pos[:2]) / np.linalg.norm(obj_pos[:2] - eef_pos[:2])
-        #     action = 1.5 * speed * u
-        #     action = np.array([action[0], action[1], 0, 0, 0, 0, -1])
-        #     if phase == 5:
-        #         # gripper closed
-        #         action[-1] = 1
-        #     return action
-        # if phase == 2 or phase == 6:
-        #     # move down (gripper open)
-        #     action = np.array([0, 0, -speed, 0, 0, 0, -1])
-        #     if phase == 6:
-        #         action[-1] = 1
-        #     return action
-        # if phase == 3:
-        #     # grip
-        #     return np.array([0, 0, 0, 0, 0, 0, 1])
-        # if phase == 4:
-        #     # move up
-        #     return np.array([0, 0, speed, 0, 0, 0, 1])
-        # if phase == 7:
-        #     # release
-        #     return np.array([0, 0, 0, 0, 0, 0, -1])
-        # if phase == 8:
-        #     # do nothing
-        #     return np.array([0, 0, 0, 0, 0, 0, -1])
-
-
-        if (
-            (phase == 1 and np.all(np.abs(eef_pos[:2] - obj_pos[:2]) < thresh))
-            or
-            (phase == 2 and np.abs(eef_pos[2] - pick_place_height) < thresh)
-            or
-            (phase == 3 and env.gripper_state == 1)
-            or
-            (phase == 4 and np.abs(eef_pos[2] - pick_place_height) < thresh)
-            or
-            (phase == 5 and np.all(np.abs(eef_pos[:2] - goal_pos[:2]) < thresh))
-            or
-            (phase == 6 and np.abs(eef_pos[2] - pick_place_height) < thresh)
-            or
-            (phase == 7 and env.gripper_state == -1)
-        ):
-            phase += 1
-        action = generate_action(phase=phase)
-
-        if phase == 8:
-            stop_steps += 1
+        if phase == 1: # reach to pick pos
+            u = (obj_pos[:2] - eef_pos[:2]) / np.linalg.norm(obj_pos[:2] - eef_pos[:2])
+            action = 1.5 * speed * u
+            action = np.array([action[0], action[1], 0, 0, 0, 0, -1])
+            if np.all(np.abs(eef_pos[:2] - obj_pos[:2]) < thresh):
+                phase = 2
+        if phase == 2: # move down (open)
+            action = np.array([0, 0, -speed, 0, 0, 0, -1])
+            if np.abs(eef_pos[2] - pick_place_height) < thresh:
+                phase = 3
+        if phase == 3: # grip
+            action = np.array([0, 0, 0, 0, 0, 0, 1])
+            gripper_cnt += 1
+            if gripper_cnt > 15:
+                gripper_cnt = 0
+                phase = 4
+        if phase == 4: # move up (close)
+            action = np.array([0, 0, speed, 0, 0, 0, 1])
+            if np.abs(eef_pos[2] - lift_height) < thresh:
+                phase = 5
+        if phase == 5: # reach to drop pos
+            u = (goal_pos[:2] - eef_pos[:2]) / np.linalg.norm(goal_pos[:2] - eef_pos[:2])
+            action = 1.5 * speed * u
+            action = np.array([action[0], action[1], 0, 0, 0, 0, 1])
+            if np.all(np.abs(eef_pos[:2] - goal_pos[:2]) < thresh):
+                phase = 6
+        if phase == 6: # move down (close)
+            action = np.array([0, 0, -speed, 0, 0, 0, 1])
+            if abs(eef_pos[2] - pick_place_height) < thresh:
+                phase = 7
+        if phase == 7: # drop
+            action = np.array([0, 0, 0, 0, 0, 0, -1])
+            gripper_cnt += 1
+            if gripper_cnt >= 15:
+                gripper_cnt = 0
+                phase = 8
+        if phase == 8: # move up (open)
+            action = np.array([0, 0, speed, 0, 0, 0, -1])
+            if np.abs(eef_pos[2] - lift_height) < thresh:
+                # stop_steps += 1
+                break
 
         obs, reward, done, info = env.step(action)
         frame = obs[camera_names + "_image"]
@@ -773,14 +763,14 @@ def record_video_abstract_states(start_state, end_state, video_path="video.mp4",
         eef_pos_hist.append(obs["eef_xyz_gripper"])
         action_hist.append(action)
         obj_pos_hist.append(obs["obj_pos"])
-        eef_state_hist.append(np.where(obs["eef_abstract_state"] == True)[0])
-        obj_state_hist.append(np.where(obs["obj_abstract_state"] == True)[0])
+        eef_state_hist.append(np.where(obs["eef_abstract_state"] == True)[0][0])
+        obj_state_hist.append(np.where(obs["obj_abstract_state"] == True)[0][0])
 
-        print("action ", action)
-        print("phase ", phase)
-        print("eef pos ", eef_pos)
-        print("goal ", goal_pos)
-        print("obj pos ", obj_pos)
+        # print("action ", action)
+        # print("phase ", phase)
+        # print("eef pos ", eef_pos)
+        # print("goal ", goal_pos)
+        # print("obj pos ", obj_pos)
 
         n_frames += 1
         if n_frames > 500:
@@ -935,24 +925,49 @@ if __name__ == "__main__":
 
     ############## Record Drawer Stimulus ###############
     # views = ["sideview", "agentview"]
-    views = ["sideview"]
-    speeds = [0.4]
     # speeds = [0.1, 0.2, 0.3, 0.4]
-    save_dir = "videos/drawer_large"
-    os.makedirs(save_dir, exist_ok=True)
+    # save_dir = "videos/drawer_large"
+    # os.makedirs(save_dir, exist_ok=True)
     
-    for view, speed in [(view, speed) for view in views for speed in speeds]:
-        print(f"recording {view}, {speed}")
-        record_video_drawer(
-            video_path=os.path.join(save_dir, f"{view}_speed{speed}.mp4"),
-            csv_path=os.path.join(save_dir, f"{view}_speed{speed}.csv"),
-            camera_names=view,
-            thresh=speed/100,
-            speed=speed,
-        )
+    # for view, speed in [(view, speed) for view in views for speed in speeds]:
+    #     print(f"recording {view}, {speed}")
+    #     record_video_drawer(
+    #         video_path=os.path.join(save_dir, f"{view}_speed{speed}.mp4"),
+    #         csv_path=os.path.join(save_dir, f"{view}_speed{speed}.csv"),
+    #         camera_names=view,
+    #         thresh=speed/100,
+    #         speed=speed,
+    #     )
 
     ############ Record Abstract State Stimulus ###############
-    # record_video_abstract_states(start_state=1, end_state=2)
+    views = ["agentview"]
+    obj_colors = ["red"]
+    states = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    # start_states = [1]
+    # end_states = [4, 6]
+    speed = 0.15
+    save_root_dir = "videos/abstract_states_color_grid"
+    os.makedirs(save_root_dir, exist_ok=True)
+
+    for view in views:
+        for color in obj_colors:
+            save_dir = os.path.join(save_root_dir, f"{view}_{color}")
+            os.makedirs(save_dir, exist_ok=True)
+            for start in start_states:
+                for end in end_states:
+                    if start == end:
+                        continue
+                    print(f"recording {view} {color} {start} to {end}")
+                    # record_video_abstract_states(start_state=1, end_state=2)
+                    record_video_abstract_states(
+                        start_state=start,
+                        end_state=end,
+                        video_path=os.path.join(save_dir, f"state{start}_to_{end}.mp4"),
+                        csv_path=os.path.join(save_dir, f"state{start}_to_{end}.csv"),
+                        camera_names=view,
+                        obj_rgba=colors[color],
+                        speed=speed,
+                    )
 
     ########## Record Lift ###############
     # n_videos = 15
