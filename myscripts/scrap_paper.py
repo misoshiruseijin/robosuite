@@ -2,7 +2,8 @@ import h5py
 import pdb
 import random
 
-import robosuite
+import robosuite as suite
+from robosuite import load_controller_config
 import pandas as pd
 import numpy as np
 
@@ -28,25 +29,19 @@ def copy_model_file(hdf5_path):
     for key in f["data"].keys():
         f["data"][key].attrs["model_file"] = model_file
 
-# def concat_hdf5_files(hdf5_path1, hdf5_path2):
-#     f1 = h5py.File(hdf5_path1, "r+")
-#     f2 = h5py.File(hdf5_path2, "r+")
-#     # pdb.set_trace()
-#     n = len(f1["data"].keys()) + 1
-#     n_added = 0
-#     for key in f2["data"].keys():
-#         f1["data"].create_group(f"demo_{n}")
-#         f2.copy(f2["data"][key], f1[f"data/demo_{n}"])
-#         f1[f"data/demo_{n}"].attrs["model_file"] = f2["data"][key].attrs["model_file"]
-#         f1[f"data/demo_{n}"].attrs["num_samples"] = f2["data"][key].attrs["num_samples"]
-#         n_added += f2["data"][key].attrs["num_samples"]
-#         n += 1
-#     f1["data"].attrs["total"] = f1["data"].attrs["total"] + n_added
+env = suite.make(
+    env_name="DrawerEnv",
+    controller_configs=load_controller_config(default_controller="OSC_POSITION"),
+    robots="Panda",
+    has_renderer=True,
+    has_offscreen_renderer=False,
+    render_camera="agentview",
+    use_camera_obs=False,
+    control_freq=20,
+    ignore_done=True,
+)
 
-#     pdb.set_trace()
-#     f1.close()
-#     f2.close()
-
+pdb.set_trace()
 
 # path1 = "/home/ayanoh/robosuite/robosuite/models/assets/demonstrations/franka_reaching_robosuite/reaching_100.hdf5"
 # path2 = "/home/ayanoh/robosuite/robosuite/models/assets/demonstrations/franka_reaching_robosuite/reaching_50_2.hdf5"
@@ -54,8 +49,8 @@ def copy_model_file(hdf5_path):
 # do_nothing(path1)
 # update_num_samples(path1)
 
-csv_path = "/home/ayanoh/robosuite/myscripts/video0.csv"
-pdb.set_trace()
+# csv_path = "/home/ayanoh/robosuite/myscripts/video0.csv"
+# pdb.set_trace()
 
 
 

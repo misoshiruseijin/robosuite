@@ -2,8 +2,7 @@ import robosuite as suite
 import numpy as np
 import redis
 from robosuite import load_controller_config
-from  robosuite.devices import Keyboard, SpaceMouse
-from robosuite.environments.manipulation.reaching_2d import Reaching2D
+from robosuite.devices import Keyboard, SpaceMouse
 from robosuite.utils.input_utils import input2action
 from robosuite.wrappers import VisualizationWrapper
 import pdb
@@ -898,6 +897,7 @@ class FrankaDrawer():
 
         self.env = VisualizationWrapper(self.env, indicator_configs=None)
 
+        pdb.set_trace()
         obs = self.env.reset()
     
     
@@ -1037,7 +1037,7 @@ def main():
     # Setup printing options for numbers
     np.set_printoptions(formatter={"float": lambda x: "{0:0.3f}".format(x)})
     
-    task = FrankaGridWall(view="agentview")
+    task = FrankaDrawer(view="agentview")
     # task.spacemouse_control()
     task.hardcode_control()
 
