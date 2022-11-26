@@ -5,6 +5,7 @@ from robosuite import load_controller_config
 from robosuite.devices import Keyboard, SpaceMouse
 from robosuite.utils.input_utils import input2action
 from robosuite.wrappers import VisualizationWrapper
+from robosuite.utils.primitive_skills import PrimitiveSkill
 import pdb
 ############### For BallBasket Environment #################
 class BallBasketExperiment():
@@ -467,6 +468,7 @@ class Franka2DReachingExperiment():
                 print("target ", self.env.target_position)
                 self.env.render()
 
+
 class FrankaDropExperiment():
     def __init__(
         self,
@@ -702,7 +704,29 @@ class FrankaLift():
                 # print("delta ", obs["robot0_delta_to_target"])
                 # print("target ", self.env.target_position)
                 self.env.render()
+   
+    def primitive_control(self):
         
+        primitive = PrimitiveSkill(self.env)
+
+        # Reset environment
+        obs = self.env.reset()
+        # pdb.set_trace()
+        # self.env.modify_observable(observable_name="robot0_joint_pos", attribute="active", modifier=True)
+
+        # rendering setup
+        # self.env.render()
+
+        primitive.move_to_pos(
+            env=self.env,
+            obs=obs,
+            goal_pos=(0.16,0.16,0.988),
+            gripper_closed=False,
+            robot_id=0
+        )                
+
+
+
 class FrankaGridWall():
     def __init__(
         self,
@@ -776,7 +800,7 @@ class FrankaGridWall():
                 # take step in simulation
                 obs, reward, done, info = self.env.step(action)
                 # print("action ", action)
-                # print("eef_pos ", obs["robot0_eef_pos"])
+                print("eef_pos ", obs["robot0_eef_pos"])
                 # print("eef state ", obs["eef_abstract_state"])
                 # print("obj state ", obs["obj_abstract_state"])
 
@@ -897,7 +921,6 @@ class FrankaDrawer():
 
         self.env = VisualizationWrapper(self.env, indicator_configs=None)
 
-        pdb.set_trace()
         obs = self.env.reset()
     
     
@@ -1037,9 +1060,10 @@ def main():
     # Setup printing options for numbers
     np.set_printoptions(formatter={"float": lambda x: "{0:0.3f}".format(x)})
     
-    task = FrankaDrawer(view="agentview")
+    task = FrankaLift()
     # task.spacemouse_control()
-    task.hardcode_control()
+    # task.hardcode_control()
+    task.primitive_control()
 
 
 if __name__ == "__main__":

@@ -149,7 +149,8 @@ class Reaching2D(SingleArmEnv):
         controller_configs=None,
         gripper_types="default",
         initialization_noise=None,
-        table_full_size=(0.65, 0.65, 0.15),
+        # table_full_size=(0.65, 0.65, 0.15),
+        table_full_size=(0.65, 0.8, 0.15),
         table_friction=(100, 100, 100),
         use_camera_obs=True,
         use_object_obs=True,
@@ -205,7 +206,9 @@ class Reaching2D(SingleArmEnv):
 
         # workspace boundaries
         self.workspace_x = (-0.2, 0.2)
-        self.workspace_y = (-0.3, 0.3)
+        # self.workspace_x = (-0.4, 0.4)
+        # self.workspace_y = (-0.3, 0.3)
+        self.workspace_y = (-0.4, 0.4)
         self.workspace_z = (0.83, 1.3)
 
         self.reset_ready = False # hack to fix target initialized in wrong position issue
@@ -444,7 +447,7 @@ class Reaching2D(SingleArmEnv):
 
     def _check_action_in_bounds(self, action):
 
-        sf = 3 # safety factor to prevent robot from moving out of bounds
+        sf = 2 # safety factor to prevent robot from moving out of bounds
         x_in_bounds = self.workspace_x[0] < self._eef_xpos[0] + sf * action[0] / self.control_freq < self.workspace_x[1]
         y_in_bounds = self.workspace_y[0] < self._eef_xpos[1] + sf * action[1] / self.control_freq < self.workspace_y[1]
         return x_in_bounds and y_in_bounds

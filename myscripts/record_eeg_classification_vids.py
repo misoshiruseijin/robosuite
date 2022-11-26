@@ -15,6 +15,7 @@ import robosuite.utils.macros as macros
 from robosuite import make
 from robosuite.wrappers.visualization_wrapper import VisualizationWrapper
 from robosuite.controllers import load_controller_config
+from robosuite.utils.primitive_skills import PrimitiveSkill
 
 import pandas as pd
 import os
@@ -27,6 +28,119 @@ macros.IMAGE_CONVENTION = "opencv"
 
 np.random.seed(1)
 
+def record_videos_2d_reaching(video_path="video.mp4", csv_path="data.csv", camera_names="frontview", good=True, timesteps=200):
+    
+    camera_names = "frontview"
+    target_half_size = np.array((0.05, 0.05, 0.001))
+    terminate_on_success = False
+
+    # initialize an environment with offscreen renderer
+    env = make(
+        env_name="Reaching2D",
+        controller_configs=load_controller_config(default_controller="OSC_POSITION"),
+        robots="Panda",
+        has_offscreen_renderer=True,
+        render_camera="frontview",
+        use_camera_obs=True,
+        control_freq=20,
+        target_half_size=target_half_size,
+        random_init=True,
+        random_target=True,
+        has_renderer=False,
+        # ignore_done=False,
+        use_object_obs=False,
+        camera_names=camera_names,
+        camera_heights=512,
+        camera_widths=512,
+    )
+    env = VisualizationWrapper(env, indicator_configs=None)
+
+    good_hist = []
+    eef_pos_hist = []  
+    action_hist = []
+
+    # create a video writer with imageio
+    writer = imageio.get_writer(video_path, fps=20)
+
+    obs = env.reset()
+    eef_pos = obs["robot0_eef_pos"]
+    target_pos = env.target_pos
+    bad_action_resample_cnt = 0
+
+    # unit vector in direction of target
+    u_good = (target_pos - eef_pos[:2]) / np.linalg.norm((target_pos - eef_pos[:2]))
+
+    # if good, move straight to target. 
+    if good:
+        action = 0.3 * u_good
+
+    # if bad, find bad action
+    if not good:
+        theta = np.deg2rad(np.random.uniform(-45, 45, 1)[0]) # angle range
+        rot = np.array([ # rotation matrix
+            [np.cos(theta), -np.sin(theta)],
+            [np.sin(theta), np.cos(theta)]
+        ])
+        u_bad = np.dot(rot, -u_good) # unit vector in bad direction (clearly away from target)
+        # action = 0.3 * u_bad
+        action = 0.3 * -u_good
+
+    action = np.concatenate([action, np.array([0, -1])])
+    print("action ", action)
+
+    for i in range(timesteps):
+
+        # if good and target is reached, stop
+        if good and env._check_success():
+                action = np.array([0, 0, 0, -1])
+
+        # if bad, go away from target. if action out of bounds, sample another bad action. if valid action is not found, stop
+        if not good:
+            while not env._check_action_in_bounds(action):
+                theta = np.deg2rad(np.random.uniform(-80, 80, 1)[0]) # angle range
+                rot = np.array([ # rotation matrix
+                    [np.cos(theta), -np.sin(theta)],
+                    [np.sin(theta), np.cos(theta)]
+                ])
+                u_bad = np.dot(rot, -u_good) # unit vector in bad direction (clearly away from target)
+                action = 0.3 * u_bad
+                action = np.concatenate([action, np.array([0, -1])])
+                bad_action_resample_cnt += 1
+                if bad_action_resample_cnt >= 50:
+                    # if unable to find valid action, zero action
+                    action = np.array([0, 0, 0, -1])
+                    print("max resample")
+                    break
+        
+        obs, reward, done, info = env.step(action)
+
+        frame = obs[camera_names + "_image"]
+        writer.append_data(frame)
+
+        # log target position, action, eef position, 
+        # print("action ", action)
+        good_hist.append(good)
+        eef_pos_hist.append(obs["robot0_eef_pos"][:2])
+        action_hist.append(action)   
+        # print("reward ", reward)
+        # pdb.set_trace()   
+    
+    writer.close()
+    
+    # record target po, time, eef pos, actions
+    df = pd.DataFrame(
+        data={
+            "step" : np.arange(len(good_hist)),
+            "action" : pd.Series(action_hist),
+            "eef_pos" : pd.Series(eef_pos_hist),
+            "good" : good_hist,
+            "target_pos" : pd.Series([target_pos for i in range(len(good_hist))]),
+        }
+    )
+    df.to_csv(csv_path, index=False)
+
+
+
 ################## Franka 2D Reaching ###########################
 def is_good(p_good):
     if np.random.random() < p_good:
@@ -34,6 +148,7 @@ def is_good(p_good):
     return False
 
 def is_in_target(target_pos, target_half_size, eef_pos):
+    
     return (
         target_pos[0] - target_half_size[0] < eef_pos[0] < target_pos[0] + target_half_size[0]
         and target_pos[1] - target_half_size[1] < eef_pos[1] < target_pos[1] + target_half_size[1]
@@ -60,7 +175,7 @@ def record_videos():
                 # if the eef is already in target region, good action is to not move
                 action = np.zeros(2)
             else:
-                action = 0.3 * (1 / np.max(np.abs(u_good))) * u_good # scale action to [-1,1] * 0.5
+                action = 0.3 * (1 / np.max(np.abs(u_good))) * u_good # scale action
         
         else:
             theta = np.deg2rad(np.random.uniform(-45, 45, 1)[0]) # angle range
@@ -253,6 +368,7 @@ def add_eef_in_target_to_csv(csv_path, target_half_size=(0.05, 0.05)):
 
     df["in_target"] = in_target
     df.to_csv(csv_path, index=False)
+
 ################## Franka 2D Reaching ###########################
 
 ################## Franka Drop ##################################
@@ -893,19 +1009,33 @@ if __name__ == "__main__":
         "gray" : (0.75,0.75,0.75,1),
     }
 
-    csv_path = "/home/ayanoh/robosuite/myscripts/csv/"
-    save_path = "/home/ayanoh/robosuite/myscripts/csv_new/"
+    save_path = "videos/2d_reaching"
+    good_path = os.path.join(save_path, "good")
+    bad_path = os.path.join(save_path, "bad")
+    os.makedirs(save_path, exist_ok=True)
+    os.makedirs(good_path, exist_ok=True)
+    os.makedirs(bad_path, exist_ok=True)
 
-    csv_files = os.listdir(csv_path)
-    start_frame = 0
-    clip = 0
-    for file in csv_files:
-        file_path = os.path.join(csv_path, file)
-        df = pd.read_csv(file_path)
-        df["eef_abstract_state"] += 1
-        df["obj_abstract_state"] += 1
-        df.to_csv(file_path, index=False)
+    n_videos = 25
+    steps = 100
 
+    for i in range(n_videos):
+        print(f"\nrecording good {i}")
+        record_videos_2d_reaching(
+            video_path=os.path.join(good_path, f"good{i}.mp4"),
+            csv_path=os.path.join(good_path, f"good{i}.csv"),
+            camera_names="frontview",
+            good=True,
+            timesteps=steps,
+        )
+        print(f"\nrecording bad {i}")
+        record_videos_2d_reaching(
+            video_path=os.path.join(bad_path, f"bad{i}.mp4"),
+            csv_path=os.path.join(bad_path, f"bad{i}.csv"),
+            camera_names="frontview",
+            good=False,
+            timesteps=steps,
+        )
 
     ############## Record Drawer Stimulus ###############
     # views = ["sideview", "agentview"]
