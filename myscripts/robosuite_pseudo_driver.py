@@ -718,7 +718,6 @@ class FrankaLift():
         # self.env.render()
 
         primitive.move_to_pos(
-            env=self.env,
             obs=obs,
             goal_pos=(0.16,0.16,0.988),
             gripper_closed=False,

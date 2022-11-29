@@ -999,6 +999,58 @@ def record_video_drawer(video_path="video.mp4", csv_path="data.csv", camera_name
     df.to_csv(csv_path, index=False)
 
 
+####### TEST PRIMITIVE #########
+def test_primitive():
+    # initialize an environment with offscreen renderer
+    camera_names = "frontview"
+    target_half_size = np.array((0.05, 0.05, 0.001))
+    video_path = "video.mp4"
+    csv_path = "data.csv"
+
+    obs_hist = []
+    reward_hist = []
+    done_hist = []
+    info_hist = []
+
+    # initialize an environment with offscreen renderer
+    env = make(
+        env_name="Lift2",
+        controller_configs=load_controller_config(default_controller="OSC_POSE"),
+        robots="Panda",
+        has_renderer=False,
+        has_offscreen_renderer=True,
+        render_camera="frontview",
+        use_camera_obs=True,
+        control_freq=20,
+        ignore_done=False,
+        camera_names=camera_names,
+        camera_heights=512,
+        camera_widths=512,
+        obj_rgba=(1,0,0,1),
+    )
+
+    env = VisualizationWrapper(env, indicator_configs=None)
+    obs = env.reset()
+    # create a video writer with imageio
+    writer = imageio.get_writer(video_path, fps=20)
+
+    primitive = PrimitiveSkill(env, return_all_states=True)
+    observations, rewards, dones, infos = primitive.move_to_pos(
+        obs=obs,
+        goal_pos=(0.16,0.16,0.988),
+        gripper_closed=False,
+        robot_id=0,
+        speed=0.25
+    )
+
+    for ob in observations:
+        frame = ob[camera_names + "_image"]
+        writer.append_data(frame)
+
+    writer.close()
+
+
+
 if __name__ == "__main__":
 
     colors = {
@@ -1009,33 +1061,36 @@ if __name__ == "__main__":
         "gray" : (0.75,0.75,0.75,1),
     }
 
-    save_path = "videos/2d_reaching"
-    good_path = os.path.join(save_path, "good")
-    bad_path = os.path.join(save_path, "bad")
-    os.makedirs(save_path, exist_ok=True)
-    os.makedirs(good_path, exist_ok=True)
-    os.makedirs(bad_path, exist_ok=True)
+    test_primitive()
 
-    n_videos = 25
-    steps = 100
+    ############ Record Equal Length 2D Reaching ##############
+    # save_path = "videos/2d_reaching"
+    # good_path = os.path.join(save_path, "good")
+    # bad_path = os.path.join(save_path, "bad")
+    # os.makedirs(save_path, exist_ok=True)
+    # os.makedirs(good_path, exist_ok=True)
+    # os.makedirs(bad_path, exist_ok=True)
 
-    for i in range(n_videos):
-        print(f"\nrecording good {i}")
-        record_videos_2d_reaching(
-            video_path=os.path.join(good_path, f"good{i}.mp4"),
-            csv_path=os.path.join(good_path, f"good{i}.csv"),
-            camera_names="frontview",
-            good=True,
-            timesteps=steps,
-        )
-        print(f"\nrecording bad {i}")
-        record_videos_2d_reaching(
-            video_path=os.path.join(bad_path, f"bad{i}.mp4"),
-            csv_path=os.path.join(bad_path, f"bad{i}.csv"),
-            camera_names="frontview",
-            good=False,
-            timesteps=steps,
-        )
+    # n_videos = 25
+    # steps = 100
+
+    # for i in range(n_videos):
+    #     print(f"\nrecording good {i}")
+    #     record_videos_2d_reaching(
+    #         video_path=os.path.join(good_path, f"good{i}.mp4"),
+    #         csv_path=os.path.join(good_path, f"good{i}.csv"),
+    #         camera_names="frontview",
+    #         good=True,
+    #         timesteps=steps,
+    #     )
+    #     print(f"\nrecording bad {i}")
+    #     record_videos_2d_reaching(
+    #         video_path=os.path.join(bad_path, f"bad{i}.mp4"),
+    #         csv_path=os.path.join(bad_path, f"bad{i}.csv"),
+    #         camera_names="frontview",
+    #         good=False,
+    #         timesteps=steps,
+    #     )
 
     ############## Record Drawer Stimulus ###############
     # views = ["sideview", "agentview"]
