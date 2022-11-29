@@ -468,7 +468,6 @@ class Franka2DReachingExperiment():
                 print("target ", self.env.target_position)
                 self.env.render()
 
-
 class FrankaDropExperiment():
     def __init__(
         self,
@@ -724,8 +723,6 @@ class FrankaLift():
             robot_id=0
         )                
 
-
-
 class FrankaGridWall():
     def __init__(
         self,
@@ -893,7 +890,6 @@ class FrankaGridWall():
 
                 self.env.render()
 
-
 class FrankaDrawer():
     def __init__(
         self,
@@ -1042,7 +1038,60 @@ class FrankaDrawer():
                 # print("contact ", obs["robot0_contact"])
 
                 self.env.render()
-  
+
+def spacemouse_control(env, obs_to_print=["robot0_eef_pos"], indicator_on=True):
+    
+    if indicator_on:
+        env = VisualizationWrapper(env, indicator_configs=None)
+
+    controller_type = env.robot_configs[0]["controller_config"]["type"]
+    if controller_type == "OSC_POSE":
+        action_dim = 6
+    elif controller_type == "OSC_POSITION":
+        action_dim = 3
+    
+    device = SpaceMouse(
+            vendor_id=9583,
+            product_id=50734,
+            pos_sensitivity=1.0,
+            rot_sensitivity=1.0,
+        )
+
+    device.start_control()
+    while True:
+        # Reset environment
+        obs = env.reset()
+        env.modify_observable(observable_name="robot0_joint_pos", attribute="active", modifier=True)
+
+        # rendering setup
+        env.render()
+
+        # Initialize device control
+        device.start_control()
+
+        while True:
+            # set active robot
+            active_robot = env.robots[0]
+            # get action
+            action, grip = input2action(
+                device=device,
+                robot=active_robot,
+            )
+            if action_dim < 6:
+                action = np.append(action[:action_dim], action[-1])
+
+            if action is None:
+                break
+
+            # take step in simulation
+            obs, reward, done, info = env.step(action)
+
+            for ob in obs_to_print:
+                print(f"{ob}: {obs[ob]}")
+
+            env.render()
+
+
 def str2ndarray(array_str, shape):
     """
     Helper function to convert action read from redis to np array
@@ -1059,11 +1108,26 @@ def main():
     # Setup printing options for numbers
     np.set_printoptions(formatter={"float": lambda x: "{0:0.3f}".format(x)})
     
-    task = FrankaLift()
+    # task = FrankaLift()
     # task.spacemouse_control()
     # task.hardcode_control()
-    task.primitive_control()
+    # task.primitive_control()
 
+    env = suite.make(
+        env_name="Reaching2DObstacle",
+        controller_configs=load_controller_config(default_controller="OSC_POSE"),
+        robots="Panda",
+        has_renderer=True,
+        has_offscreen_renderer=False,
+        render_camera="agentview2",
+        use_camera_obs=False,
+        control_freq=20,
+        ignore_done=True,
+        target_half_size=(0.05,0.05,0.001),
+        random_init=True,
+        random_target=True,
+    )
+    spacemouse_control(env=env, obs_to_print=["robot0_eef_pos", "target_pos", "obstacle_pos"])
 
 if __name__ == "__main__":
     main()
