@@ -15,11 +15,17 @@ import robosuite.utils.macros as macros
 from robosuite import make
 from robosuite.wrappers.visualization_wrapper import VisualizationWrapper
 from robosuite.controllers import load_controller_config
+
 from robosuite.utils.primitive_skills import PrimitiveSkill
+
+from robosuite.utils.input_utils import input2action
+from robosuite.devices import SpaceMouse
 
 import pandas as pd
 import os
 from pathlib import Path
+from pynput import keyboard
+import cv2
 
 import pdb
 # Set the image convention to opencv so that the images are automatically rendered "right side up" when using imageio
@@ -1049,7 +1055,198 @@ def test_primitive():
 
     writer.close()
 
+########## Spacemouse Control ############
+def spacemouse_control(env, obs_to_print=["robot0_eef_pos"], indicator_on=True):
+    
+    if indicator_on:
+        env = VisualizationWrapper(env, indicator_configs=None)
 
+    controller_type = env.robot_configs[0]["controller_config"]["type"]
+    if controller_type == "OSC_POSE":
+        action_dim = 6
+    elif controller_type == "OSC_POSITION":
+        action_dim = 3
+    
+    device = SpaceMouse(
+            vendor_id=9583,
+            product_id=50734,
+            pos_sensitivity=1.0,
+            rot_sensitivity=1.0,
+        )
+
+    device.start_control()
+    while True:
+        # Reset environment
+        obs = env.reset()
+        env.modify_observable(observable_name="robot0_joint_pos", attribute="active", modifier=True)
+
+        # rendering setup
+        env.render()
+
+        # Initialize device control
+        device.start_control()
+
+        while True:
+            # set active robot
+            active_robot = env.robots[0]
+            # get action
+            action, grip = input2action(
+                device=device,
+                robot=active_robot,
+            )
+            if action_dim < 6:
+                action = np.append(action[:action_dim], action[-1])
+
+            if action is None:
+                break
+
+            # take step in simulation
+            obs, reward, done, info = env.step(action)
+
+            for ob in obs_to_print:
+                print(f"{ob}: {obs[ob]}")
+
+            env.render()
+
+########## Manual Record Start/Stop ###########
+# global flag to be accessed by on_press callback - TODO: is there way to avoid global variables?
+recording = False
+def manual_record(env, video_path="video.mp4", csv_path="data.csv", camera_names="frontview"):
+
+    waypoints=[(0.16, 0.16, 0.988), (0.16, -0.16, 0.988)]
+    goal_idx = 0
+    goal_pos = waypoints[goal_idx]
+    thresh = 0.002
+    speed = 0.15
+    obs = env.reset()
+    eef_pos = obs["robot0_eef_pos"]
+    error = goal_pos - eef_pos
+    started_recording = False
+    finished_recording = False
+    writer = imageio.get_writer(video_path, fps=20)
+    global recording
+
+    def on_press(key):
+        if key.char == "r":
+            global recording
+            recording = not recording
+            if recording:
+                print("Recording....")
+            else: 
+                print("Stopped recording")
+
+    def on_release(key):
+        return True
+
+    # start non-blocking listener:
+    listener = keyboard.Listener(
+        on_press=on_press,
+        on_release=on_release)
+    listener.start()
+
+    while np.any(np.abs(error)) > thresh:
+
+        if not started_recording and recording:
+            started_recording = True
+            print("started ", started_recording)
+        if started_recording and not recording:
+            finished_recording = True
+            print("finished ", finished_recording)
+            break
+
+        action = speed * error / np.linalg.norm(error)
+        action = np.concatenate([action, np.array([0, 0, 0, -1])])
+        obs, reward, done, info = env.step(action)
+        frame = obs[camera_names + "_image"]
+        # pdb.set_trace()
+        cv2.imshow("frame", frame)
+        cv2.waitKey(1)
+        
+        # pdb.set_trace()
+        if started_recording:
+            writer.append_data(frame)
+        
+        if np.all(np.abs(error)) <= thresh:
+            goal_idx = not goal_idx
+            goal_pos = waypoints[goal_idx]
+
+    writer.close()
+
+def manual_record_spacemouse(env, video_path="video.mp4", csv_path="data.csv", camera_names="frontview"):
+    
+    # record start/stop keypress callback
+    def on_press(key):
+        if key.char == "r":
+            global recording
+            recording = not recording
+            if recording:
+                print("Recording....")
+            else: 
+                print("Stopped recording")
+
+    def on_release(key):
+        return True
+
+    # start non-blocking listener:
+    listener = keyboard.Listener(
+        on_press=on_press,
+        on_release=on_release)
+    listener.start()
+
+    # get action dimension
+    controller_type = env.robot_configs[0]["controller_config"]["type"]
+    if controller_type == "OSC_POSE":
+        action_dim = 6
+    elif controller_type == "OSC_POSITION":
+        action_dim = 3
+
+    active_robot = env.robots[0]
+    
+    # initialize spacemouse
+    device = SpaceMouse(
+            vendor_id=9583,
+            product_id=50734,
+            pos_sensitivity=1.0,
+            rot_sensitivity=1.0,
+        )
+
+    device.start_control()
+
+    obs = env.reset()
+    started_recording = False
+    finished_recording = False
+    writer = imageio.get_writer(video_path, fps=20)
+    global recording
+
+
+    while True:
+
+        # update recording state
+        if not started_recording and recording:
+            started_recording = True
+            print("started ", started_recording)
+        if started_recording and not recording:
+            finished_recording = True
+            print("finished ", finished_recording)
+            break
+
+        # get action from
+        action, grip = input2action(device=device, robot=active_robot)
+        if action_dim < 6:
+            action = np.append(action[:action_dim], action[-1])
+        if action is None:
+            break
+        obs, reward, done, info = env.step(action)
+        frame = obs[camera_names + "_image"]
+        # pdb.set_trace()
+        cv2.imshow("frame", cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        cv2.waitKey(1)
+        
+        # pdb.set_trace()
+        if started_recording:
+            writer.append_data(frame)
+
+    writer.close()
 
 if __name__ == "__main__":
 
@@ -1061,7 +1258,30 @@ if __name__ == "__main__":
         "gray" : (0.75,0.75,0.75,1),
     }
 
-    test_primitive()
+    # test_primitive()
+   
+    camera_names = "frontview"
+
+    # initialize an environment with offscreen renderer
+    env = make(
+        env_name="Reaching2DObstacle",
+        controller_configs=load_controller_config(default_controller="OSC_POSE"),
+        robots="Panda",
+        has_renderer=False,
+        has_offscreen_renderer=True,
+        render_camera="agentview2",
+        use_camera_obs=True,
+        control_freq=20,
+        ignore_done=True,
+        target_half_size=(0.05,0.05,0.001),
+        random_init=True,
+        random_target=True,
+        camera_heights=512,
+        camera_widths=512,
+    )
+    env = VisualizationWrapper(env, indicator_configs=None)
+
+    manual_record_spacemouse(env)
 
     ############ Record Equal Length 2D Reaching ##############
     # save_path = "videos/2d_reaching"
