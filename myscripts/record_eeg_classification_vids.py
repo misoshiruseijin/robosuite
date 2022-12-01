@@ -1172,8 +1172,24 @@ def manual_record(env, video_path="video.mp4", csv_path="data.csv", camera_names
 
     writer.close()
 
-def manual_record_spacemouse(env, video_path="video.mp4", csv_path="data.csv", camera_names="frontview"):
+def manual_record_spacemouse(env, device, video_path="video.mp4", camera_names=["agentview"]):
     
+    """
+    Record video manually using spacemouse. Start recording by pressing "r", stop recording by pressing "r" again.
+
+    Args:
+        env: environment
+        video_path: location to save recorded video
+        camera_names: simulation camera view
+
+    Returns:
+        action_hist (list): list of actions taken
+        eef_pos_hist (list): list of end effector positions encountered 
+        reward_hist (list): list of rewards earned 
+    """
+
+    global recording
+    recording = False    
     # record start/stop keypress callback
     def on_press(key):
         if key.char == "r":
@@ -1201,26 +1217,23 @@ def manual_record_spacemouse(env, video_path="video.mp4", csv_path="data.csv", c
         action_dim = 3
 
     active_robot = env.robots[0]
-    
-    # initialize spacemouse
-    device = SpaceMouse(
-            vendor_id=9583,
-            product_id=50734,
-            pos_sensitivity=1.0,
-            rot_sensitivity=1.0,
-        )
-
-    device.start_control()
-
     obs = env.reset()
     started_recording = False
     finished_recording = False
-    writer = imageio.get_writer(video_path, fps=20)
-    global recording
 
+    # initialize list of writers for each camera view
+    writers = []
+    for view in camera_names:
+        writers.append(
+            imageio.get_writer(video_path[:video_path.find(".")] + f"_{view}" + video_path[video_path.find("."):], fps=20)
+        )
+    
+    eef_pos_hist = []
+    action_hist = []
+    reward_hist = []
 
     while True:
-
+        print(recording)
         # update recording state
         if not started_recording and recording:
             started_recording = True
@@ -1228,6 +1241,7 @@ def manual_record_spacemouse(env, video_path="video.mp4", csv_path="data.csv", c
         if started_recording and not recording:
             finished_recording = True
             print("finished ", finished_recording)
+            recording = False
             break
 
         # get action from
@@ -1237,16 +1251,26 @@ def manual_record_spacemouse(env, video_path="video.mp4", csv_path="data.csv", c
         if action is None:
             break
         obs, reward, done, info = env.step(action)
-        frame = obs[camera_names + "_image"]
+        render_frame = obs[camera_names[0] + "_image"]
         # pdb.set_trace()
-        cv2.imshow("frame", cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        cv2.imshow("frame", cv2.cvtColor(render_frame, cv2.COLOR_BGR2RGB))
         cv2.waitKey(1)
         
         # pdb.set_trace()
         if started_recording:
-            writer.append_data(frame)
+            for writer, view in zip(writers, camera_names):
+                writer.append_data(obs[view + "_image"])
+            action_hist.append(action)
+            eef_pos_hist.append(obs["robot0_eef_pos"])
+            reward_hist.append(reward)
 
-    writer.close()
+    # close video writers and keyboard listener
+    listener.stop()
+    for writer in writers:
+        writer.close()
+
+    return action_hist, eef_pos_hist, reward_hist
+
 
 if __name__ == "__main__":
 
@@ -1260,7 +1284,10 @@ if __name__ == "__main__":
 
     # test_primitive()
    
-    camera_names = "frontview"
+   ############# Obstacle Avoidance (Manual Record) ###############
+    camera_names = ["frontview", "sideview"]
+    target_half_size=(0.05,0.05,0.001)
+    obstacle_half_size=(0.025, 0.025, 0.15)
 
     # initialize an environment with offscreen renderer
     env = make(
@@ -1269,19 +1296,73 @@ if __name__ == "__main__":
         robots="Panda",
         has_renderer=False,
         has_offscreen_renderer=True,
-        render_camera="agentview2",
+        render_camera="agentview",
+        camera_names=camera_names,
         use_camera_obs=True,
         control_freq=20,
         ignore_done=True,
-        target_half_size=(0.05,0.05,0.001),
+        target_half_size=target_half_size,
+        obstacle_half_size=obstacle_half_size,
         random_init=True,
         random_target=True,
         camera_heights=512,
         camera_widths=512,
     )
     env = VisualizationWrapper(env, indicator_configs=None)
+    
+    # initialize spacemouse
+    device = SpaceMouse(
+            vendor_id=9583,
+            product_id=50734,
+            pos_sensitivity=1.0,
+            rot_sensitivity=1.0,
+        )
 
-    manual_record_spacemouse(env)
+    device.start_control()
+
+    n_videos = 2
+    save_dir = "videos/obstacle_avoidance"
+    os.makedirs(save_dir, exist_ok=True)
+    # global recording
+
+    for i in range(n_videos):
+
+        obs = env.reset()
+        target_pos = obs["target_pos"]
+        obstacle_pos = obs["obstacle_pos"]
+
+        # record video
+        action_hist, eef_pos_hist, reward_hist = manual_record_spacemouse(
+            env=env,
+            device=device,
+            video_path=os.path.join(save_dir, f"video{i}.mp4"),
+            camera_names=camera_names
+        )
+
+        # record csv datafile
+        n_steps = len(action_hist)
+        good = np.all(np.array(reward_hist) >= 0)
+        df = pd.DataFrame(
+            data={
+                "step" : np.arange(len(action_hist)),
+                "action" : pd.Series(action_hist),
+                "eef_pos" : pd.Series(eef_pos_hist),
+                "target_pos" : [target_pos] * n_steps,
+                "obstacle_pos" : [obstacle_pos] * n_steps,
+                "target_half_size" : [target_half_size] * n_steps,
+                "obstacle_half_size" : [obstacle_half_size] * n_steps,
+                "good" : [good] * n_steps, # if collision occurs, it is a bad demo
+            }
+        )
+
+        if good:
+            label = "good"
+        else: 
+            label = "bad"
+        df.to_csv(os.path.join(save_dir, f"video{i}_{label}.csv"), index=False)
+
+    cv2.destroyAllWindows()
+    env.close()
 
     ############ Record Equal Length 2D Reaching ##############
     # save_path = "videos/2d_reaching"

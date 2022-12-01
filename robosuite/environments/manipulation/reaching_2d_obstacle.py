@@ -178,6 +178,7 @@ class Reaching2DObstacle(SingleArmEnv):
         renderer_config=None,
         target_half_size=(0.05, 0.05, 0.001), # target width, height, thickness
         target_position=(0.0, 0.0), # target position
+        obstacle_half_size=(0.025, 0.025, 0.15), # obstacle size
         random_init=True,
         random_target=True,
     ):
@@ -198,7 +199,10 @@ class Reaching2DObstacle(SingleArmEnv):
 
         # target
         self.target_half_size = target_half_size
-        self.target_position = target_position + self.table_offset[:2]
+        # self.target_position = target_position + self.table_offset[:2]
+
+        # obstacle
+        self.obstacle_half_size = obstacle_half_size
 
         # initial eef position
         self.initial_eef_pos = None
@@ -272,6 +276,10 @@ class Reaching2DObstacle(SingleArmEnv):
         # sparse completion reward
         if self._check_success():
             reward = 10
+
+        # collision negative reward
+        if self._check_collision():
+            reward = -10
         
         # # Scale reward if requested
         # if self.reward_scale is not None:
@@ -317,7 +325,7 @@ class Reaching2DObstacle(SingleArmEnv):
         # Initialize obstacle object
         self.obstacle = BlockObject(
             name="obstacle",
-            body_half_size=(0.025, 0.025, 0.15),
+            body_half_size=self.obstacle_half_size,
             density=500,
             rgba=(0,0,1,1)
         )
@@ -389,14 +397,6 @@ class Reaching2DObstacle(SingleArmEnv):
                 modality = "object"
 
                 @sensor(modality=modality)
-                def robot0_delta_to_target(obs_cache):
-                    return (
-                        obs_cache[f"{pf}eef_pos"][:2] - self.target_position
-                        if f"{pf}eef_pos" in obs_cache
-                        else np.zeros(3)
-                    )
-
-                @sensor(modality=modality)
                 def target_pos(obs_cache):
                     return self.sim.data.get_joint_qpos(self.target.joints[0])
 
@@ -404,7 +404,7 @@ class Reaching2DObstacle(SingleArmEnv):
                 def obstacle_pos(obs_cache):
                     return self.sim.data.get_joint_qpos(self.obstacle.joints[0])
 
-                sensors = [robot0_delta_to_target, target_pos, obstacle_pos]
+                sensors = [target_pos, obstacle_pos]
                 names = [s.__name__ for s in sensors]
 
                 # Create observables
@@ -474,7 +474,7 @@ class Reaching2DObstacle(SingleArmEnv):
        
         ##### Success = center point of end effector is within target cylinder #####
         success = self._check_in_region(
-            region_center = self.target_position,
+            region_center = self.sim.data.get_joint_qpos(self.target.joints[0]),
             region_bounds = self.target_half_size,
             coord = self._eef_xpos
         )
@@ -496,6 +496,11 @@ class Reaching2DObstacle(SingleArmEnv):
         # Prematurely terminate if task is success
         if self._check_success():
             print("~~~~~~~~in target~~~~~~~~~~~~~~")
+            terminated = True
+
+        # Prematurely terminate if collision occurs
+        if self._check_collision():
+            print("!!! collision detected !!!")
             terminated = True
 
         return terminated
@@ -521,6 +526,17 @@ class Reaching2DObstacle(SingleArmEnv):
         y_in_bounds = self.workspace_y[0] < self._eef_xpos[1] + sf * action[1] / self.control_freq < self.workspace_y[1]
         return x_in_bounds and y_in_bounds
 
+    def _check_collision(self):
+        # Arm contacts any other object including table
+        if self.check_contact(self.robots[0].robot_model):
+            # print("arm collision")
+            return True
+
+        # Prematurely terminate if gripper collides with obstacle
+        if self.check_contact(self.robots[0].gripper, self.obstacle):
+            # print("gripper collision: hoop")
+            return True
+
     def step(self, action):
 
         action_in_bounds = self._check_action_in_bounds(action)
@@ -535,7 +551,6 @@ class Reaching2DObstacle(SingleArmEnv):
         action[-1] = -1
 
         # if end effector position is off the table, ignore the action
-        # if not (eef_x_in_bounds and eef_y_in_bounds):
         if not action_in_bounds:
             action[:-1] = 0
             print("Action out of bounds")
@@ -638,4 +653,4 @@ class Reaching2DObstacle(SingleArmEnv):
 
     @property
     def target_pos(self):
-        return self.target_position
+        return self.sim.data.get_joint_qpos(self.target.joints[0])

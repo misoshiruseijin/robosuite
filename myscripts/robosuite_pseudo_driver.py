@@ -1124,6 +1124,7 @@ def main():
         control_freq=20,
         ignore_done=True,
         target_half_size=(0.05,0.05,0.001),
+        obstacle_half_size=(0.025, 0.025, 0.15),
         random_init=True,
         random_target=True,
     )
