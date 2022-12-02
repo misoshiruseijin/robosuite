@@ -1119,10 +1119,10 @@ def main():
         control_freq=20,
         ignore_done=True,
     )
-    pdb.set_trace()
 
     prim = PrimitiveSkill(env)
     obs = env.reset()
+
     # print("move_to")
     # prim.move_to_pos(
     #         obs=obs,
@@ -1131,9 +1131,12 @@ def main():
     #         robot_id=0
     #     )     
     print("pick")
-    obs, reward, done, info = prim.pick(obs=obs, goal_pos=obs["cube_pos"])
+    # obs, reward, done, info = prim.pick(obs=obs, goal_pos=obs["cube_pos"])
+    obs, reward, done, info = prim.pick(obs=obs, obj_id=23)
+
     print("place")
-    obs, reward, done, info = prim.place(obs=obs, goal_pos=(0,0.15,0.9))
+    # obs, reward, done, info = prim.place(obs=obs, goal_pos=(0,0.15,0.9))
+    obs, reward, done, info = prim.place(obs=obs, obj_id=23)
 
 
     # env = suite.make(

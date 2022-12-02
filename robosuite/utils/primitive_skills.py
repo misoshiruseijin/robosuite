@@ -106,10 +106,12 @@ class PrimitiveSkill():
         
         # make sure there is something to return
         obs, reward, done, info = self.env.step(np.append(np.zeros(self.action_dim), gripper_action))
-        obs_list.append(obs)
-        reward_list.append(reward)
-        done_list.append(done)
-        info_list.append(info)
+        
+        if self.return_all_states:
+            obs_list.append(obs)
+            reward_list.append(reward)
+            done_list.append(done)
+            info_list.append(info)
 
         if self.return_all_states:
             return obs_list, reward_list, done_list, info_list
@@ -133,12 +135,14 @@ class PrimitiveSkill():
             obs, reward, done, info from environment's step function
         """
         # make sure one of goal_pos or obj_id is provided
-        assert not goal_pos is None and obj_id is None, "Either goal_pos or obj_id must be given"
-        assert not goal_pos is not None and obj_id is not None, "Cannot provide both goal_pos and obj_id"
+        assert not (goal_pos is None and obj_id is None), "Either goal_pos or obj_id must be given"
+        assert not (goal_pos is not None and obj_id is not None), "Cannot provide both goal_pos and obj_id"
 
         # if specified by obj_id
         if obj_id is not None:
-            raise NotImplementedError
+            # get object center position
+            obj_name = self.env.sim.model.body_id2name(obj_id)
+            goal_pos = self.env.sim.data.get_body_xpos(obj_name)
 
         if lift_height is None:
             lift_height = self.home_pos[2]
@@ -206,12 +210,14 @@ class PrimitiveSkill():
             obs, reward, done, info from environment's step function
         """
         # make sure one of goal_pos or obj_id is provided
-        assert not goal_pos is None and obj_id is None, "Either goal_pos or obj_id must be given"
-        assert not goal_pos is not None and obj_id is not None, "Cannot provide both goal_pos and obj_id"
+        assert not (goal_pos is None and obj_id is None), "Either goal_pos or obj_id must be given"
+        assert not (goal_pos is not None and obj_id is not None), "Cannot provide both goal_pos and obj_id"
 
         # if specified by obj_id
         if obj_id is not None:
-            raise NotImplementedError
+            # get object center position
+            obj_name = self.env.sim.model.body_id2name(obj_id)
+            goal_pos = self.env.sim.data.get_body_xpos(obj_name)
 
         if lift_height is None:
             lift_height = self.home_pos[2]
