@@ -1107,28 +1107,51 @@ def str2ndarray(array_str, shape):
 def main():
     # Setup printing options for numbers
     np.set_printoptions(formatter={"float": lambda x: "{0:0.3f}".format(x)})
-    
-    # task = FrankaLift()
-    # task.spacemouse_control()
-    # task.hardcode_control()
-    # task.primitive_control()
 
     env = suite.make(
-        env_name="Reaching2DObstacle",
+        env_name="Lift2",
         controller_configs=load_controller_config(default_controller="OSC_POSE"),
         robots="Panda",
         has_renderer=True,
         has_offscreen_renderer=False,
-        render_camera="agentview2",
+        render_camera="frontview",
         use_camera_obs=False,
         control_freq=20,
         ignore_done=True,
-        target_half_size=(0.05,0.05,0.001),
-        obstacle_half_size=(0.025, 0.025, 0.15),
-        random_init=True,
-        random_target=True,
     )
-    spacemouse_control(env=env, obs_to_print=["robot0_eef_pos", "target_pos", "obstacle_pos"])
+    pdb.set_trace()
+
+    prim = PrimitiveSkill(env)
+    obs = env.reset()
+    # print("move_to")
+    # prim.move_to_pos(
+    #         obs=obs,
+    #         goal_pos=obs["cube_pos"],
+    #         gripper_closed=False,
+    #         robot_id=0
+    #     )     
+    print("pick")
+    obs, reward, done, info = prim.pick(obs=obs, goal_pos=obs["cube_pos"])
+    print("place")
+    obs, reward, done, info = prim.place(obs=obs, goal_pos=(0,0.15,0.9))
+
+
+    # env = suite.make(
+    #     env_name="Reaching2DObstacle",
+    #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
+    #     robots="Panda",
+    #     has_renderer=True,
+    #     has_offscreen_renderer=False,
+    #     render_camera="agentview2",
+    #     use_camera_obs=False,
+    #     control_freq=20,
+    #     ignore_done=True,
+    #     target_half_size=(0.05,0.05,0.001),
+    #     obstacle_half_size=(0.025, 0.025, 0.15),
+    #     random_init=True,
+    #     random_target=True,
+    # )
+    # spacemouse_control(env=env, obs_to_print=["robot0_eef_pos", "target_pos", "obstacle_pos"])
 
 if __name__ == "__main__":
     main()

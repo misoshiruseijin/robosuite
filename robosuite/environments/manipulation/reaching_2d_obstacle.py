@@ -308,14 +308,8 @@ class Reaching2DObstacle(SingleArmEnv):
 
         # Arena always gets set to zero origin
         mujoco_arena.set_origin([0, 0, 0])
-
-        # # Initialize target object
-        # if self.random_target: # sample target position if using random target initialization
-        #     self.target_position = np.concatenate((
-        #         np.random.uniform(self.workspace_x[0] + self.target_half_size[0], self.workspace_x[1] - self.target_half_size[0], 1), # x
-        #         np.random.uniform(self.workspace_y[0] + self.target_half_size[0], self.workspace_y[1] - self.target_half_size[1], 1), # y
-        #     ))
         
+        # Initialize target object
         self.target = BlockObject(
             name="target",
             body_half_size=self.target_half_size,

@@ -32,7 +32,7 @@ import pdb
 # (which uses opencv convention)
 macros.IMAGE_CONVENTION = "opencv"
 
-np.random.seed(1)
+np.random.seed(3)
 
 def record_videos_2d_reaching(video_path="video.mp4", csv_path="data.csv", camera_names="frontview", good=True, timesteps=200):
     
@@ -1287,7 +1287,7 @@ if __name__ == "__main__":
    ############# Obstacle Avoidance (Manual Record) ###############
     camera_names = ["frontview", "sideview"]
     target_half_size=(0.05,0.05,0.001)
-    obstacle_half_size=(0.025, 0.025, 0.15)
+    obstacle_half_size=(0.025, 0.025, 0.12)
 
     # initialize an environment with offscreen renderer
     env = make(
@@ -1320,7 +1320,7 @@ if __name__ == "__main__":
 
     device.start_control()
 
-    n_videos = 2
+    n_videos = 5
     save_dir = "videos/obstacle_avoidance"
     os.makedirs(save_dir, exist_ok=True)
     # global recording
@@ -1355,10 +1355,7 @@ if __name__ == "__main__":
             }
         )
 
-        if good:
-            label = "good"
-        else: 
-            label = "bad"
+        label = "good" if good else "bad"
         df.to_csv(os.path.join(save_dir, f"video{i}_{label}.csv"), index=False)
 
     cv2.destroyAllWindows()
