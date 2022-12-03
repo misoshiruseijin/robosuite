@@ -1124,6 +1124,7 @@ def main():
     prim = PrimitiveSkill(env)
     obs = env.reset()
     prim.open_drawer(obs, 2, 0.1, (1,-1))
+    prim.close_drawer(obs, 2, 0.05, (1,1))
 
     # env = suite.make(
     #     env_name="Lift2",

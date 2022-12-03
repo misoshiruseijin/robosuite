@@ -14,7 +14,7 @@ from robosuite.utils.mjcf_utils import CustomMaterial, array_to_string, find_ele
 from robosuite.utils.buffers import RingBuffer
 import robosuite.utils.transform_utils as T
 
-from robosuite.models.objects.zoo import CabinetObject
+from robosuite.models.objects.zoo import CabinetObject, LargeCabinetObject
 
 class DrawerEnv(SingleArmEnv):
     def __init__(
@@ -244,7 +244,7 @@ class DrawerEnv(SingleArmEnv):
             mat_attrib=mat_attrib,
         )
 
-        self.cabinet_object = CabinetObject(
+        self.cabinet_object = LargeCabinetObject(
             name="CabinetObject")
         cabinet_object = self.cabinet_object.get_obj(); cabinet_object.set("pos", array_to_string((0.05, 0.27, 0.03))); mujoco_arena.table_body.append(cabinet_object)
         

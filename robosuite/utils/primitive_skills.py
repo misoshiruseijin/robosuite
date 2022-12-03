@@ -12,7 +12,6 @@ class PrimitiveSkill():
         self,
         env,
         home_pos=None,
-        thresh=0.001,
         return_all_states=False,
     ):
 
@@ -41,9 +40,8 @@ class PrimitiveSkill():
             self.home_pos = home_pos
 
         self.return_all_states = return_all_states
-        self.thresh = thresh 
 
-    def move_to_pos(self, obs, goal_pos, gripper_closed, info_list=None, robot_id=0, speed=0.15):
+    def move_to_pos(self, obs, goal_pos, gripper_closed, info_list=None, robot_id=0, speed=0.15, thresh=0.001):
         """
         Moves end effector to target position (x, y, z) coordinate in a straight line path.
         Cannot be interrupted until target position is reached.
@@ -74,7 +72,7 @@ class PrimitiveSkill():
         if self.env.has_renderer:
             self.env.render()
 
-        while np.any(np.abs(error) > self.thresh):
+        while np.any(np.abs(error) > thresh):
             print("eef pos ", eef_pos)
             print("goal pos ", goal_pos)
             print("error ", error)
@@ -269,7 +267,78 @@ class PrimitiveSkill():
                 self.env.render()
 
         # pull
-        obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=pull_pos, gripper_closed=True, robot_id=robot_id, speed=speed)
+        obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=pull_pos, gripper_closed=True, robot_id=robot_id, speed=speed, thresh=0.003)
+
+        # stop
+        action = np.append(np.zeros(self.action_dim), 1)
+        for _ in range(15):
+            obs, reward, done, info = self.env.step(action)
+            if self.env.has_renderer:
+                self.env.render()
+
+        # release handle
+        action = np.append(np.zeros(self.action_dim), -1)
+        for _ in range(15):
+            obs, reward, done, info = self.env.step(action)
+            if self.env.has_renderer:
+                self.env.render()
+
+        # move up
+        obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=above_pos2, gripper_closed=False, robot_id=robot_id, speed=speed)
+
+        # return to home
+        obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=self.home_pos, gripper_closed=False, robot_id=robot_id, speed=speed)
+
+        return obs, reward, done, info
+
+    def close_drawer(self, obs, drawer_obj_id, pull_dist, pull_direction=(1,1), waypoint_height=None, robot_id=0, speed=0.15):
+        """
+        Grips drawer handle and closes drawer by pull_dist (delta), then returns to home position. 
+        
+        Args:
+            obs: current observation
+            drawer_obj_id: id of drawer object to act on (object must be CabinetObject or LargeCabinetObject type) 
+            pull_dist (float): amount to pull
+            pull_direction (2-tuple of ints): first element is axis to pull along (0 = x, 1 = y),
+                second element is direction to pull (1 = positive, -1 = negative) - e.g. (1, -1) means pull in negative y direction
+            waypoint_height (float): height of waypoint. if none, uses home_pos height
+            robot_id (int): id of robot to be controlled
+            speed (float): how fast the end effector will move (0,1]
+
+        Returns:
+            obs, reward, done, info from environment's step function (or lists of these if self.return_all_states is True)
+        """
+        
+        # TODO - make sure provided object is a drawer
+
+        # get position of drawer handle site
+        obj_name = list(self.env.obj_body_id.keys())[list(self.env.obj_body_id.values()).index(drawer_obj_id)]
+        handle_pos = self.env.sim.data.get_site_xpos(obj_name + "_handle_site")
+
+        if waypoint_height is None:
+            waypoint_height = self.home_pos[2]
+        
+        above_pos1 = (handle_pos[0], handle_pos[1], waypoint_height)
+        pull_pos = np.copy(handle_pos)
+        pull_pos[pull_direction[0]] += pull_direction[1] * pull_dist
+        above_pos2 = np.copy(pull_pos)
+        above_pos2[2] = waypoint_height
+
+        # move to above handle
+        obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=above_pos1, gripper_closed=False, robot_id=robot_id, speed=speed)
+
+        # move down
+        obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=handle_pos, gripper_closed=False, robot_id=robot_id, speed=speed,)
+
+        # grip
+        action = np.append(np.zeros(self.action_dim), 1)
+        for _ in range(15):
+            obs, reward, done, info = self.env.step(action)
+            if self.env.has_renderer:
+                self.env.render()
+
+        # push
+        obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=pull_pos, gripper_closed=True, robot_id=robot_id, speed=speed, thresh=0.003)
 
         # stop
         action = np.append(np.zeros(self.action_dim), 1)
