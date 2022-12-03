@@ -1,5 +1,7 @@
 """
 Basic, hardcoded parameterized primitive motions
+
+NOTE Currently, only move_to_pos works with option return_all_states = True
 """
 import numpy as np
 
@@ -41,7 +43,7 @@ class PrimitiveSkill():
         self.return_all_states = return_all_states
         self.thresh = thresh 
 
-    def move_to_pos(self, obs, goal_pos, gripper_closed, robot_id=0, speed=0.15):
+    def move_to_pos(self, obs, goal_pos, gripper_closed, info_list=None, robot_id=0, speed=0.15):
         """
         Moves end effector to target position (x, y, z) coordinate in a straight line path.
         Cannot be interrupted until target position is reached.
@@ -53,7 +55,7 @@ class PrimitiveSkill():
             gripper_closed (bool): whether gripper should be closed during the motion
 
         Returns:
-            obs, reward, done, info from environment's step function
+            obs, reward, done, info from environment's step function (or lists of these if self.return_all_states is True)
         """
 
         slow_speed = 0.1
@@ -118,7 +120,7 @@ class PrimitiveSkill():
         
         return obs, reward, done, info
 
-    def pick(self, obs, goal_pos=None, obj_id=None, lift_height=None, robot_id=0, speed=0.15):
+    def pick(self, obs, goal_pos=None, obj_id=None, waypoint_height=None, robot_id=0, speed=0.15):
         """
         Moves end effector to above object to be grasped, moves down to grasp, moves up, then back to the home position.
         Grip position can be specified by either 3d location (goal_pos) or id of object to pick up (obj_id).
@@ -127,12 +129,12 @@ class PrimitiveSkill():
             obs: current observation
             goal_pos (3-tuple or array of floats): location to grasp
             obj_id: object to pick
-            lift_height (float): how high to lift the object after grasp. if none, uses home_pos height
+            waypoint_height (float): how high to lift the object after grasp. if none, uses home_pos height
             robot_id (int): id of robot to be controlled
             speed (float): how fast the end effector will move (0,1]
         
         Returns:
-            obs, reward, done, info from environment's step function
+            obs, reward, done, info from environment's step function (or lists of these if self.return_all_states is True)
         """
         # make sure one of goal_pos or obj_id is provided
         assert not (goal_pos is None and obj_id is None), "Either goal_pos or obj_id must be given"
@@ -144,27 +146,15 @@ class PrimitiveSkill():
             obj_name = self.env.sim.model.body_id2name(obj_id)
             goal_pos = self.env.sim.data.get_body_xpos(obj_name)
 
-        if lift_height is None:
-            lift_height = self.home_pos[2]
-        above_pos = (goal_pos[0], goal_pos[1], lift_height)
+        if waypoint_height is None:
+            waypoint_height = self.home_pos[2]
+        above_pos = (goal_pos[0], goal_pos[1], waypoint_height)
 
         # move to above grip site
-        obs, reward, done, info = self.move_to_pos(
-            obs=obs,
-            goal_pos=above_pos,
-            gripper_closed=False,
-            robot_id=robot_id,
-            speed=speed
-        )
+        obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=above_pos, gripper_closed=False, robot_id=robot_id, speed=speed)
 
         # move down to grip site
-        obs, reward, done, info = self.move_to_pos(
-            obs=obs,
-            goal_pos=goal_pos,
-            gripper_closed=False,
-            robot_id=robot_id,
-            speed=speed
-        )
+        obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=goal_pos, gripper_closed=False, robot_id=robot_id, speed=speed)
 
         # grip
         action = np.append(np.zeros(self.action_dim), 1)
@@ -174,26 +164,14 @@ class PrimitiveSkill():
                 self.env.render()
 
         # move up
-        obs, reward, done, info = self.move_to_pos(
-            obs=obs,
-            goal_pos=above_pos,
-            gripper_closed=True,
-            robot_id=robot_id,
-            speed=speed
-        )
+        obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=above_pos, gripper_closed=True, robot_id=robot_id, speed=speed)
 
         # move to home position
-        obs, reward, done, info = self.move_to_pos(
-            obs=obs,
-            goal_pos=self.home_pos,
-            gripper_closed=True,
-            robot_id=robot_id,
-            speed=speed
-        )
+        obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=self.home_pos, gripper_closed=True, robot_id=robot_id, speed=speed)
 
         return obs, reward, done, info
     
-    def place(self, obs, goal_pos=None, obj_id=None, lift_height=None, robot_id=0, speed=0.15):
+    def place(self, obs, goal_pos=None, obj_id=None, waypoint_height=None, robot_id=0, speed=0.15):
         """
         Moves end effector to above position to place, moves down to goal position and drops object, move up, then back to the home position,
         Position to release object can be specified as 3d position (goal_pos) or id of object to release the object onto (obj_id)
@@ -202,12 +180,12 @@ class PrimitiveSkill():
             obs: current observation
             goal_pos (3-tuple or array of floats): location to grasp
             obj_id: id of object to place an object onto 
-            lift_height (float): height of waypoint. if none, uses home_pos height
+            waypoint_height (float): height of waypoint. if none, uses home_pos height
             robot_id (int): id of robot to be controlled
             speed (float): how fast the end effector will move (0,1]
         
         Returns:
-            obs, reward, done, info from environment's step function
+            obs, reward, done, info from environment's step function (or lists of these if self.return_all_states is True)
         """
         # make sure one of goal_pos or obj_id is provided
         assert not (goal_pos is None and obj_id is None), "Either goal_pos or obj_id must be given"
@@ -219,27 +197,15 @@ class PrimitiveSkill():
             obj_name = self.env.sim.model.body_id2name(obj_id)
             goal_pos = self.env.sim.data.get_body_xpos(obj_name)
 
-        if lift_height is None:
-            lift_height = self.home_pos[2]
-        above_pos = (goal_pos[0], goal_pos[1], lift_height)
+        if waypoint_height is None:
+            waypoint_height = self.home_pos[2]
+        above_pos = (goal_pos[0], goal_pos[1], waypoint_height)
 
         # move to above grip site
-        obs, reward, done, info = self.move_to_pos(
-            obs=obs,
-            goal_pos=above_pos,
-            gripper_closed=True,
-            robot_id=robot_id,
-            speed=speed
-        )
+        obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=above_pos, gripper_closed=True, robot_id=robot_id, speed=speed)
 
         # move down to grip site
-        obs, reward, done, info = self.move_to_pos(
-            obs=obs,
-            goal_pos=goal_pos,
-            gripper_closed=True,
-            robot_id=robot_id,
-            speed=speed
-        )
+        obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=goal_pos, gripper_closed=True, robot_id=robot_id, speed=speed)
 
         # release object
         action = np.append(np.zeros(self.action_dim), -1)
@@ -249,27 +215,82 @@ class PrimitiveSkill():
                 self.env.render()
 
         # move up
-        obs, reward, done, info = self.move_to_pos(
-            obs=obs,
-            goal_pos=above_pos,
-            gripper_closed=False,
-            robot_id=robot_id,
-            speed=speed
-        )
+        obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=above_pos, gripper_closed=False, robot_id=robot_id, speed=speed)
 
         # move to home position
-        obs, reward, done, info = self.move_to_pos(
-            obs=obs,
-            goal_pos=self.home_pos,
-            gripper_closed=False,
-            robot_id=robot_id,
-            speed=speed
-        )
+        obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=self.home_pos, gripper_closed=False, robot_id=robot_id, speed=speed)
 
         return obs, reward, done, info
     
-    def pull_drawer(self, obs, drawer_obj, pull_dist, robot_id=0, speed=0.15):
+    def open_drawer(self, obs, drawer_obj_id, pull_dist, pull_direction=(1,-1), waypoint_height=None, robot_id=0, speed=0.15):
+        """
+        Grips drawer handle and opens drawer by pull_dist (delta), then returns to home position. 
+        
+        Args:
+            obs: current observation
+            drawer_obj_id: id of drawer object to act on (object must be CabinetObject or LargeCabinetObject type) 
+            pull_dist (float): amount to pull
+            pull_direction (2-tuple of ints): first element is axis to pull along (0 = x, 1 = y),
+                second element is direction to pull (1 = positive, -1 = negative) - e.g. (1, -1) means pull in negative y direction
+            waypoint_height (float): height of waypoint. if none, uses home_pos height
+            robot_id (int): id of robot to be controlled
+            speed (float): how fast the end effector will move (0,1]
+
+        Returns:
+            obs, reward, done, info from environment's step function (or lists of these if self.return_all_states is True)
         """
         
-        """
-        pass
+        # TODO - make sure provided object is a drawer
+
+        # get position of drawer handle site
+        obj_name = list(self.env.obj_body_id.keys())[list(self.env.obj_body_id.values()).index(drawer_obj_id)]
+        handle_pos = self.env.sim.data.get_site_xpos(obj_name + "_handle_site")
+
+        if waypoint_height is None:
+            waypoint_height = self.home_pos[2]
+        
+        above_pos1 = (handle_pos[0], handle_pos[1], waypoint_height)
+        pull_pos = np.copy(handle_pos)
+        pull_pos[pull_direction[0]] += pull_direction[1] * pull_dist
+        above_pos2 = np.copy(pull_pos)
+        above_pos2[2] = waypoint_height
+
+        # move to above handle
+        obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=above_pos1, gripper_closed=False, robot_id=robot_id, speed=speed)
+
+        # move down
+        obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=handle_pos, gripper_closed=False, robot_id=robot_id, speed=speed,)
+
+        # grip
+        action = np.append(np.zeros(self.action_dim), 1)
+        for _ in range(15):
+            obs, reward, done, info = self.env.step(action)
+            if self.env.has_renderer:
+                self.env.render()
+
+        # pull
+        obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=pull_pos, gripper_closed=True, robot_id=robot_id, speed=speed)
+
+        # stop
+        action = np.append(np.zeros(self.action_dim), 1)
+        for _ in range(15):
+            obs, reward, done, info = self.env.step(action)
+            if self.env.has_renderer:
+                self.env.render()
+
+        # release handle
+        action = np.append(np.zeros(self.action_dim), -1)
+        for _ in range(15):
+            obs, reward, done, info = self.env.step(action)
+            if self.env.has_renderer:
+                self.env.render()
+
+        # move up
+        obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=above_pos2, gripper_closed=False, robot_id=robot_id, speed=speed)
+
+        # return to home
+        obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=self.home_pos, gripper_closed=False, robot_id=robot_id, speed=speed)
+
+        return obs, reward, done, info
+
+        

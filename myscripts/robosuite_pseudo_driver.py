@@ -917,6 +917,7 @@ class FrankaDrawer():
         self.env = VisualizationWrapper(self.env, indicator_configs=None)
 
         obs = self.env.reset()
+        pdb.set_trace()
     
     
     # run simulation with spacemouse
@@ -1109,7 +1110,7 @@ def main():
     np.set_printoptions(formatter={"float": lambda x: "{0:0.3f}".format(x)})
 
     env = suite.make(
-        env_name="Lift2",
+        env_name="DrawerEnv",
         controller_configs=load_controller_config(default_controller="OSC_POSE"),
         robots="Panda",
         has_renderer=True,
@@ -1122,21 +1123,30 @@ def main():
 
     prim = PrimitiveSkill(env)
     obs = env.reset()
+    prim.open_drawer(obs, 2, 0.1, (1,-1))
 
-    # print("move_to")
-    # prim.move_to_pos(
-    #         obs=obs,
-    #         goal_pos=obs["cube_pos"],
-    #         gripper_closed=False,
-    #         robot_id=0
-    #     )     
-    print("pick")
-    # obs, reward, done, info = prim.pick(obs=obs, goal_pos=obs["cube_pos"])
-    obs, reward, done, info = prim.pick(obs=obs, obj_id=23)
+    # env = suite.make(
+    #     env_name="Lift2",
+    #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
+    #     robots="Panda",
+    #     has_renderer=True,
+    #     has_offscreen_renderer=False,
+    #     render_camera="frontview",
+    #     use_camera_obs=False,
+    #     control_freq=20,
+    #     ignore_done=True,
+    # )
 
-    print("place")
-    # obs, reward, done, info = prim.place(obs=obs, goal_pos=(0,0.15,0.9))
-    obs, reward, done, info = prim.place(obs=obs, obj_id=23)
+    # prim = PrimitiveSkill(env)
+    # obs = env.reset()
+   
+    # print("pick")
+    # # obs, reward, done, info = prim.pick(obs=obs, goal_pos=obs["cube_pos"])
+    # obs, reward, done, info = prim.pick(obs=obs, obj_id=23)
+
+    # print("place")
+    # # obs, reward, done, info = prim.place(obs=obs, goal_pos=(0,0.15,0.9))
+    # obs, reward, done, info = prim.place(obs=obs, obj_id=23)
 
 
     # env = suite.make(
