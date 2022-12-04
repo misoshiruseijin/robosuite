@@ -1109,22 +1109,38 @@ def main():
     # Setup printing options for numbers
     np.set_printoptions(formatter={"float": lambda x: "{0:0.3f}".format(x)})
 
+    spacemouse_control(env)
+
+if __name__ == "__main__":
+
     env = suite.make(
-        env_name="DrawerEnv",
-        controller_configs=load_controller_config(default_controller="OSC_POSE"),
+        env_name="PickPlacePrimitive",
         robots="Panda",
+        controller_configs=load_controller_config(default_controller="OSC_POSE"),
+        table_full_size=(0.65, 0.65, 0.15),
         has_renderer=True,
         has_offscreen_renderer=False,
-        render_camera="frontview",
         use_camera_obs=False,
-        control_freq=20,
+        render_camera="frontview",
         ignore_done=True,
+        camera_names="agentview",
+        block_half_size=(0.025, 0.025, 0.025),
+        plate_half_size=(0.05, 0.05, 0.02),
+        block_rgba=(1,0,0,1),
+        plate_rgba=(0,0,1,1),
     )
 
-    prim = PrimitiveSkill(env)
-    obs = env.reset()
-    prim.open_drawer(obs, 2, 0.1, (1,-1))
-    prim.close_drawer(obs, 2, 0.05, (1,1))
+    # env = suite.make(
+    #     env_name="DrawerEnv",
+    #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
+    #     robots="Panda",
+    #     has_renderer=True,
+    #     has_offscreen_renderer=False,
+    #     render_camera="frontview",
+    #     use_camera_obs=False,
+    #     control_freq=20,
+    #     ignore_done=True,
+    # )
 
     # env = suite.make(
     #     env_name="Lift2",
@@ -1137,18 +1153,6 @@ def main():
     #     control_freq=20,
     #     ignore_done=True,
     # )
-
-    # prim = PrimitiveSkill(env)
-    # obs = env.reset()
-   
-    # print("pick")
-    # # obs, reward, done, info = prim.pick(obs=obs, goal_pos=obs["cube_pos"])
-    # obs, reward, done, info = prim.pick(obs=obs, obj_id=23)
-
-    # print("place")
-    # # obs, reward, done, info = prim.place(obs=obs, goal_pos=(0,0.15,0.9))
-    # obs, reward, done, info = prim.place(obs=obs, obj_id=23)
-
 
     # env = suite.make(
     #     env_name="Reaching2DObstacle",
@@ -1165,8 +1169,6 @@ def main():
     #     random_init=True,
     #     random_target=True,
     # )
-    # spacemouse_control(env=env, obs_to_print=["robot0_eef_pos", "target_pos", "obstacle_pos"])
 
-if __name__ == "__main__":
     main()
 

@@ -1,23 +1,28 @@
+from collections import OrderedDict
+from pkgutil import ModuleInfo
+from random import random
+
 import numpy as np
+import random
 
 import robosuite.utils.transform_utils as T
 
 from robosuite.environments.manipulation.single_arm_env import SingleArmEnv
 from robosuite.models.arenas import TableArena
-from robosuite.models.objects import BoxObject, BlockObject
+from robosuite.models.objects import BlockObject, RectangularBasketObject
 
 from robosuite.models.tasks import ManipulationTask
 from robosuite.utils.observables import Observable, sensor
-from robosuite.utils.transform_utils import convert_quat
 from robosuite.utils.placement_samplers import UniformRandomSampler
-
-from robosuite.controllers import load_controller_config
 import pdb
-import time
 
-class Reaching2DObstacle(SingleArmEnv):
+class PickPlacePrimitive(SingleArmEnv):
     """
-    This class corresponds to the lifting task for a single robot arm.
+    Cube and plate are placed in one of 3 predefined positions on the table.
+    Goal is to pick object up and place it on plate.
+    Action is a single int - each int corresponds to primitive action:
+        10 = pick(position0), 11 = pick(position1), 12 = pick(position2)
+        20 = place(position0), 21 = place(position1), 22 = place(position2)
 
     Args:
         robots (str or list of str): Specification for specific robot arm(s) to be instantiated within this env
@@ -53,8 +58,6 @@ class Reaching2DObstacle(SingleArmEnv):
             :Note: Specifying "default" will automatically use the default noise settings.
                 Specifying None will automatically create the required dict with "magnitude" set to 0.0.
 
-        prehensile (bool): If true, ball object starts on the table. Else, the object starts in robot's gripper
-
         table_full_size (3-tuple): x, y, and z dimensions of the table.
 
         table_friction (3-tuple): the three mujoco friction parameters for
@@ -67,12 +70,6 @@ class Reaching2DObstacle(SingleArmEnv):
 
         reward_scale (None or float): Scales the normalized reward function by the amount specified.
             If None, environment reward remains unnormalized
-
-        reward_shaping (bool): if True, use dense rewards.
-
-        placement_initializer (ObjectPositionSampler): if provided, will
-            be used to place objects on every reset, else a UniformRandomSampler
-            is used by default.
 
         has_renderer (bool): If true, render the simulation state in
             a viewer instead of headless mode.
@@ -134,10 +131,9 @@ class Reaching2DObstacle(SingleArmEnv):
             [multiple / a single] segmentation(s) to use for all cameras. A list of list of str specifies per-camera
             segmentation setting(s) to use.
 
-        target_half_size (2-tuple): half size of target area
+        obj_half_size (3-tuple of floats): x, y, z half size of cube object
 
-        target_position (2-tuple): position of target area
-
+        plate_half_size (3-tuple of floats): x, y, z half size of plate object
         
     Raises:
         AssertionError: [Invalid number of robots specified]
@@ -149,16 +145,12 @@ class Reaching2DObstacle(SingleArmEnv):
         env_configuration="default",
         controller_configs=None,
         gripper_types="default",
-        initialization_noise=None,
-        # table_full_size=(0.65, 0.65, 0.15),
-        table_full_size=(0.65, 0.8, 0.15),
-        table_friction=(100, 100, 100),
+        initialization_noise="default",
+        table_full_size=(0.65, 0.65, 0.15),
+        table_friction=(100,100,100),
         use_camera_obs=True,
         use_object_obs=True,
         reward_scale=1.0,
-        reward_shaping=False,
-        target_placement_initializer=None,
-        obstacle_placement_initializer=None,
         has_renderer=False,
         has_offscreen_renderer=True,
         render_camera="frontview",
@@ -169,61 +161,60 @@ class Reaching2DObstacle(SingleArmEnv):
         horizon=1000,
         ignore_done=False,
         hard_reset=True,
-        camera_names="frontview",
+        camera_names="agentview",
         camera_heights=256,
         camera_widths=256,
         camera_depths=False,
         camera_segmentations=None,  # {None, instance, class, element}
         renderer="mujoco",
         renderer_config=None,
-        target_half_size=(0.05, 0.05, 0.001), # target width, height, thickness
-        target_position=(0.0, 0.0), # target position
-        obstacle_half_size=(0.025, 0.025, 0.15), # obstacle size
-        random_init=True,
-        random_target=True,
+        prehensile=False, # start with obj in gripper if False * NOT USED
+        block_half_size=(0.025, 0.025, 0.025),
+        plate_half_size=(0.05, 0.05, 0.02),
+        block_rgba=(1,0,0,1),
+        plate_rgba=(0,0,1,1),
     ):
 
-        print("INIT")
+        # task setting: start obj in hand or not
+        self.prehensile = prehensile
 
         # settings for table top
         self.table_full_size = table_full_size
         self.table_friction = table_friction
-        self.table_offset = np.array((0, 0, 0.85))
+        self.table_offset = np.array((0, 0, 0.75))
+
+        # block and plate size
+        self.block_half_size = block_half_size
+        self.plate_half_size = plate_half_size
+
+        # object colors
+        self.block_rgba = block_rgba
+        self.plate_rgba = plate_rgba
+
+        # workspace boundaries
+        self.workspace_x = (-0.2 + self.table_offset[0], 0.2 + self.table_offset[0])
+        self.workspace_y = (-0.3 + self.table_offset[1], 0.3 + self.table_offset[1])
+        self.workspace_z = (self.table_offset[2] + 0.03, self.table_offset[2] + 0.5)
+
+        # predefined positions where objects can be placed
+        # z position each object should be placed
+        self.block_z_pos = self.table_offset[2] + self.block_half_size[2] + 0.001
+        self.plate_z_pos = self.table_offset[2] + self.plate_half_size[2] + 0.001
+        # x, y position objects can be placed
+        self.fixed_positions = {
+            0 : np.array([-0.11, 0]),
+            1 : np.array([0.2, -0.16]),
+            2 : np.array([0.10, 0.22]),
+        }
 
         # reward configuration
         self.reward_scale = reward_scale
-        self.reward_shaping = reward_shaping
 
         # whether to use ground-truth object states
         self.use_object_obs = use_object_obs
 
-        # target
-        self.target_half_size = target_half_size
-
-        # obstacle
-        self.obstacle_half_size = obstacle_half_size
-
-        # initial eef position
-        self.initial_eef_pos = None
-
-        # whether to use random eef position and target position
-        self.random_init = random_init
-        self.random_target = random_target
-
-        # workspace boundaries
-        self.workspace_x = (-0.2, 0.2)
-        self.workspace_y = (-0.35, 0.35)
-        self.workspace_z = (0.83, 1.3)
-
-        # placement initializer
-        self.target_placement_initializer = target_placement_initializer
-        self.obstacle_placement_initializer = obstacle_placement_initializer
-
-        # initial z position
-        self.initial_z = None
-
-        self.reset_ready = False # hack to fix target initialized in wrong position issue
-        # self.loadmodel_ready = False
+        # gripper state
+        self.gripper_state = 1 # 1 = closed, -1 = open
 
         super().__init__(
             robots=robots,
@@ -253,13 +244,13 @@ class Reaching2DObstacle(SingleArmEnv):
         )
 
 
-    def reward(self, action=None): ### TODO ###
+    def reward(self, action=None):
         """
         Reward function for the task.
 
         Sparse un-normalized reward:
 
-            - a discrete reward of 2.25 is provided if the gripper ends up in the target region
+            - a discrete reward of 2.25 is provided if the object ends up on the stage
 
         Note that the final reward is normalized and scaled by
         reward_scale / 2.25 as well so that the max score is equal to reward_scale
@@ -276,13 +267,9 @@ class Reaching2DObstacle(SingleArmEnv):
         if self._check_success():
             reward = 10
 
-        # collision negative reward
-        if self._check_collision():
-            reward = -10
-        
-        # # Scale reward if requested
-        # if self.reward_scale is not None:
-        #     reward *= self.reward_scale / 10
+        # Scale reward if requested
+        if self.reward_scale is not None:
+            reward *= self.reward_scale / 10
 
         return reward
 
@@ -290,12 +277,10 @@ class Reaching2DObstacle(SingleArmEnv):
         """
         Loads an xml model, puts it in self.model
         """
-
         super()._load_model()
 
         # Adjust base pose accordingly
         xpos = self.robots[0].robot_model.base_xpos_offset["table"](self.table_full_size[0])
-        xpos += np.array([-0.15, 0, 0])
         self.robots[0].robot_model.set_base_xpos(xpos)
 
         # load model for table top workspace
@@ -307,59 +292,28 @@ class Reaching2DObstacle(SingleArmEnv):
 
         # Arena always gets set to zero origin
         mujoco_arena.set_origin([0, 0, 0])
+
+        # initialize block object
+        self.block = BlockObject(
+            name="block",
+            body_half_size=self.block_half_size,
+            rgba=self.block_rgba,
+            density=1000,
+        )
+
+        # initialize plate object
+        self.plate = RectangularBasketObject(
+            name="plate",
+            body_half_size=self.plate_half_size,
+            rgba=self.plate_rgba,
+            density=1000,
+        )
         
-        # Initialize target object
-        self.target = BlockObject(
-            name="target",
-            body_half_size=self.target_half_size,
-            rgba=(1,0,0,1),
-        )
-
-        # Initialize obstacle object
-        self.obstacle = BlockObject(
-            name="obstacle",
-            body_half_size=self.obstacle_half_size,
-            density=500,
-            rgba=(0,0,1,1)
-        )
-
-        # create placement initializer
-        if self.target_placement_initializer is not None:
-            self.target_placement_initializer.reset()
-            self.target_placement_initializer.add_objects([self.target])
-        else:
-            self.target_placement_initializer = UniformRandomSampler(
-                name="ObjectSampler",
-                mujoco_objects=[self.target],
-                x_range=[-0.15, 0.15],
-                y_range=[-0.35, 0.35],
-                rotation=None,
-                ensure_object_boundary_in_range=False,
-                ensure_valid_placement=True,
-                reference_pos=self.table_offset,
-                z_offset=0.001
-            )
-        if self.obstacle_placement_initializer is not None:
-            self.obstacle_placement_initializer.reset()
-            self.obstacle_placement_initializer.add_objects([self.obstacle])
-        else:
-            self.obstacle_placement_initializer = UniformRandomSampler(
-                name="ObjectSampler",
-                mujoco_objects=[self.obstacle],
-                x_range=[-0.1, 0.1],
-                y_range=[-0.25, 0.25],
-                rotation=None,
-                ensure_object_boundary_in_range=False,
-                ensure_valid_placement=True,
-                reference_pos=self.table_offset,
-                z_offset=0.001
-            )
-
         # task includes arena, robot, and objects of interest
         self.model = ManipulationTask(
             mujoco_arena=mujoco_arena,
             mujoco_robots=[robot.robot_model for robot in self.robots],
-            mujoco_objects=[self.target, self.obstacle],
+            mujoco_objects=[self.block, self.plate],
         )
 
     def _setup_references(self):
@@ -371,75 +325,67 @@ class Reaching2DObstacle(SingleArmEnv):
         super()._setup_references()
 
         # Additional object references from this env
-        self.target_body_id = self.sim.model.body_name2id(self.target.root_body)
-        self.obstacle_body_id = self.sim.model.body_name2id(self.obstacle.root_body)
+        self.block_body_id = self.sim.model.body_name2id(self.block.root_body)
+        self.plate_body_id = self.sim.model.body_name2id(self.plate.root_body)
 
     def _setup_observables(self):
-            """
-            Sets up observables to be used for this environment. Creates object-based observables if enabled
+        """
+        Sets up observables to be used for this environment. Creates object-based observables if enabled
 
-            Returns:
-                OrderedDict: Dictionary mapping observable names to its corresponding Observable object
-            """
-            observables = super()._setup_observables()
+        Returns:
+            OrderedDict: Dictionary mapping observable names to its corresponding Observable object
+        """
+        observables = super()._setup_observables()
 
-            # low-level object information
-            if self.use_object_obs:
-                # Get robot prefix and define observables modality
-                pf = self.robots[0].robot_model.naming_prefix
-                modality = "object"
+        # low-level object information
+        if self.use_object_obs:
+            # Get robot prefix and define observables modality
+            pf = self.robots[0].robot_model.naming_prefix
+            modality = "object"
 
-                @sensor(modality=modality)
-                def target_pos(obs_cache):
-                    return self.sim.data.get_joint_qpos(self.target.joints[0])
+            @sensor(modality=modality)
+            def eef_xyz_gripper(obs_cache):
+                return (
+                    np.append(obs_cache[f"{pf}eef_pos"], self.gripper_state)
+                    if f"{pf}eef_pos" in obs_cache
+                    else np.zeros(4)
+                )
 
-                @sensor(modality=modality)
-                def obstacle_pos(obs_cache):
-                    return self.sim.data.get_joint_qpos(self.obstacle.joints[0])
+            @sensor(modality=modality)
+            def block_pos(obs_cache):
+                return np.array(self.sim.data.body_xpos[self.block_body_id])
 
-                sensors = [target_pos, obstacle_pos]
-                names = [s.__name__ for s in sensors]
+            @sensor(modality=modality)
+            def plate_pos(obs_cache):
+                return np.array(self.sim.data.body_xpos[self.plate_body_id])
 
-                # Create observables
-                for name, s in zip(names, sensors):
-                    observables[name] = Observable(
-                        name=name,
-                        sensor=s,
-                        sampling_rate=self.control_freq,
-                    )
-    
-            return observables
+            sensors = [eef_xyz_gripper, block_pos, plate_pos]
+            names = [s.__name__ for s in sensors]
+
+            # Create observables
+            for name, s in zip(names, sensors):
+                observables[name] = Observable(
+                    name=name,
+                    sensor=s,
+                    sampling_rate=self.control_freq,
+                )
+ 
+        return observables
 
     def _reset_internal(self):
-        # print("START reset internal")
         """
         Resets simulation internal configurations.
         """
         super()._reset_internal()
 
-        self.initial_z = self._eef_xpos[2]
-
-        # reset all object position using placement initializer
-        if not self.deterministic_reset:
-            # sample from placement initializer for all objects
-            target_placement = self.target_placement_initializer.sample()
-            obstacle_placement = self.obstacle_placement_initializer.sample()
-
-            # reset position of all objects
-            obj_pos, obj_quat, obj = target_placement["target"]
-            self.sim.data.set_joint_qpos(obj.joints[0], np.concatenate([np.array(obj_pos), np.array([0, 0, 0, 1])])) # no rotations
-
-            obj_pos, obj_quat, obj = obstacle_placement["obstacle"]
-            self.sim.data.set_joint_qpos(obj.joints[0], np.concatenate([np.array(obj_pos), np.array([0, 0, 0, 1])])) # no rotations
-
-        # target_xpos = np.concatenate((self.target_position, np.array([self.table_offset[2]+self.target_half_size[2], 0, 0, 0, 1])))
-        # # target_xpos[2] = self.table_offset[2] + self.target.base_half_size[1]
-        # self.sim.data.set_joint_qpos(self.target.joints[0], target_xpos)
-
-        # self.reset_ready = True
-
-        # print("TARGET PLACED AT: ", self.target_position)
-        # print("END reset internal")
+        # randomly place block and plate in one of the predefined positions (objects cannot be in same position)
+        position_indices = list(self.fixed_positions.keys())
+        random.shuffle(position_indices)
+        block_xpos = np.append(self.fixed_positions[position_indices[0]], self.block_z_pos)
+        self.sim.data.set_joint_qpos(self.block.joints[0], np.concatenate([block_xpos, np.array([0, 0, 0, 1])]))
+        plate_xpos = np.append(self.fixed_positions[position_indices[1]], self.plate_z_pos)
+        self.sim.data.set_joint_qpos(self.plate.joints[0], np.concatenate([plate_xpos, np.array([0, 0, 0, 1])]))
+        
 
     def visualize(self, vis_settings):
         """
@@ -453,32 +399,41 @@ class Reaching2DObstacle(SingleArmEnv):
         # Run superclass method first
         super().visualize(vis_settings=vis_settings)
 
-        # Color the gripper visualization site according to its distance to the cube
+        # Visualize gripper position (projection onto table)
         if vis_settings["grippers"]:
-            self._visualize_gripper_to_target(gripper=self.robots[0].gripper, target=self.target)
+            self._visualize_gripper_to_target(gripper=self.robots[0].gripper, target=self.plate)
+
+    def _check_grasping_obj(self):
+        
+        grasping_obj = self._check_grasp(
+            gripper=self.robots[0].gripper,
+            object_geoms=self.block
+        )
+
+        return grasping_obj
 
     def _check_success(self):
         """
-        Check if ball has been placed into basket.;
+        Check if obj has been placed on stage.
 
         Returns:
-            bool: True if ball is in basket
+            bool: True if obj is placed on stage
         """
-       
-        ##### Success = center point of end effector is within target cylinder #####
-        success = self._check_in_region(
-            region_center = self.sim.data.get_joint_qpos(self.target.joints[0]),
-            region_bounds = self.target_half_size,
-            coord = self._eef_xpos
-        )
+        # return self._check_obj_above_stage() and not self._check_grasping_obj()
+        return False
+    
+    def _check_obj_dropped(self):
 
-        return success
+        # return not (self._check_grasping_obj()) and not (self._check_obj_above_stage())
+        return False
 
     def _check_terminated(self):
         """
         Check if the task has completed one way or another. The following conditions lead to termination:
 
+            - Collision
             - Task completion
+            - Joint Limit reached
 
         Returns:
             bool: True if episode is terminated
@@ -486,72 +441,36 @@ class Reaching2DObstacle(SingleArmEnv):
 
         terminated = False
 
+        # Prematurely terminate if arm contacts any other object including table - shouldn't happen
+        if self.check_contact(self.robots[0].robot_model):
+            print("arm collision")
+            return True
+
         # Prematurely terminate if task is success
         if self._check_success():
-            print("~~~~~~~~in target~~~~~~~~~~~~~~")
-            terminated = True
+            print("success")
+            return True
 
-        # Prematurely terminate if collision occurs
-        if self._check_collision():
-            print("!!! collision detected !!!")
-            terminated = True
-
-        return terminated
-    
-    def _check_in_region(self, region_center, region_bounds, coord):
-        """
-        Check if input coordinate is inside the target
-
-        Args
-            region_center (array): 3d coordiante of region center
-            region_bounds (array): defines bounds of region
-                box (half size)
-            coord (array): 2d coordinate to check
-        """
-        in_x = region_center[0] - region_bounds[0] < coord[0] < region_center[0] + region_bounds[0]
-        in_y = region_center[1] - region_bounds[1] < coord[1] < region_center[1] + region_bounds[1]
-        return in_x and in_y
-
+        return False
+  
     def _check_action_in_bounds(self, action):
 
-        sf = 2 # safety factor to prevent robot from moving out of bounds
-        x_in_bounds = self.workspace_x[0] < self._eef_xpos[0] + sf * action[0] / self.control_freq < self.workspace_x[1]
-        y_in_bounds = self.workspace_y[0] < self._eef_xpos[1] + sf * action[1] / self.control_freq < self.workspace_y[1]
-        return x_in_bounds and y_in_bounds
+        sf = 3 # safety factor to prevent robot from moving out of bounds
 
-    def _check_collision(self):
-        # Arm contacts any other object including table
-        if self.check_contact(self.robots[0].robot_model):
-            # print("arm collision")
-            return True
+        # within workspace bounds?
+        x_in_ws = self.workspace_x[0] < self._eef_xpos[0] + sf * action[0] / self.control_freq < self.workspace_x[1]
+        y_in_ws = self.workspace_y[0] < self._eef_xpos[1] + sf * action[1] / self.control_freq < self.workspace_y[1]
+        z_in_ws = self.workspace_z[0] < self._eef_xpos[2] + sf * action[2] / self.control_freq < self.workspace_z[1]
+        in_ws = x_in_ws and y_in_ws and z_in_ws
 
-        # Prematurely terminate if gripper collides with obstacle
-        if self.check_contact(self.robots[0].gripper, self.obstacle):
-            # print("gripper collision: hoop")
-            return True
+        # in no-entry zone?
+        x_in_ne = self.ne_x[0] < self._eef_xpos[0] + sf * action[0] / self.control_freq < self.ne_x[1]
+        y_in_ne = self.ne_y[0] < self._eef_xpos[1] + sf * action[0] / self.control_freq < self.ne_y[1]
+        z_in_ne = self.ne_z[0] < self._eef_xpos[2] + sf * action[0] / self.control_freq < self.ne_z[1]
+        in_ne = x_in_ne and y_in_ne and z_in_ne
 
-    def step(self, action):
-
-        action_in_bounds = self._check_action_in_bounds(action)
-
-        # ignore orientation inputs
-        action[3:6] = 0
-
-        # override z action to maintain constant height above table
-        action[2] = self._z_correction()
-
-        # ignore gripper inputs
-        action[-1] = -1
-
-        # if end effector position is off the table, ignore the action
-        if not action_in_bounds:
-            action[:-1] = 0
-            print("Action out of bounds")
-        
-        # print("eefpos ", self._eef_xpos)
-        # print("target ", self.target_position)
-
-        return super().step(action)
+        # print(f"in_ws {in_ws}, in_ne {in_ne}")
+        return in_ws and not in_ne
 
     def step_no_count(self, action):
         """
@@ -583,67 +502,98 @@ class Reaching2DObstacle(SingleArmEnv):
 
         observations = self.viewer._get_observations() if self.viewer_get_obs else self._get_observations()
         return observations, reward, done, info
-    
-    def reset(self):
-        print("Resetting....")
-        observations = super().reset()
+  
+    def step(self, action):
 
-        # # wait for reset_internal to run
-        # while not self.reset_ready:
-        #     pass
+        """ 
+        No Entry Zone Bounds (eef cannot enter this zone to avoid robot-stage collision):
+
+        Step function ignores any action that send the eef out of the workspace or into the No Entry Zone with a safety factor of 10
+        """
+
+        # update gripper state 
+        if action[-1] < 0:
+            self.gripper_state = -1
+        else:
+            self.gripper_state = 1
+
+        return super().step(action)
+
+    def _check_in_region(self, region_center, region_bounds, coord):
+        """
+        Check if input coordinate is inside the target
+
+        Args
+            region_center (array): 3d coordiante of region center
+            region_bounds (array): defines bounds of region
+                box (half size)
+            coord (array): 2d coordinate to check
+        """
+        in_x = region_center[0] - region_bounds[0] < coord[0] < region_center[0] + region_bounds[0]
+        in_y = region_center[1] - region_bounds[1] < coord[1] < region_center[1] + region_bounds[1]
+        in_z = region_center[2] - region_bounds[2] < coord[2] < region_center[2] + region_bounds[2]
+        return in_x and in_y and in_z
+
+    def reset(self):
+
+        observations = super().reset()
 
         # if self.random_init:
         #     # sample random position inside workspace
+        #     c = 1
         #     self.initial_eef_pos = np.concatenate((
-        #         np.random.uniform(self.workspace_x[0], self.workspace_x[1], 1),
-        #         np.random.uniform(self.workspace_y[0], self.workspace_y[1], 1),
+        #         np.random.uniform(c*self.workspace_x[0], c*self.workspace_x[1], 1),
+        #         np.random.uniform(c*self.workspace_y[0], c*self.workspace_y[1], 1),
+        #         np.random.uniform(c*self.workspace_z[0], c*self.workspace_z[1], 1)
         #     ))
 
-        #     # sample again if start position is already inside or too close to the target
-        #     thresh = (0.1, 0.1) # how far the starting position must be from target bounds (radius, height)
-        #     while (self._check_in_region(self.target_position[:2], self.target_half_size[:2] + thresh, self.initial_eef_pos)):
+        #     # sample again if start position collides with stage or is too close 
+        #     thresh = (0.05, 0.05, 0.0) # how far the starting position must be from target bounds
+        #     buf = (0.055, 0.11, 0.03)
+        #     # while (self._check_in_region(self.stage_pos, self.stage_half_size + buf, self.initial_eef_pos)):
+        #     while (self._check_in_region(self.stage_pos, self.stage_half_size + buf, self.initial_eef_pos)):
         #         self.initial_eef_pos = np.concatenate((
         #             np.random.uniform(self.workspace_x[0], self.workspace_x[1], 1),
         #             np.random.uniform(self.workspace_y[0], self.workspace_y[1], 1),
+        #             np.random.uniform(self.workspace_z[0], self.workspace_z[1], 1),
         #         ))
+        #         print("sampled pos: ", self.initial_eef_pos)
 
         #     # move the eef to the sampled initial position
-        #     thresh = 0.005
-        #     while np.any(np.abs(self._eef_xpos[:2] - self.initial_eef_pos) > thresh):
-        #         action = 4 * (self.initial_eef_pos - self._eef_xpos[:2]) / np.linalg.norm(self.initial_eef_pos - self._eef_xpos[:2])
-        #         action = np.concatenate((action, np.array([0, -1])))
+        #     thresh = 0.01
+        #     while np.any(np.abs(self._eef_xpos - self.initial_eef_pos) > thresh):
+        #         action = 4 * (self.initial_eef_pos - self._eef_xpos) / np.linalg.norm(self.initial_eef_pos - self._eef_xpos)
+        #         action = np.concatenate((action, np.array([1])))
         #         observations, reward, done, info = self.step_no_count(action)
         #         # print("error to initial pos ", initial_pos - self._eef_xpos)
         
         # self.reset_ready = False
-        # print(f"EEF position {self.initial_eef_pos} sampled based on target {self.target_position}")
+        # print(f"EEF position {self.initial_eef_pos} sampled based on target {self.stage_pos}")
         # print("End reset")
         return observations
-
+        
     def _post_action(self, action):
-        """
-        In addition to super method, add additional info if requested
+            """
+            In addition to super method, add additional info if requested
 
-        Args:
-            action (np.array): Action to execute within the environment
+            Args:
+                action (np.array): Action to execute within the environment
 
-        Returns:
-            3-tuple:
+            Returns:
+                3-tuple:
 
-                - (float) reward from the environment
-                - (bool) whether the current episode is completed or not
-                - (dict) info about current env step
-        """
-        reward, done, info = super()._post_action(action)
+                    - (float) reward from the environment
+                    - (bool) whether the current episode is completed or not
+                    - (dict) info about current env step
+            """
+            reward, done, info = super()._post_action(action)
 
-        # allow episode to finish early if allowed
-        done = done or self._check_terminated()
+            # allow episode to finish early if allowed
+            done = done or self._check_terminated()
 
-        return reward, done, info
-
-    def _z_correction(self):
-        return 3 * (self.initial_z - self._eef_xpos[2])
+            return reward, done, info
 
     @property
-    def target_pos(self):
-        return self.sim.data.get_joint_qpos(self.target.joints[0])
+    def stage_top(self):
+        # return coordinate of stage top surface center
+        return self.stage_pos + np.array([0, 0, self.stage_half_size[2]])
