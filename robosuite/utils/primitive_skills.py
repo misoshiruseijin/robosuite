@@ -238,10 +238,12 @@ class PrimitiveSkill():
             obs, reward, done, info from environment's step function (or lists of these if self.return_all_states is True)
         """
         
-        # TODO - make sure provided object is a drawer
+        # make sure provided object is a drawer
+        # NOTE: Environment must have dict named obj_body_id storing {obj_name : obj_id}. The drawer object must have "drawer" in it's name
+        obj_name = list(self.env.obj_body_id.keys())[list(self.env.obj_body_id.values()).index(drawer_obj_id)]
+        assert "drawer" in obj_name, "Object with id 'drawer_obj_id' must be CabinetObject or LargeCabinetObject and name must include 'drawer'"
 
         # get position of drawer handle site
-        obj_name = list(self.env.obj_body_id.keys())[list(self.env.obj_body_id.values()).index(drawer_obj_id)]
         handle_pos = self.env.sim.data.get_site_xpos(obj_name + "_handle_site")
 
         if waypoint_height is None:
@@ -309,10 +311,12 @@ class PrimitiveSkill():
             obs, reward, done, info from environment's step function (or lists of these if self.return_all_states is True)
         """
         
-        # TODO - make sure provided object is a drawer
+        # make sure provided object is a drawer
+        # NOTE: Environment must have dict named obj_body_id storing {obj_name : obj_id}. The drawer object must have "drawer" in it's name
+        obj_name = list(self.env.obj_body_id.keys())[list(self.env.obj_body_id.values()).index(drawer_obj_id)]
+        assert "drawer" in obj_name, "Object with id 'drawer_obj_id' must be CabinetObject or LargeCabinetObject and name must include 'drawer'"
 
         # get position of drawer handle site
-        obj_name = list(self.env.obj_body_id.keys())[list(self.env.obj_body_id.values()).index(drawer_obj_id)]
         handle_pos = self.env.sim.data.get_site_xpos(obj_name + "_handle_site")
 
         if waypoint_height is None:

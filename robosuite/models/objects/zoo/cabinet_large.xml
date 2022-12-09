@@ -12,6 +12,7 @@
             <geom material="MatRedWood" pos="0 0.01 0.124" size="0.11 0.19 0.008" group="1" type="box" mass=".05"/>
             <geom material="MatRedWood" pos="-0.103 -0.19 0.065" size="0.012 0.01 0.065" group="1" type="box" mass=".05"/>
             <geom material="MatRedWood" pos="0.103 -0.19 0.065" size="0.012 0.01 0.065" group="1" type="box" mass=".05"/>
+            <site name="body_front_site" pos="0 -0.175 0.065" rgba="0 0 0 0" size="0.005" type="sphere"/>
 
 	    <body name="drawer_link" pos="0 -0.01 0.076">
               <inertial pos="0 0 0.35" quat="0.5 0.5 0.5 0.5" mass="7.85398" diaginertia="0.923301 0.764585 0.168533" />
@@ -27,6 +28,7 @@
                 <geom material="MatCeramic" euler="0 1.57 0" pos="0 -0.288 0.04" size="0.009 0.05" group="1" type="capsule" mass=".06"/>
                 <geom material="MatCeramic" euler="1.57 0 0" pos="0.05 -0.238 0.04" size="0.009 0.05" group="1" type="capsule" mass=".06"/>
         <site name="handle_site" pos="0 -0.288 0.04" rgba="0 0 1 0.5" size="0.02" type="sphere"/>
+        <site name="drawer_front_site" pos="0 -0.175 0.0068" rgba="0 0 0 0" size="0.005" type="sphere"/>
 	    </body>
           </body>
         </body>

@@ -245,7 +245,7 @@ class DrawerEnv(SingleArmEnv):
         )
 
         self.cabinet_object = LargeCabinetObject(
-            name="CabinetObject")
+            name="drawer")
         cabinet_object = self.cabinet_object.get_obj(); cabinet_object.set("pos", array_to_string((0.05, 0.27, 0.03))); mujoco_arena.table_body.append(cabinet_object)
         
         for obj_body in [

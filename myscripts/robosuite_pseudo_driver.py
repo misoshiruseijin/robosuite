@@ -917,129 +917,8 @@ class FrankaDrawer():
         self.env = VisualizationWrapper(self.env, indicator_configs=None)
 
         obs = self.env.reset()
-        pdb.set_trace()
+        # pdb.set_trace()
     
-    
-    # run simulation with spacemouse
-    def spacemouse_control(self):
-        device = SpaceMouse(
-            vendor_id=9583,
-            product_id=50734,
-            pos_sensitivity=1.0,
-            rot_sensitivity=1.0,
-        )
-
-        device.start_control()
-        while True:
-            # Reset environment
-            obs = self.env.reset()
-            # pdb.set_trace()
-            self.env.modify_observable(observable_name="robot0_joint_pos", attribute="active", modifier=True)
-
-            # rendering setup
-            self.env.render()
-
-            # Initialize device control
-            device.start_control()
-
-            done = False
-
-            while True:
-                # set active robot
-                active_robot = self.env.robots[0]
-                # get action
-                action, grip = input2action(
-                    device=device,
-                    robot=active_robot,
-                )
-                # action = action[:4]
-                action[3:5] = 0
- 
-                if action is None:
-                    break
-
-                # take step in simulation
-                obs, reward, done, info = self.env.step(action)
-                # print("action ", action)
-                print("eef_pos ", obs["robot0_eef_pos"])
-                # print("contact ", obs["robot0_contact"])
-
-                self.env.render()
-  
-    def hardcode_control(self):
-
-        grip_height = 1.022
-        zero_pull_y = 0.017
-        full_pull_y = -0.304
-        thresh = 0.001
-        phase = 1
-
-        n_frames = 0
-        pre_record_steps = 0
-        post_record_steps = 0
-        transition_steps = 0
-        idle_phase = 1
-
-        while True:
-            # Reset environment
-            obs = self.env.reset()
-            # pdb.set_trace()
-            self.env.modify_observable(observable_name="robot0_joint_pos", attribute="active", modifier=True)
-
-            # rendering setup
-            self.env.render()
-
-            done = False
-
-            while True:
-                print("phase ", phase)
-                # set active robot
-                active_robot = self.env.robots[0]
-                # get action
-                if phase == 1: # down
-                    action = np.array([0, 0, -0.1, 0, 0, 0, -1])
-                    if np.abs(obs["eef_xyz_gripper"][2] - grip_height) < thresh:
-                        phase = 2
-                if phase == 2: # grip
-                    action = np.array([0, 0, 0, 0, 0, 0, 1])
-                    if obs["eef_xyz_gripper"][-1] == 1:
-                        phase = 3
-                if phase == 3: # close
-                    action = np.array([0, 0.1, 0, 0, 0, 0, 1])
-                    if np.abs(obs["eef_xyz_gripper"][1] - zero_pull_y) < thresh:
-                        phase = 5
-                if phase == 4: # open
-                    action = np.array([0, -0.1, 0, 0, 0, 0, 1])
-                    if np.abs(obs["eef_xyz_gripper"][1] - full_pull_y) < thresh:
-                        phase = 5
-                if phase == 5: # idle
-                    action = np.array([0, 0, 0, 0, 0, 0, 1])
-                    if idle_phase == 1:
-                        pre_record_steps += 1
-                        if pre_record_steps >= 50: # pre-recording
-                            phase = 4
-                            idle_phase += 1
-                    elif idle_phase == 2: # between open and close
-                        transition_steps += 1
-                        if transition_steps >= 50:
-                            phase = 3
-                            idle_phase += 1
-                    elif idle_phase == 3:
-                        post_record_steps += 1
-                        if post_record_steps >= 50:
-                            break
-
-                if action is None:
-                    break
-
-                # take step in simulation
-                obs, reward, done, info = self.env.step(action)
-                # print("action ", action)
-                print("eef_pos ", obs["robot0_eef_pos"])
-                # print("contact ", obs["robot0_contact"])
-
-                self.env.render()
-
 def spacemouse_control(env, obs_to_print=["robot0_eef_pos"], indicator_on=True, gripper_closed=False):
     
     if indicator_on:
@@ -1114,40 +993,57 @@ def main():
     np.set_printoptions(formatter={"float": lambda x: "{0:0.3f}".format(x)})
 
     # spacemouse_control(env, gripper_closed=True, indicator_on=False)
-    env.render()
-    for _ in range(25):
-        action = 0.05 * np.random.uniform(-1, 1, 6)
-        action = np.append(action, 1)
-        env.step(action)
-        env.render()
+    # env.render()
+    # for _ in range(25):
+    #     action = 0.05 * np.random.uniform(-1, 1, 6)
+    #     action = np.append(action, 1)
+    #     env.step(action)
+    #     env.render()
 
-    while True: 
-        action = np.array([0, 0, 0, 0, 0, 0, -1])
-        env.step(action)
-        env.render()
+    # while True: 
+    #     action = np.array([0, 0, 0, 0, 0, 0, -1])
+    #     env.step(action)
+    #     env.render()
     
 
 if __name__ == "__main__":
 
+
     env = suite.make(
-        env_name="LeftRight",
-        robots="Panda",
+        env_name="DrawerEnv",
         controller_configs=load_controller_config(default_controller="OSC_POSE"),
-        table_full_size=(0.8, 2.0, 0.05),
-        use_camera_obs=False,
-        use_object_obs=True,
+        robots="Panda",
         has_renderer=True,
         has_offscreen_renderer=False,
-        render_camera="frontview2",
+        render_camera="frontview",
+        use_camera_obs=False,
+        control_freq=20,
         ignore_done=True,
-        camera_names="agentview",
-        camera_heights=256,
-        camera_widths=256,
-        line_thickness=0.05,
-        line_rgba=(0,0,0,1),
-        ball_radius=0.04,
-        ball_rgba=(1,0,0,1)
     )
+    prim = PrimitiveSkill(env)
+    obs = env.reset()
+    env.render()
+    prim.open_drawer(obs, env.obj_body_id["drawer"], pull_dist=0.1)
+
+    # env = suite.make(
+    #     env_name="LeftRight",
+    #     robots="Panda",
+    #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
+    #     table_full_size=(0.8, 2.0, 0.05),
+    #     use_camera_obs=False,
+    #     use_object_obs=True,
+    #     has_renderer=True,
+    #     has_offscreen_renderer=False,
+    #     render_camera="frontview2",
+    #     ignore_done=True,
+    #     camera_names="agentview",
+    #     camera_heights=256,
+    #     camera_widths=256,
+    #     line_thickness=0.05,
+    #     line_rgba=(0,0,0,1),
+    #     ball_radius=0.04,
+    #     ball_rgba=(1,0,0,1)
+    # )
 
     # env = suite.make(
     #     env_name="PickPlacePrimitive",
