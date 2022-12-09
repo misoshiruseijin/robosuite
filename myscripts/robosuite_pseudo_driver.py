@@ -1040,7 +1040,7 @@ class FrankaDrawer():
 
                 self.env.render()
 
-def spacemouse_control(env, obs_to_print=["robot0_eef_pos"], indicator_on=True):
+def spacemouse_control(env, obs_to_print=["robot0_eef_pos"], indicator_on=True, gripper_closed=False):
     
     if indicator_on:
         env = VisualizationWrapper(env, indicator_configs=None)
@@ -1078,11 +1078,15 @@ def spacemouse_control(env, obs_to_print=["robot0_eef_pos"], indicator_on=True):
                 device=device,
                 robot=active_robot,
             )
-            if action_dim < 6:
-                action = np.append(action[:action_dim], action[-1])
 
             if action is None:
                 break
+
+            if action_dim < 6:
+                action = np.append(action[:action_dim], action[-1])
+
+            if gripper_closed:
+                action[-1] = 1
 
             # take step in simulation
             obs, reward, done, info = env.step(action)
@@ -1109,26 +1113,58 @@ def main():
     # Setup printing options for numbers
     np.set_printoptions(formatter={"float": lambda x: "{0:0.3f}".format(x)})
 
-    spacemouse_control(env)
+    # spacemouse_control(env, gripper_closed=True, indicator_on=False)
+    env.render()
+    for _ in range(25):
+        action = 0.05 * np.random.uniform(-1, 1, 6)
+        action = np.append(action, 1)
+        env.step(action)
+        env.render()
+
+    while True: 
+        action = np.array([0, 0, 0, 0, 0, 0, -1])
+        env.step(action)
+        env.render()
+    
 
 if __name__ == "__main__":
 
     env = suite.make(
-        env_name="PickPlacePrimitive",
+        env_name="LeftRight",
         robots="Panda",
         controller_configs=load_controller_config(default_controller="OSC_POSE"),
-        table_full_size=(0.65, 0.65, 0.15),
+        table_full_size=(0.8, 2.0, 0.05),
+        use_camera_obs=False,
+        use_object_obs=True,
         has_renderer=True,
         has_offscreen_renderer=False,
-        use_camera_obs=False,
-        render_camera="frontview",
+        render_camera="frontview2",
         ignore_done=True,
         camera_names="agentview",
-        block_half_size=(0.025, 0.025, 0.025),
-        plate_half_size=(0.05, 0.05, 0.02),
-        block_rgba=(1,0,0,1),
-        plate_rgba=(0,0,1,1),
+        camera_heights=256,
+        camera_widths=256,
+        line_thickness=0.05,
+        line_rgba=(0,0,0,1),
+        ball_radius=0.04,
+        ball_rgba=(1,0,0,1)
     )
+
+    # env = suite.make(
+    #     env_name="PickPlacePrimitive",
+    #     robots="Panda",
+    #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
+    #     table_full_size=(0.65, 0.65, 0.15),
+    #     has_renderer=True,
+    #     has_offscreen_renderer=False,
+    #     use_camera_obs=False,
+    #     render_camera="frontview",
+    #     ignore_done=True,
+    #     camera_names="agentview",
+    #     block_half_size=(0.025, 0.025, 0.025),
+    #     plate_half_size=(0.05, 0.05, 0.02),
+    #     block_rgba=(1,0,0,1),
+    #     plate_rgba=(0,0,1,1),
+    # )
 
     # env = suite.make(
     #     env_name="DrawerEnv",

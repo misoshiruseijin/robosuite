@@ -26,13 +26,14 @@ import os
 from pathlib import Path
 from pynput import keyboard
 import cv2
+import shutil
 
 import pdb
 # Set the image convention to opencv so that the images are automatically rendered "right side up" when using imageio
 # (which uses opencv convention)
 macros.IMAGE_CONVENTION = "opencv"
 
-np.random.seed(3)
+np.random.seed(0)
 
 def record_videos_2d_reaching(video_path="video.mp4", csv_path="data.csv", camera_names="frontview", good=True, timesteps=200):
     
@@ -1004,6 +1005,83 @@ def record_video_drawer(video_path="video.mp4", csv_path="data.csv", camera_name
     )
     df.to_csv(csv_path, index=False)
 
+################## Roll Ball Left Right Stimulus ############
+def record_left_right(video_path="video.mp4", camera_names="frontview", ball_rgba=(1,0,0,1)):
+    # initialize environment with offscreen renderer
+    env = make(
+        env_name="LeftRight",
+        robots="Panda",
+        controller_configs=load_controller_config(default_controller="OSC_POSE"),
+        initialization_noise=None,
+        table_full_size=(0.8, 2.0, 0.01),
+        use_camera_obs=True,
+        use_object_obs=True,
+        has_renderer=False,
+        has_offscreen_renderer=True,
+        render_camera="frontview",
+        ignore_done=True,
+        camera_names=camera_names,
+        camera_heights=512,
+        camera_widths=512,
+        line_thickness=0.02,
+        line_rgba=(0,0,0,1),
+        ball_radius=0.04,
+        ball_rgba=ball_rgba
+    )
+
+    obs = env.reset()
+
+    action_hist = []
+    eef_pos_hist = []
+    ball_pos_hist = []
+
+    # create a video writer with imageio
+    writer = imageio.get_writer(video_path, fps=20)
+
+    # small random movements to randomize ball roll direction for first few steps, then release
+    random_steps = 25
+    total_steps = 100
+
+    for i in range(total_steps):
+        if i < random_steps:
+            action = np.random.uniform(-1, 1, 6)
+            action[:3] *= 0.05
+            action[3:] *= 0.1
+            action = np.concatenate([action, np.array([1])])
+        else:
+            action = np.array([0, 0, 0, 0, 0, 0, -1])
+
+        obs, _, _, _ = env.step(action)
+        frame = obs[camera_names + "_image"]
+        writer.append_data(frame)
+
+        action_hist.append(action)
+        eef_pos_hist.append(obs["robot0_eef_pos"])
+        ball_pos_hist.append(obs["ball_pos"])
+
+    writer.close()
+
+    # check which side ball ended up in
+    if ball_pos_hist[-1][1] < 0:
+        ball_side = "left"
+    else:
+        ball_side = "right"
+
+    # save datafile
+    # n = len(action_hist)
+    # df = pd.DataFrame(
+    #     data={
+    #         "step" : np.arange(n),
+    #         "action" : pd.Series(action_hist),
+    #         "eef_pos" : pd.Series(eef_pos_hist),
+    #         "ball_pos" : pd.Series(ball_pos_hist),
+    #         "ball_ended_up_on" : pd.Series([ball_side] * n),
+    #         "ball_goal_side" : pd.Series([goal] * n)
+    #     }
+    # )
+    # df.to_csv(csv_path, index=False)
+
+    return action_hist, eef_pos_hist, ball_pos_hist, ball_side
 
 ####### TEST PRIMITIVE #########
 def test_primitive():
@@ -1282,84 +1360,140 @@ if __name__ == "__main__":
         "gray" : (0.75,0.75,0.75,1),
     }
 
-    # test_primitive()
-   
-   ############# Obstacle Avoidance (Manual Record) ###############
-    camera_names = ["frontview", "sideview"]
-    target_half_size=(0.05,0.05,0.001)
-    obstacle_half_size=(0.025, 0.025, 0.12)
-
-    # initialize an environment with offscreen renderer
-    env = make(
-        env_name="Reaching2DObstacle",
-        controller_configs=load_controller_config(default_controller="OSC_POSE"),
-        robots="Panda",
-        has_renderer=False,
-        has_offscreen_renderer=True,
-        render_camera="agentview",
-        camera_names=camera_names,
-        use_camera_obs=True,
-        control_freq=20,
-        ignore_done=True,
-        target_half_size=target_half_size,
-        obstacle_half_size=obstacle_half_size,
-        random_init=True,
-        random_target=True,
-        camera_heights=512,
-        camera_widths=512,
-    )
-    env = VisualizationWrapper(env, indicator_configs=None)
-    
-    # initialize spacemouse
-    device = SpaceMouse(
-            vendor_id=9583,
-            product_id=50734,
-            pos_sensitivity=1.0,
-            rot_sensitivity=1.0,
-        )
-
-    device.start_control()
-
-    n_videos = 5
-    save_dir = "videos/obstacle_avoidance"
+    # record_left_right()
+    n_videos = 20
+    save_dir = "videos/left_right"
     os.makedirs(save_dir, exist_ok=True)
-    # global recording
+
+    n_right = 0
+    n_left = 0
 
     for i in range(n_videos):
-
-        obs = env.reset()
-        target_pos = obs["target_pos"]
-        obstacle_pos = obs["obstacle_pos"]
-
+        print(f"\nRecording video {i}...")
         # record video
-        action_hist, eef_pos_hist, reward_hist = manual_record_spacemouse(
-            env=env,
-            device=device,
-            video_path=os.path.join(save_dir, f"video{i}.mp4"),
-            camera_names=camera_names
+        video_path = os.path.join(save_dir, f"video{i}.mp4")
+        action_hist, eef_pos_hist, ball_pos_hist, ball_side = record_left_right(
+            video_path=video_path,
+            camera_names="frontview2",
+            ball_rgba=(0.75,0.75,0.75,1),
         )
+        
+        if ball_side == "left":
+            n_left += 1
+        elif ball_side == "right":
+            n_right += 1
+        print(f"left: {n_left}, right: {n_right}")
 
-        # record csv datafile
-        n_steps = len(action_hist)
-        good = np.all(np.array(reward_hist) >= 0)
+        # make 2 copies of video and rename
+        shutil.copyfile(video_path, os.path.join(save_dir, f"video{i}_goal_right_result_{ball_side}.mp4"))
+        os.rename(video_path, os.path.join(save_dir, f"video{i}_goal_left_result_{ball_side}.mp4"))
+
+        # save datafile
+        n = len(action_hist)
+        csv_path = os.path.join(save_dir, f"video{i}_goal_left_result_{ball_side}.csv")
         df = pd.DataFrame(
             data={
-                "step" : np.arange(len(action_hist)),
+                "step" : np.arange(n),
                 "action" : pd.Series(action_hist),
                 "eef_pos" : pd.Series(eef_pos_hist),
-                "target_pos" : [target_pos] * n_steps,
-                "obstacle_pos" : [obstacle_pos] * n_steps,
-                "target_half_size" : [target_half_size] * n_steps,
-                "obstacle_half_size" : [obstacle_half_size] * n_steps,
-                "good" : [good] * n_steps, # if collision occurs, it is a bad demo
+                "ball_pos" : pd.Series(ball_pos_hist),
+                "ball_ended_up_on" : pd.Series([ball_side] * n),
+                "ball_goal_side" : pd.Series(["left"] * n)
             }
         )
+        df.to_csv(csv_path, index=False)
 
-        label = "good" if good else "bad"
-        df.to_csv(os.path.join(save_dir, f"video{i}_{label}.csv"), index=False)
+        csv_path = os.path.join(save_dir, f"video{i}_goal_right_result_{ball_side}.csv")
+        df = pd.DataFrame(
+            data={
+                "step" : np.arange(n),
+                "action" : pd.Series(action_hist),
+                "eef_pos" : pd.Series(eef_pos_hist),
+                "ball_pos" : pd.Series(ball_pos_hist),
+                "ball_ended_up_on" : pd.Series([ball_side] * n),
+                "ball_goal_side" : pd.Series(["right"] * n)
+            }
+        )
+        df.to_csv(csv_path, index=False)
 
-    cv2.destroyAllWindows()
-    env.close()
+
+
+    ############ Obstacle Avoidance (Manual Record) ###############
+    # camera_names = ["frontview", "sideview"]
+    # target_half_size=(0.05,0.05,0.001)
+    # obstacle_half_size=(0.025, 0.025, 0.12)
+
+    # # initialize an environment with offscreen renderer
+    # env = make(
+    #     env_name="Reaching2DObstacle",
+    #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
+    #     robots="Panda",
+    #     has_renderer=False,
+    #     has_offscreen_renderer=True,
+    #     render_camera="agentview",
+    #     camera_names=camera_names,
+    #     use_camera_obs=True,
+    #     control_freq=20,
+    #     ignore_done=True,
+    #     target_half_size=target_half_size,
+    #     obstacle_half_size=obstacle_half_size,
+    #     random_init=True,
+    #     random_target=True,
+    #     camera_heights=512,
+    #     camera_widths=512,
+    # )
+    # env = VisualizationWrapper(env, indicator_configs=None)
+    
+    # # initialize spacemouse
+    # device = SpaceMouse(
+    #         vendor_id=9583,
+    #         product_id=50734,
+    #         pos_sensitivity=1.0,
+    #         rot_sensitivity=1.0,
+    #     )
+
+    # device.start_control()
+
+    # n_videos = 5
+    # save_dir = "videos/obstacle_avoidance"
+    # os.makedirs(save_dir, exist_ok=True)
+    # # global recording
+
+    # for i in range(n_videos):
+
+    #     obs = env.reset()
+    #     target_pos = obs["target_pos"]
+    #     obstacle_pos = obs["obstacle_pos"]
+
+    #     # record video
+    #     action_hist, eef_pos_hist, reward_hist = manual_record_spacemouse(
+    #         env=env,
+    #         device=device,
+    #         video_path=os.path.join(save_dir, f"video{i}.mp4"),
+    #         camera_names=camera_names
+    #     )
+
+    #     # record csv datafile
+    #     n_steps = len(action_hist)
+    #     good = np.all(np.array(reward_hist) >= 0)
+    #     df = pd.DataFrame(
+    #         data={
+    #             "step" : np.arange(len(action_hist)),
+    #             "action" : pd.Series(action_hist),
+    #             "eef_pos" : pd.Series(eef_pos_hist),
+    #             "target_pos" : [target_pos] * n_steps,
+    #             "obstacle_pos" : [obstacle_pos] * n_steps,
+    #             "target_half_size" : [target_half_size] * n_steps,
+    #             "obstacle_half_size" : [obstacle_half_size] * n_steps,
+    #             "good" : [good] * n_steps, # if collision occurs, it is a bad demo
+    #         }
+    #     )
+
+    #     label = "good" if good else "bad"
+    #     df.to_csv(os.path.join(save_dir, f"video{i}_{label}.csv"), index=False)
+
+    # cv2.destroyAllWindows()
+    # env.close()
 
     ############ Record Equal Length 2D Reaching ##############
     # save_path = "videos/2d_reaching"
