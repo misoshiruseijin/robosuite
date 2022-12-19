@@ -134,6 +134,7 @@ class PrimitiveSkill():
         Returns:
             obs, reward, done, info from environment's step function (or lists of these if self.return_all_states is True)
         """
+
         # make sure one of goal_pos or obj_id is provided
         assert not (goal_pos is None and obj_id is None), "Either goal_pos or obj_id must be given"
         assert not (goal_pos is not None and obj_id is not None), "Cannot provide both goal_pos and obj_id"
@@ -143,6 +144,8 @@ class PrimitiveSkill():
             # get object center position
             obj_name = self.env.sim.model.body_id2name(obj_id)
             goal_pos = self.env.sim.data.get_body_xpos(obj_name)
+            # offset z
+            goal_pos[2] += self.env.sim.data.body_xpos(obj_id) - 0.025
 
         if waypoint_height is None:
             waypoint_height = self.home_pos[2]
@@ -194,15 +197,17 @@ class PrimitiveSkill():
             # get object center position
             obj_name = self.env.sim.model.body_id2name(obj_id)
             goal_pos = self.env.sim.data.get_body_xpos(obj_name)
+            # offset z
+            goal_pos[2] += self.env.sim.data.body_xpos(obj_id) + 0.025
 
         if waypoint_height is None:
             waypoint_height = self.home_pos[2]
         above_pos = (goal_pos[0], goal_pos[1], waypoint_height)
 
-        # move to above grip site
+        # move to above goal position
         obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=above_pos, gripper_closed=True, robot_id=robot_id, speed=speed)
 
-        # move down to grip site
+        # move down to goal position
         obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=goal_pos, gripper_closed=True, robot_id=robot_id, speed=speed)
 
         # release object

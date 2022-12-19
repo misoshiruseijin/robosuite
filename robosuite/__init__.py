@@ -23,6 +23,7 @@ from robosuite.environments.manipulation.drawer import DrawerEnv
 from robosuite.environments.manipulation.reaching_2d_obstacle import Reaching2DObstacle
 from robosuite.environments.manipulation.pick_place_primitive import PickPlacePrimitive
 from robosuite.environments.manipulation.left_right import LeftRight
+from robosuite.environments.manipulation.drop2 import Drop2
 
 from robosuite.environments import ALL_ENVIRONMENTS
 from robosuite.controllers import ALL_CONTROLLERS, load_controller_config

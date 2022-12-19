@@ -7,6 +7,8 @@ from robosuite import load_controller_config
 import pandas as pd
 import numpy as np
 
+from FSM_states_test import *
+
 def do_nothing(hdf5_path):
     f = h5py.File(hdf5_path)
     pdb.set_trace()
@@ -30,18 +32,20 @@ def copy_model_file(hdf5_path):
         f["data"][key].attrs["model_file"] = model_file
 
 env = suite.make(
-    env_name="DrawerEnv",
-    controller_configs=load_controller_config(default_controller="OSC_POSITION"),
+    env_name="Lift2",
+    controller_configs=load_controller_config(default_controller="OSC_POSE"),
     robots="Panda",
     has_renderer=True,
     has_offscreen_renderer=False,
-    render_camera="agentview",
+    render_camera="frontview",
     use_camera_obs=False,
     control_freq=20,
     ignore_done=True,
 )
 
-pdb.set_trace()
+obs = env.reset()
+pick_cube_state_transitions(env, obs, goal_pos=(0.16,0.16,0.988))
+
 
 # path1 = "/home/ayanoh/robosuite/robosuite/models/assets/demonstrations/franka_reaching_robosuite/reaching_100.hdf5"
 # path2 = "/home/ayanoh/robosuite/robosuite/models/assets/demonstrations/franka_reaching_robosuite/reaching_50_2.hdf5"
