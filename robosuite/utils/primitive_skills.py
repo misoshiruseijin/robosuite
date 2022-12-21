@@ -75,7 +75,7 @@ class PrimitiveSkill():
         while np.any(np.abs(error) > thresh):
             print("eef pos ", eef_pos)
             print("goal pos ", goal_pos)
-            print("error ", error)
+            # print("error ", error)
 
             # if close to goal, reduce speed
             if np.abs(np.linalg.norm(error)) < slow_dist:
@@ -118,6 +118,25 @@ class PrimitiveSkill():
         
         return obs, reward, done, info
 
+    def move_to_pos_xy(self, obs, goal_pos, gripper_closed, info_list=None, robot_id=0, speed=0.15, thresh=0.001):
+        """
+        Moves end effector to target position (x, y) coordinate in a straight line path.
+        Cannot be interrupted until target position is reached.
+        Controller type must be OSC_POSE or OSC_POSITION.
+
+        Args:
+            obs: current observation
+            goal_pos (2-tuple or array of floats): target position 
+            gripper_closed (bool): whether gripper should be closed during the motion
+
+        Returns:
+            obs, reward, done, info from environment's step function (or lists of these if self.return_all_states is True)
+        """
+
+        goal_pos = np.append(goal_pos, 0)
+        return self.move_to_pos(obs=obs, goal_pos=goal_pos, gripper_closed=gripper_closed, robot_id=robot_id, speed=speed, thresh=thresh)
+
+
     def pick(self, obs, goal_pos=None, obj_id=None, waypoint_height=None, robot_id=0, speed=0.15):
         """
         Moves end effector to above object to be grasped, moves down to grasp, moves up, then back to the home position.
@@ -144,8 +163,11 @@ class PrimitiveSkill():
             # get object center position
             obj_name = self.env.sim.model.body_id2name(obj_id)
             goal_pos = self.env.sim.data.get_body_xpos(obj_name)
+            grip_pos = self.env.sim.data.get_body_xpos(obj_name)
+
             # offset z
-            goal_pos[2] += self.env.sim.data.body_xpos(obj_id) - 0.025
+            goal_pos += np.array([0, 0, self.env.body_id2obj[obj_id].body_half_size[2] - 0.015])
+            print("goal position ", goal_pos)
 
         if waypoint_height is None:
             waypoint_height = self.home_pos[2]
@@ -198,7 +220,7 @@ class PrimitiveSkill():
             obj_name = self.env.sim.model.body_id2name(obj_id)
             goal_pos = self.env.sim.data.get_body_xpos(obj_name)
             # offset z
-            goal_pos[2] += self.env.sim.data.body_xpos(obj_id) + 0.025
+            goal_pos += np.array([0, 0, self.env.body_id2obj[obj_id].body_half_size[2] - 0.015])
 
         if waypoint_height is None:
             waypoint_height = self.home_pos[2]

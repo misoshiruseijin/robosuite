@@ -1000,30 +1000,81 @@ def main():
     #     env.step(action)
     #     env.render()
 
-    # while True: 
-    #     action = np.array([0, 0, 0, 0, 0, 0, -1])
-    #     env.step(action)
-    #     env.render()
+    while True:
+        obs = env.reset()
+        env.render()
+        while True: 
+            action = np.array([0, 0, 0, 0, 0, 0, -1])
+            env.step(action)
+            env.render()
     
 
 if __name__ == "__main__":
 
-
     env = suite.make(
-        env_name="DrawerEnv",
-        controller_configs=load_controller_config(default_controller="OSC_POSE"),
+        env_name="Reaching2D",
         robots="Panda",
+        controller_configs=load_controller_config(default_controller="OSC_POSE"),
+        gripper_types="default",
+        initialization_noise=None,
+        table_full_size=(0.65, 0.8, 0.15),
+        table_friction=(100, 100, 100),
+        use_camera_obs=False,
+        use_object_obs=True,
+        reward_scale=1.0,
+        reward_shaping=False,
         has_renderer=True,
         has_offscreen_renderer=False,
         render_camera="frontview",
-        use_camera_obs=False,
-        control_freq=20,
         ignore_done=True,
+        hard_reset=True,
+        camera_names="frontview",
+        target_half_size=(0.05, 0.05, 0.001), # target width, height, thickness
+        target_position=(0.0, 0.0), # target position (height above the table)
+        random_init=True,
+        random_target=False,
     )
-    prim = PrimitiveSkill(env)
-    obs = env.reset()
-    env.render()
-    prim.open_drawer(obs, env.obj_body_id["drawer"], pull_dist=0.1)
+
+
+
+    # env = suite.make(
+    #     env_name="Reaching2D",
+    #     robots="Panda",
+    #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
+    #     gripper_types="default",
+    #     initialization_noise=None,
+    #     table_full_size=(0.65, 0.8, 0.15),
+    #     table_friction=(100, 100, 100),
+    #     use_camera_obs=False,
+    #     use_object_obs=True,
+    #     reward_scale=1.0,
+    #     has_renderer=True,
+    #     has_offscreen_renderer=False,
+    #     render_camera="frontview",
+    #     ignore_done=True,
+    #     camera_names="frontview",
+    #     target_half_size=(0.05, 0.05, 0.001), # target width, height, thickness
+    #     target_position=(0.0, 0.0), # target position (height above the table)
+    #     random_init=True,
+    #     random_target=True,
+    # )
+    # spacemouse_control(env,)
+
+    # env = suite.make(
+    #     env_name="DrawerEnv",
+    #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
+    #     robots="Panda",
+    #     has_renderer=True,
+    #     has_offscreen_renderer=False,
+    #     render_camera="frontview",
+    #     use_camera_obs=False,
+    #     control_freq=20,
+    #     ignore_done=True,
+    # )
+    # prim = PrimitiveSkill(env)
+    # obs = env.reset()
+    # env.render()
+    # prim.open_drawer(obs, env.obj_body_id["drawer"], pull_dist=0.1)
 
     # env = suite.make(
     #     env_name="LeftRight",

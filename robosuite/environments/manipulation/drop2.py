@@ -200,7 +200,7 @@ class Drop2(SingleArmEnv):
         # workspace boundaries
         self.workspace_x = (-0.2 + self.table_offset[0], 0.2 + self.table_offset[0])
         self.workspace_y = (-0.3 + self.table_offset[1], 0.3 + self.table_offset[1])
-        self.workspace_z = (self.table_offset[2] + 0.03, self.table_offset[2] + 0.5)
+        self.workspace_z = (self.table_offset[2] + 0.01, self.table_offset[2] + 0.5)
 
         # initial eef position
         self.initial_eef_pos = None
@@ -218,11 +218,11 @@ class Drop2(SingleArmEnv):
         self.stage_half_size = np.array(stage_half_size)
         self.stage_pos = stage_pos + self.table_offset - np.array([0, 0, self.stage_half_size[2]])
 
-        # no entry zone around stage (avoid collision between eef and stage)
-        buf = (0.055, 0.11, 0.03)
-        self.ne_x = (self.stage_pos[0] - self.stage_half_size[0] - buf[0], self.stage_pos[0] + self.stage_half_size[0] + buf[1])
-        self.ne_y = (self.stage_pos[1] - self.stage_half_size[1] - buf[1], self.stage_pos[1] + self.stage_half_size[1] + buf[1])
-        self.ne_z = (self.table_offset[2], self.stage_pos[2] + self.stage_half_size[2] + buf[2])
+        # # no entry zone around stage (avoid collision between eef and stage)
+        # buf = (0.055, 0.11, 0.03)
+        # self.ne_x = (self.stage_pos[0] - self.stage_half_size[0] - buf[0], self.stage_pos[0] + self.stage_half_size[0] + buf[1])
+        # self.ne_y = (self.stage_pos[1] - self.stage_half_size[1] - buf[1], self.stage_pos[1] + self.stage_half_size[1] + buf[1])
+        # self.ne_z = (self.table_offset[2], self.stage_pos[2] + self.stage_half_size[2] + buf[2])
 
         # gripper state
         self.gripper_state = 1 # 1 = closed, -1 = open
@@ -230,6 +230,9 @@ class Drop2(SingleArmEnv):
         self.reset_ready = False
 
         self.stage_type = stage_type
+
+        # 
+        self.body_id2obj = {}
 
         super().__init__(
             robots=robots,
@@ -345,11 +348,10 @@ class Drop2(SingleArmEnv):
             #     np.array([self.table_offset[2] + self.stage_half_size[2]])
             # ))
 
-
         # create placement initializer
         if self.placement_initializer is not None:
             self.placement_initializer.reset()
-            self.placement_initializer.add_objects(self.block, self.stage)
+            self.placement_initializer.add_objects([self.block, self.stage])
         else:
             self.placement_initializer = UniformRandomSampler(
                 name="ObjectSampler",
@@ -381,6 +383,11 @@ class Drop2(SingleArmEnv):
         self.block_body_id = self.sim.model.body_name2id(self.block.root_body)
         self.stage_body_id = self.sim.model.body_name2id(self.stage.root_body)
 
+        self.body_id2obj = {
+            self.block_body_id : self.block,
+            self.stage_body_id : self.stage,
+        }
+
     def _setup_observables(self): ### TODO ###
         """
         Sets up observables to be used for this environment. Creates object-based observables if enabled
@@ -406,11 +413,11 @@ class Drop2(SingleArmEnv):
 
             @sensor(modality=modality)
             def block_pos(obs_cache):
-                return np.array(self.sim.data.body_xpos(self.block_body_id))
+                return np.array(self.sim.data.body_xpos[self.block_body_id])
 
             @sensor(modality=modality)
             def stage_pos(obs_cache):
-                return np.array(self.sim.data.body_xpos(self.stage_body_id))
+                return np.array(self.sim.data.body_xpos[self.stage_body_id])
 
             sensors = [eef_xyz_gripper, block_pos, stage_pos]
             names = [s.__name__ for s in sensors]
@@ -430,7 +437,6 @@ class Drop2(SingleArmEnv):
         Resets simulation internal configurations.
         """
         super()._reset_internal()
-
         # Reset all object positions using initializer sampler if we're not directly loading from an xml
         if not self.deterministic_reset:
 
@@ -463,8 +469,8 @@ class Drop2(SingleArmEnv):
         stage_pos = self.sim.data.body_xpos[self.stage_body_id] + np.array([0, 0, self.stage_half_size[2]])
         stage_size = self.stage_half_size
         above_stage = (stage_pos[0] - stage_size[0] < obj_pos[0] < stage_pos[0] + stage_size[0]
-                and stage_pos[1] - stage_size[1] < obj_pos[1] < stage_pos[1] + stage_size[1]
-                and obj_pos[2] > stage_pos[2])
+                and stage_pos[1] - stage_size[1] < obj_pos[1] < stage_pos[1] + stage_size[1])
+
         # if above_stage:
         #     print("Above Stage")
         return above_stage
@@ -538,15 +544,18 @@ class Drop2(SingleArmEnv):
         y_in_ws = self.workspace_y[0] < self._eef_xpos[1] + sf * action[1] / self.control_freq < self.workspace_y[1]
         z_in_ws = self.workspace_z[0] < self._eef_xpos[2] + sf * action[2] / self.control_freq < self.workspace_z[1]
         in_ws = x_in_ws and y_in_ws and z_in_ws
+        # print(f"in x, y, z : {x_in_ws}, {y_in_ws}, {z_in_ws}")
 
-        # in no-entry zone?
-        x_in_ne = self.ne_x[0] < self._eef_xpos[0] + sf * action[0] / self.control_freq < self.ne_x[1]
-        y_in_ne = self.ne_y[0] < self._eef_xpos[1] + sf * action[0] / self.control_freq < self.ne_y[1]
-        z_in_ne = self.ne_z[0] < self._eef_xpos[2] + sf * action[0] / self.control_freq < self.ne_z[1]
-        in_ne = x_in_ne and y_in_ne and z_in_ne
+        # # in no-entry zone?
+        # x_in_ne = self.ne_x[0] < self._eef_xpos[0] + sf * action[0] / self.control_freq < self.ne_x[1]
+        # y_in_ne = self.ne_y[0] < self._eef_xpos[1] + sf * action[0] / self.control_freq < self.ne_y[1]
+        # z_in_ne = self.ne_z[0] < self._eef_xpos[2] + sf * action[0] / self.control_freq < self.ne_z[1]
+        # in_ne = x_in_ne and y_in_ne and z_in_ne
+        # print(f"in NE x, y, z : {x_in_ne}, {y_in_ne}, {z_in_ne}")
 
         # print(f"in_ws {in_ws}, in_ne {in_ne}")
-        return in_ws and not in_ne
+        # return in_ws and not in_ne
+        return in_ws
 
     def step_no_count(self, action):
         """
@@ -592,10 +601,10 @@ class Drop2(SingleArmEnv):
         sf = 0.035
 
         # # no entry zone boundaries
-        buf = (0.055, 0.11, 0.03)
-        self.ne_x = (self.stage_pos[0] - self.stage_half_size[0] - buf[0], self.stage_pos[0] + self.stage_half_size[0] + buf[1])
-        self.ne_y = (self.stage_pos[1] - self.stage_half_size[1] - buf[1], self.stage_pos[1] + self.stage_half_size[1] + buf[1])
-        self.ne_z = (self.table_offset[2], self.stage_pos[2] + self.stage_half_size[2] + buf[2])
+        # buf = (0.055, 0.11, 0.03)
+        # self.ne_x = (self.stage_pos[0] - self.stage_half_size[0] - buf[0], self.stage_pos[0] + self.stage_half_size[0] + buf[1])
+        # self.ne_y = (self.stage_pos[1] - self.stage_half_size[1] - buf[1], self.stage_pos[1] + self.stage_half_size[1] + buf[1])
+        # self.ne_z = (self.table_offset[2], self.stage_pos[2] + self.stage_half_size[2] + buf[2])
 
         # ignore action?
         if not self._check_action_in_bounds(action):
@@ -629,42 +638,6 @@ class Drop2(SingleArmEnv):
     def reset(self):
 
         observations = super().reset()
-
-        while not self.reset_ready:
-            pass
-
-        if self.random_init:
-            # sample random position inside workspace
-            c = 1
-            self.initial_eef_pos = np.concatenate((
-                np.random.uniform(c*self.workspace_x[0], c*self.workspace_x[1], 1),
-                np.random.uniform(c*self.workspace_y[0], c*self.workspace_y[1], 1),
-                np.random.uniform(c*self.workspace_z[0], c*self.workspace_z[1], 1)
-            ))
-
-            # sample again if start position collides with stage or is too close 
-            thresh = (0.05, 0.05, 0.0) # how far the starting position must be from target bounds
-            buf = (0.055, 0.11, 0.03)
-            # while (self._check_in_region(self.stage_pos, self.stage_half_size + buf, self.initial_eef_pos)):
-            while (self._check_in_region(self.stage_pos, self.stage_half_size + buf, self.initial_eef_pos)):
-                self.initial_eef_pos = np.concatenate((
-                    np.random.uniform(self.workspace_x[0], self.workspace_x[1], 1),
-                    np.random.uniform(self.workspace_y[0], self.workspace_y[1], 1),
-                    np.random.uniform(self.workspace_z[0], self.workspace_z[1], 1),
-                ))
-                print("sampled pos: ", self.initial_eef_pos)
-
-            # move the eef to the sampled initial position
-            thresh = 0.01
-            while np.any(np.abs(self._eef_xpos - self.initial_eef_pos) > thresh):
-                action = 4 * (self.initial_eef_pos - self._eef_xpos) / np.linalg.norm(self.initial_eef_pos - self._eef_xpos)
-                action = np.concatenate((action, np.array([1])))
-                observations, reward, done, info = self.step_no_count(action)
-                # print("error to initial pos ", initial_pos - self._eef_xpos)
-        
-        self.reset_ready = False
-        print(f"EEF position {self.initial_eef_pos} sampled based on target {self.stage_pos}")
-        # print("End reset")
         return observations
         
     def _post_action(self, action):

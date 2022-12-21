@@ -16,7 +16,7 @@ import time
 
 class Reaching2D(SingleArmEnv):
     """
-    This class corresponds to the lifting task for a single robot arm.
+    This class corresponds to the 2D reaching task for a single robot arm.
 
     Args:
         robots (str or list of str): Specification for specific robot arm(s) to be instantiated within this env
@@ -52,8 +52,6 @@ class Reaching2D(SingleArmEnv):
             :Note: Specifying "default" will automatically use the default noise settings.
                 Specifying None will automatically create the required dict with "magnitude" set to 0.0.
 
-        prehensile (bool): If true, ball object starts on the table. Else, the object starts in robot's gripper
-
         table_full_size (3-tuple): x, y, and z dimensions of the table.
 
         table_friction (3-tuple): the three mujoco friction parameters for
@@ -66,12 +64,6 @@ class Reaching2D(SingleArmEnv):
 
         reward_scale (None or float): Scales the normalized reward function by the amount specified.
             If None, environment reward remains unnormalized
-
-        reward_shaping (bool): if True, use dense rewards.
-
-        placement_initializer (ObjectPositionSampler): if provided, will
-            be used to place objects on every reset, else a UniformRandomSampler
-            is used by default.
 
         has_renderer (bool): If true, render the simulation state in
             a viewer instead of headless mode.
@@ -133,9 +125,15 @@ class Reaching2D(SingleArmEnv):
             [multiple / a single] segmentation(s) to use for all cameras. A list of list of str specifies per-camera
             segmentation setting(s) to use.
 
-        target_half_size (2-tuple): half size of target area
+        target_half_size (2-tuple): (x,y) half size of target area
 
-        target_position (2-tuple): position of target area
+        target_position (2-tuple): (x,y) position of target area
+
+        random_init (bool): If True, initial end-effector position is set randomly (position is selected so that eef is
+            within workspace boundaries and at least 0.15m away from edge of the target). If False, end-effector position
+            starts at the default home position. 
+
+        random_target (bool): If True, value of target_position is ignored and target is placed randomly on the table.
 
         
     Raises:
@@ -149,13 +147,11 @@ class Reaching2D(SingleArmEnv):
         controller_configs=None,
         gripper_types="default",
         initialization_noise=None,
-        # table_full_size=(0.65, 0.65, 0.15),
         table_full_size=(0.65, 0.8, 0.15),
         table_friction=(100, 100, 100),
         use_camera_obs=True,
         use_object_obs=True,
         reward_scale=1.0,
-        reward_shaping=False,
         has_renderer=False,
         has_offscreen_renderer=True,
         render_camera="frontview",
@@ -176,7 +172,7 @@ class Reaching2D(SingleArmEnv):
         target_half_size=(0.05, 0.05, 0.001), # target width, height, thickness
         target_position=(0.0, 0.0), # target position (height above the table)
         random_init=True,
-        random_target=True,
+        random_target=False,
     ):
 
         print("INIT")
@@ -188,7 +184,6 @@ class Reaching2D(SingleArmEnv):
 
         # reward configuration
         self.reward_scale = reward_scale
-        self.reward_shaping = reward_shaping
 
         # whether to use ground-truth object states
         self.use_object_obs = use_object_obs
@@ -206,13 +201,10 @@ class Reaching2D(SingleArmEnv):
 
         # workspace boundaries
         self.workspace_x = (-0.2, 0.2)
-        # self.workspace_x = (-0.4, 0.4)
-        # self.workspace_y = (-0.3, 0.3)
         self.workspace_y = (-0.4, 0.4)
         self.workspace_z = (0.83, 1.3)
 
         self.reset_ready = False # hack to fix target initialized in wrong position issue
-        # self.loadmodel_ready = False
 
         super().__init__(
             robots=robots,
@@ -265,9 +257,9 @@ class Reaching2D(SingleArmEnv):
         if self._check_success():
             reward = 10
         
-        # # Scale reward if requested
-        # if self.reward_scale is not None:
-        #     reward *= self.reward_scale / 10
+        # Scale reward if requested
+        if self.reward_scale is not None:
+            reward *= self.reward_scale / 10
 
         return reward
 
@@ -339,18 +331,18 @@ class Reaching2D(SingleArmEnv):
                 modality = "object"
 
                 @sensor(modality=modality)
-                def robot0_delta_to_target(obs_cache):
+                def eef_xy(obs_cache):
                     return (
-                        obs_cache[f"{pf}eef_pos"][:2] - self.target_position
+                        obs_cache[f"{pf}eef_pos"][:2] 
                         if f"{pf}eef_pos" in obs_cache
-                        else np.zeros(3)
+                        else np.zeros(2)
                     )
 
                 @sensor(modality=modality)
                 def target_pos(obs_cache):
                     return self.target_position
 
-                sensors = [robot0_delta_to_target, target_pos]
+                sensors = [target_pos, eef_xy]
                 names = [s.__name__ for s in sensors]
 
                 # Create observables
@@ -454,18 +446,14 @@ class Reaching2D(SingleArmEnv):
 
     def step(self, action):
 
-        # sf = 3 # safety factor to prevent robot from moving out of bounds
-        # eef_x_in_bounds = self.workspace_x[0] < self._eef_xpos[0] + sf * action[0] / self.control_freq < self.workspace_x[1]
-        # eef_y_in_bounds = self.workspace_y[0] < self._eef_xpos[1] + sf * action[1] / self.control_freq < self.workspace_y[1]
         action_in_bounds = self._check_action_in_bounds(action)
 
         # ignore z axis and orientation inputs
-        action[2:6] = 0
+        action[2:] = 0
         # ignore gripper inputs
         action[-1] = -1
 
         # if end effector position is off the table, ignore the action
-        # if not (eef_x_in_bounds and eef_y_in_bounds):
         if not action_in_bounds:
             action[:-1] = 0
             print("Action out of bounds")
@@ -517,23 +505,24 @@ class Reaching2D(SingleArmEnv):
         if self.random_init:
             # sample random position inside workspace
             self.initial_eef_pos = np.concatenate((
-                np.random.uniform(self.workspace_x[0], self.workspace_x[1], 1),
-                np.random.uniform(self.workspace_y[0], self.workspace_y[1], 1),
+                0.9*np.random.uniform(self.workspace_x[0], self.workspace_x[1], 1),
+                0.9*np.random.uniform(self.workspace_y[0], self.workspace_y[1], 1),
             ))
 
             # sample again if start position is already inside or too close to the target
-            thresh = (0.1, 0.1) # how far the starting position must be from target bounds (radius, height)
-            while (self._check_in_region(self.target_position[:2], self.target_half_size[:2] + thresh, self.initial_eef_pos)):
+            thresh = np.array([0.15, 0.15]) # how far the starting position must be from target bounds 
+
+            while (self._check_in_region(self.target_position[:2],self.target_half_size[:2] + thresh, self.initial_eef_pos)):
                 self.initial_eef_pos = np.concatenate((
-                    np.random.uniform(self.workspace_x[0], self.workspace_x[1], 1),
-                    np.random.uniform(self.workspace_y[0], self.workspace_y[1], 1),
+                    0.9*np.random.uniform(self.workspace_x[0], self.workspace_x[1], 1),
+                    0.9*np.random.uniform(self.workspace_y[0], self.workspace_y[1], 1),
                 ))
 
             # move the eef to the sampled initial position
             thresh = 0.005
             while np.any(np.abs(self._eef_xpos[:2] - self.initial_eef_pos) > thresh):
                 action = 4 * (self.initial_eef_pos - self._eef_xpos[:2]) / np.linalg.norm(self.initial_eef_pos - self._eef_xpos[:2])
-                action = np.concatenate((action, np.array([0, -1])))
+                action = np.concatenate((action, np.array([0, 0, 0, 0, -1])))
                 observations, reward, done, info = self.step_no_count(action)
                 # print("error to initial pos ", initial_pos - self._eef_xpos)
         
@@ -562,7 +551,3 @@ class Reaching2D(SingleArmEnv):
         done = done or self._check_terminated()
 
         return reward, done, info
-
-    @property
-    def target_pos(self):
-        return self.target_position

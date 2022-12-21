@@ -32,7 +32,7 @@ def copy_model_file(hdf5_path):
         f["data"][key].attrs["model_file"] = model_file
 
 env = suite.make(
-    env_name="Lift2",
+    env_name="Drop2",
     controller_configs=load_controller_config(default_controller="OSC_POSE"),
     robots="Panda",
     has_renderer=True,
@@ -44,7 +44,7 @@ env = suite.make(
 )
 
 obs = env.reset()
-pick_cube_state_transitions(env, obs, goal_pos=(0.16,0.16,0.988))
+pick_block_transition(env, obs, {"goal_pos":(0.16,0.16,0.988)})
 
 
 # path1 = "/home/ayanoh/robosuite/robosuite/models/assets/demonstrations/franka_reaching_robosuite/reaching_100.hdf5"
