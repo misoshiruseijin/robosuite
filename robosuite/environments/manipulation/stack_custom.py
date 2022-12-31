@@ -1,22 +1,20 @@
-import numpy as np
+from collections import OrderedDict
 
-import robosuite.utils.transform_utils as T
+import numpy as np
 
 from robosuite.environments.manipulation.single_arm_env import SingleArmEnv
 from robosuite.models.arenas import TableArena
 from robosuite.models.objects import BoxObject
-
 from robosuite.models.tasks import ManipulationTask
+from robosuite.utils.mjcf_utils import CustomMaterial
 from robosuite.utils.observables import Observable, sensor
+from robosuite.utils.placement_samplers import UniformRandomSampler
 from robosuite.utils.transform_utils import convert_quat
 
-from robosuite.controllers import load_controller_config
-import pdb
-import time
 
-class Reaching2D(SingleArmEnv):
+class StackCustom(SingleArmEnv):
     """
-    This class corresponds to the 2D reaching task for a single robot arm.
+    This class corresponds to the stacking task for a single robot arm.
 
     Args:
         robots (str or list of str): Specification for specific robot arm(s) to be instantiated within this env
@@ -65,6 +63,12 @@ class Reaching2D(SingleArmEnv):
         reward_scale (None or float): Scales the normalized reward function by the amount specified.
             If None, environment reward remains unnormalized
 
+        reward_shaping (bool): if True, use dense rewards.
+
+        placement_initializer (ObjectPositionSampler): if provided, will
+            be used to place objects on every reset, else a UniformRandomSampler
+            is used by default.
+
         has_renderer (bool): If true, render the simulation state in
             a viewer instead of headless mode.
 
@@ -82,7 +86,7 @@ class Reaching2D(SingleArmEnv):
             Defaults to -1, in which case the device will be inferred from environment variables
             (GPUS or CUDA_VISIBLE_DEVICES).
 
-        control_freq (float): many control signals to receive in every second. This sets the amount of
+        control_freq (float): how many control signals to receive in every second. This sets the amount of
             simulation time that passes between every action input.
 
         horizon (int): Every episode lasts for exactly @horizon timesteps.
@@ -125,17 +129,6 @@ class Reaching2D(SingleArmEnv):
             [multiple / a single] segmentation(s) to use for all cameras. A list of list of str specifies per-camera
             segmentation setting(s) to use.
 
-        target_half_size (2-tuple): (x,y) half size of target area
-
-        target_position (2-tuple): (x,y) position of target area
-
-        random_init (bool): If True, initial end-effector position is set randomly (position is selected so that eef is
-            within workspace boundaries and at least 0.15m away from edge of the target). If False, end-effector position
-            starts at the default home position. 
-
-        random_target (bool): If True, value of target_position is ignored and target is placed randomly on the table.
-
-        
     Raises:
         AssertionError: [Invalid number of robots specified]
     """
@@ -146,12 +139,14 @@ class Reaching2D(SingleArmEnv):
         env_configuration="default",
         controller_configs=None,
         gripper_types="default",
-        initialization_noise=None,
-        table_full_size=(0.65, 0.8, 0.15),
-        table_friction=(100, 100, 100),
+        initialization_noise="default",
+        table_full_size=(0.8, 0.8, 0.05),
+        table_friction=(1.0, 5e-3, 1e-4),
         use_camera_obs=True,
         use_object_obs=True,
         reward_scale=1.0,
+        reward_shaping=False,
+        placement_initializer=None,
         has_renderer=False,
         has_offscreen_renderer=True,
         render_camera="frontview",
@@ -162,19 +157,14 @@ class Reaching2D(SingleArmEnv):
         horizon=1000,
         ignore_done=False,
         hard_reset=True,
-        camera_names="frontview",
+        camera_names="agentview",
         camera_heights=256,
         camera_widths=256,
         camera_depths=False,
         camera_segmentations=None,  # {None, instance, class, element}
         renderer="mujoco",
         renderer_config=None,
-        target_half_size=(0.05, 0.05, 0.001), # target width, height, thickness
-        target_position=(0.0, 0.0), # target position (height above the table)
-        random_init=True,
-        random_target=False,
     ):
-
         # settings for table top
         self.table_full_size = table_full_size
         self.table_friction = table_friction
@@ -182,27 +172,13 @@ class Reaching2D(SingleArmEnv):
 
         # reward configuration
         self.reward_scale = reward_scale
+        self.reward_shaping = reward_shaping
 
         # whether to use ground-truth object states
         self.use_object_obs = use_object_obs
 
-        # target
-        self.target_half_size = target_half_size
-        self.target_position = target_position + self.table_offset[:2]
-
-        # initial eef position
-        self.initial_eef_pos = None
-
-        # whether to use random eef position and target position
-        self.random_init = random_init
-        self.random_target = random_target
-
-        # workspace boundaries
-        self.workspace_x = (-0.2, 0.2)
-        self.workspace_y = (-0.4, 0.4)
-        self.workspace_z = (0.83, 1.3)
-
-        self.reset_ready = False # hack to fix target initialized in wrong position issue
+        # object placement initializer
+        self.placement_initializer = placement_initializer
 
         super().__init__(
             robots=robots,
@@ -231,17 +207,32 @@ class Reaching2D(SingleArmEnv):
             renderer_config=renderer_config,
         )
 
-
-    def reward(self, action=None): ### TODO ###
+    def reward(self, action):
         """
         Reward function for the task.
 
         Sparse un-normalized reward:
 
-            - a discrete reward of 2.25 is provided if the gripper ends up in the target region
+            - a discrete reward of 2.0 is provided if the red block is stacked on the green block
+
+        Un-normalized components if using reward shaping:
+
+            - Reaching: in [0, 0.25], to encourage the arm to reach the cube
+            - Grasping: in {0, 0.25}, non-zero if arm is grasping the cube
+            - Lifting: in {0, 1}, non-zero if arm has lifted the cube
+            - Aligning: in [0, 0.5], encourages aligning one cube over the other
+            - Stacking: in {0, 2}, non-zero if cube is stacked on other cube
+
+        The reward is max over the following:
+
+            - Reaching + Grasping
+            - Lifting + Aligning
+            - Stacking
+
+        The sparse reward only consists of the stacking component.
 
         Note that the final reward is normalized and scaled by
-        reward_scale / 2.25 as well so that the max score is equal to reward_scale
+        reward_scale / 2.0 as well so that the max score is equal to reward_scale
 
         Args:
             action (np array): [NOT USED]
@@ -249,23 +240,63 @@ class Reaching2D(SingleArmEnv):
         Returns:
             float: reward value
         """
-        reward = 0.0
+        r_reach, r_lift, r_stack = self.staged_rewards()
+        if self.reward_shaping:
+            reward = max(r_reach, r_lift, r_stack)
+        else:
+            reward = 2.0 if r_stack > 0 else 0.0
 
-        # sparse completion reward
-        if self._check_success():
-            reward = 10
-        
-        # Scale reward if requested
         if self.reward_scale is not None:
-            reward *= self.reward_scale / 10
+            reward *= self.reward_scale / 2.0
 
         return reward
+
+    def staged_rewards(self):
+        """
+        Helper function to calculate staged rewards based on current physical states.
+
+        Returns:
+            3-tuple:
+
+                - (float): reward for reaching and grasping
+                - (float): reward for lifting and aligning
+                - (float): reward for stacking
+        """
+        # reaching is successful when the gripper site is close to the center of the cube
+        cubeA_pos = self.sim.data.body_xpos[self.cubeA_body_id]
+        cubeB_pos = self.sim.data.body_xpos[self.cubeB_body_id]
+        gripper_site_pos = self.sim.data.site_xpos[self.robots[0].eef_site_id]
+        dist = np.linalg.norm(gripper_site_pos - cubeA_pos)
+        r_reach = (1 - np.tanh(10.0 * dist)) * 0.25
+
+        # grasping reward
+        grasping_cubeA = self._check_grasp(gripper=self.robots[0].gripper, object_geoms=self.cubeA)
+        if grasping_cubeA:
+            r_reach += 0.25
+
+        # lifting is successful when the cube is above the table top by a margin
+        cubeA_height = cubeA_pos[2]
+        table_height = self.table_offset[2]
+        cubeA_lifted = cubeA_height > table_height + 0.04
+        r_lift = 1.0 if cubeA_lifted else 0.0
+
+        # Aligning is successful when cubeA is right above cubeB
+        if cubeA_lifted:
+            horiz_dist = np.linalg.norm(np.array(cubeA_pos[:2]) - np.array(cubeB_pos[:2]))
+            r_lift += 0.5 * (1 - np.tanh(horiz_dist))
+
+        # stacking is successful when the block is lifted and the gripper is not holding the object
+        r_stack = 0
+        cubeA_touching_cubeB = self.check_contact(self.cubeA, self.cubeB)
+        if not grasping_cubeA and r_lift > 0 and cubeA_touching_cubeB:
+            r_stack = 2.0
+
+        return r_reach, r_lift, r_stack
 
     def _load_model(self):
         """
         Loads an xml model, puts it in self.model
         """
-
         super()._load_model()
 
         # Adjust base pose accordingly
@@ -282,24 +313,66 @@ class Reaching2D(SingleArmEnv):
         # Arena always gets set to zero origin
         mujoco_arena.set_origin([0, 0, 0])
 
-        # Initialize target object
-        if self.random_target: # sample target position if using random target initialization
-            self.target_position = np.concatenate((
-                np.random.uniform(self.workspace_x[0] + self.target_half_size[0], self.workspace_x[1] - self.target_half_size[0], 1), # x
-                np.random.uniform(self.workspace_y[0] + self.target_half_size[0], self.workspace_y[1] - self.target_half_size[1], 1), # y
-            ))
-        
-        self.target = BoxObject(
-            name="target",
-            size=self.target_half_size,
-            rgba=(1,0,0,1),
+        # initialize objects of interest
+        tex_attrib = {
+            "type": "cube",
+        }
+        mat_attrib = {
+            "texrepeat": "1 1",
+            "specular": "0.4",
+            "shininess": "0.1",
+        }
+        redwood = CustomMaterial(
+            texture="WoodRed",
+            tex_name="redwood",
+            mat_name="redwood_mat",
+            tex_attrib=tex_attrib,
+            mat_attrib=mat_attrib,
         )
+        greenwood = CustomMaterial(
+            texture="WoodGreen",
+            tex_name="greenwood",
+            mat_name="greenwood_mat",
+            tex_attrib=tex_attrib,
+            mat_attrib=mat_attrib,
+        )
+        self.cubeA = BoxObject(
+            name="cubeA",
+            size_min=[0.02, 0.02, 0.02],
+            size_max=[0.02, 0.02, 0.02],
+            rgba=[1, 0, 0, 1],
+            material=redwood,
+        )
+        self.cubeB = BoxObject(
+            name="cubeB",
+            size_min=[0.025, 0.025, 0.025],
+            size_max=[0.025, 0.025, 0.025],
+            rgba=[0, 1, 0, 1],
+            material=greenwood,
+        )
+        cubes = [self.cubeA, self.cubeB]
+        # Create placement initializer
+        if self.placement_initializer is not None:
+            self.placement_initializer.reset()
+            self.placement_initializer.add_objects(cubes)
+        else:
+            self.placement_initializer = UniformRandomSampler(
+                name="ObjectSampler",
+                mujoco_objects=cubes,
+                x_range=[-0.08, 0.08],
+                y_range=[-0.08, 0.08],
+                rotation=None,
+                ensure_object_boundary_in_range=False,
+                ensure_valid_placement=True,
+                reference_pos=self.table_offset,
+                z_offset=0.01,
+            )
 
         # task includes arena, robot, and objects of interest
         self.model = ManipulationTask(
             mujoco_arena=mujoco_arena,
             mujoco_robots=[robot.robot_model for robot in self.robots],
-            mujoco_objects=[self.target],
+            mujoco_objects=cubes,
         )
 
     def _setup_references(self):
@@ -311,63 +384,122 @@ class Reaching2D(SingleArmEnv):
         super()._setup_references()
 
         # Additional object references from this env
-        self.target_body_id = self.sim.model.body_name2id(self.target.root_body)
-
-    def _setup_observables(self):
-            """
-            Sets up observables to be used for this environment. Creates object-based observables if enabled
-
-            Returns:
-                OrderedDict: Dictionary mapping observable names to its corresponding Observable object
-            """
-            observables = super()._setup_observables()
-
-            # low-level object information
-            if self.use_object_obs:
-                # Get robot prefix and define observables modality
-                pf = self.robots[0].robot_model.naming_prefix
-                modality = "object"
-
-                @sensor(modality=modality)
-                def eef_xy(obs_cache):
-                    return (
-                        obs_cache[f"{pf}eef_pos"][:2] 
-                        if f"{pf}eef_pos" in obs_cache
-                        else np.zeros(2)
-                    )
-
-                @sensor(modality=modality)
-                def target_pos(obs_cache):
-                    return self.target_position
-
-                sensors = [target_pos, eef_xy]
-                names = [s.__name__ for s in sensors]
-
-                # Create observables
-                for name, s in zip(names, sensors):
-                    observables[name] = Observable(
-                        name=name,
-                        sensor=s,
-                        sampling_rate=self.control_freq,
-                    )
-    
-            return observables
+        self.cubeA_body_id = self.sim.model.body_name2id(self.cubeA.root_body)
+        self.cubeB_body_id = self.sim.model.body_name2id(self.cubeB.root_body)
 
     def _reset_internal(self):
-        # print("START reset internal")
         """
         Resets simulation internal configurations.
         """
         super()._reset_internal()
 
-        target_xpos = np.concatenate((self.target_position, np.array([self.table_offset[2]+self.target_half_size[2], 0, 0, 0, 1])))
-        # target_xpos[2] = self.table_offset[2] + self.target.base_half_size[1]
-        self.sim.data.set_joint_qpos(self.target.joints[0], target_xpos)
+        # Reset all object positions using initializer sampler if we're not directly loading from an xml
+        if not self.deterministic_reset:
 
-        self.reset_ready = True
+            # Sample from the placement initializer for all objects
+            object_placements = self.placement_initializer.sample()
 
-        print("TARGET PLACED AT: ", self.target_position)
-        # print("END reset internal")
+            # Loop through all objects and reset their positions
+            for obj_pos, obj_quat, obj in object_placements.values():
+                self.sim.data.set_joint_qpos(obj.joints[0], np.concatenate([np.array(obj_pos), np.array(obj_quat)]))
+
+    def _setup_observables(self):
+        """
+        Sets up observables to be used for this environment. Creates object-based observables if enabled
+
+        Returns:
+            OrderedDict: Dictionary mapping observable names to its corresponding Observable object
+        """
+        observables = super()._setup_observables()
+
+        # low-level object information
+        if self.use_object_obs:
+            # Get robot prefix and define observables modality
+            pf = self.robots[0].robot_model.naming_prefix
+            modality = "object"
+
+            # position and rotation of the first cube
+            @sensor(modality=modality)
+            def cubeA_pos(obs_cache):
+                return np.array(self.sim.data.body_xpos[self.cubeA_body_id])
+
+            @sensor(modality=modality)
+            def cubeA_quat(obs_cache):
+                return convert_quat(np.array(self.sim.data.body_xquat[self.cubeA_body_id]), to="xyzw")
+
+            @sensor(modality=modality)
+            def cubeB_pos(obs_cache):
+                return np.array(self.sim.data.body_xpos[self.cubeB_body_id])
+
+            @sensor(modality=modality)
+            def cubeB_quat(obs_cache):
+                return convert_quat(np.array(self.sim.data.body_xquat[self.cubeB_body_id]), to="xyzw")
+
+            @sensor(modality=modality)
+            def gripper_to_cubeA(obs_cache):
+                return (
+                    obs_cache["cubeA_pos"] - obs_cache[f"{pf}eef_pos"]
+                    if "cubeA_pos" in obs_cache and f"{pf}eef_pos" in obs_cache
+                    else np.zeros(3)
+                )
+
+            @sensor(modality=modality)
+            def gripper_to_cubeB(obs_cache):
+                return (
+                    obs_cache["cubeB_pos"] - obs_cache[f"{pf}eef_pos"]
+                    if "cubeB_pos" in obs_cache and f"{pf}eef_pos" in obs_cache
+                    else np.zeros(3)
+                )
+
+            @sensor(modality=modality)
+            def cubeA_to_cubeB(obs_cache):
+                return (
+                    obs_cache["cubeB_pos"] - obs_cache["cubeA_pos"]
+                    if "cubeA_pos" in obs_cache and "cubeB_pos" in obs_cache
+                    else np.zeros(3)
+                )
+
+            sensors = [cubeA_pos, cubeA_quat, cubeB_pos, cubeB_quat, gripper_to_cubeA, gripper_to_cubeB, cubeA_to_cubeB]
+            names = [s.__name__ for s in sensors]
+
+            # Create observables
+            for name, s in zip(names, sensors):
+                observables[name] = Observable(
+                    name=name,
+                    sensor=s,
+                    sampling_rate=self.control_freq,
+                )
+
+        return observables
+
+    def _check_success(self):
+        """
+        Check if blocks are stacked correctly.
+
+        Returns:
+            bool: True if blocks are correctly stacked
+        """
+        _, _, r_stack = self.staged_rewards()
+        return r_stack > 0
+   
+    def _check_terminated(self):
+        """
+        Check if the task has completed one way or another. The following conditions lead to termination:
+
+            - Task completion
+
+        Returns:
+            bool: True if episode is terminated
+        """
+
+        terminated = False
+
+        # Prematurely terminate if task is success
+        if self._check_success():
+            print("~~~~~~~~~~~~~~TASK SUCCESS~~~~~~~~~~~~~~")
+            terminated = True
+
+        return terminated
 
     def visualize(self, vis_settings):
         """
@@ -383,151 +515,7 @@ class Reaching2D(SingleArmEnv):
 
         # Color the gripper visualization site according to its distance to the cube
         if vis_settings["grippers"]:
-            self._visualize_gripper_to_target(gripper=self.robots[0].gripper, target=self.target)
-
-    def _check_success(self):
-        """
-        Check if ball has been placed into basket.
-
-        Returns:
-            bool: True if ball is in basket
-        """
-       
-        ##### Success = center point of end effector is within target cylinder #####
-        success = self._check_in_region(
-            region_center = self.target_position,
-            region_bounds = self.target_half_size,
-            coord = self._eef_xpos
-        )
-
-        return success
-
-    def _check_terminated(self):
-        """
-        Check if the task has completed one way or another. The following conditions lead to termination:
-
-            - Task completion
-
-        Returns:
-            bool: True if episode is terminated
-        """
-
-        terminated = False
-
-        # Prematurely terminate if task is success
-        if self._check_success():
-            print("~~~~~~~~in target~~~~~~~~~~~~~~")
-            terminated = True
-
-        return terminated
-    
-    def _check_in_region(self, region_center, region_bounds, coord):
-        """
-        Check if input coordinate is inside the target
-
-        Args
-            region_center (array): 3d coordiante of region center
-            region_bounds (array): defines bounds of region
-                box (half size)
-            coord (array): 2d coordinate to check
-        """
-        in_x = region_center[0] - region_bounds[0] < coord[0] < region_center[0] + region_bounds[0]
-        in_y = region_center[1] - region_bounds[1] < coord[1] < region_center[1] + region_bounds[1]
-        return in_x and in_y
-
-    def _check_action_in_bounds(self, action):
-
-        sf = 2 # safety factor to prevent robot from moving out of bounds
-        x_in_bounds = self.workspace_x[0] < self._eef_xpos[0] + sf * action[0] / self.control_freq < self.workspace_x[1]
-        y_in_bounds = self.workspace_y[0] < self._eef_xpos[1] + sf * action[1] / self.control_freq < self.workspace_y[1]
-        return x_in_bounds and y_in_bounds
-
-    def step(self, action):
-
-        action_in_bounds = self._check_action_in_bounds(action)
-
-        # ignore z axis and orientation inputs
-        action[2:] = 0
-        # ignore gripper inputs
-        action[-1] = -1
-
-        # if end effector position is off the table, ignore the action
-        if not action_in_bounds:
-            action[:-1] = 0
-            print("Action out of bounds")
-        
-        # print("eefpos ", self._eef_xpos)
-        # print("target ", self.target_position)
-
-        return super().step(action)
-
-    def step_no_count(self, action):
-        """
-        Modified version of step in base environment. Used for random initialization. 
-        Returns observations, but actions taken using this step function does not affect the number of steps, time, etc.
-        """
-
-        # Since the env.step frequency is slower than the mjsim timestep frequency, the internal controller will output
-        # multiple torque commands in between new high level action commands. Therefore, we need to denote via
-        # 'policy_step' whether the current step we're taking is simply an internal update of the controller,
-        # or an actual policy update
-        policy_step = True
-
-        # Loop through the simulation at the model timestep rate until we're ready to take the next policy step
-        # (as defined by the control frequency specified at the environment level)
-        for i in range(int(self.control_timestep / self.model_timestep)):
-            self.sim.forward()
-            self._pre_action(action, policy_step)
-            self.sim.step()
-            self._update_observables()
-            policy_step = False
-
-        reward = 0
-        done = False
-        info = {}
-
-        if self.viewer is not None and self.renderer != "mujoco":
-            self.viewer.update()
-
-        observations = self.viewer._get_observations() if self.viewer_get_obs else self._get_observations()
-        return observations, reward, done, info
-    
-    def reset(self):
-        print("Resetting....")
-        observations = super().reset()
-
-        # wait for reset_internal to run
-        while not self.reset_ready:
-            pass
-
-        if self.random_init:
-            # sample random position inside workspace
-            self.initial_eef_pos = np.concatenate((
-                0.9*np.random.uniform(self.workspace_x[0], self.workspace_x[1], 1),
-                0.9*np.random.uniform(self.workspace_y[0], self.workspace_y[1], 1),
-            ))
-
-            # sample again if start position is already inside or too close to the target
-            thresh = np.array([0.15, 0.15]) # how far the starting position must be from target bounds 
-
-            while (self._check_in_region(self.target_position[:2],self.target_half_size[:2] + thresh, self.initial_eef_pos)):
-                self.initial_eef_pos = np.concatenate((
-                    0.9*np.random.uniform(self.workspace_x[0], self.workspace_x[1], 1),
-                    0.9*np.random.uniform(self.workspace_y[0], self.workspace_y[1], 1),
-                ))
-
-            # move the eef to the sampled initial position
-            thresh = 0.005
-            while np.any(np.abs(self._eef_xpos[:2] - self.initial_eef_pos) > thresh):
-                action = 4 * (self.initial_eef_pos - self._eef_xpos[:2]) / np.linalg.norm(self.initial_eef_pos - self._eef_xpos[:2])
-                action = np.concatenate((action, np.array([0, 0, 0, 0, -1])))
-                observations, reward, done, info = self.step_no_count(action)
-                # print("error to initial pos ", initial_pos - self._eef_xpos)
-        
-        self.reset_ready = False
-        print(f"EEF position {self.initial_eef_pos} sampled based on target {self.target_position}")
-        # print("End reset")
-        return observations
+            self._visualize_gripper_to_target(gripper=self.robots[0].gripper, target=self.cubeA)
 
     def _post_action(self, action):
         """

@@ -14,9 +14,10 @@ from robosuite.controllers import load_controller_config
 import pdb
 import time
 
-class Reaching2D(SingleArmEnv):
+class POCReaching(SingleArmEnv):
     """
-    This class corresponds to the 2D reaching task for a single robot arm.
+    This class corresponds to the POC 2D reaching task for a single robot arm.
+    Task: move to targetA -> release gripper -> move to targetB
 
     Args:
         robots (str or list of str): Specification for specific robot arm(s) to be instantiated within this env
@@ -125,9 +126,9 @@ class Reaching2D(SingleArmEnv):
             [multiple / a single] segmentation(s) to use for all cameras. A list of list of str specifies per-camera
             segmentation setting(s) to use.
 
-        target_half_size (2-tuple): (x,y) half size of target area
+        target_half_size (2-tuple): (x,y) half size of target area 
 
-        target_position (2-tuple): (x,y) position of target area
+        target_positions (list of 2-tuple): 1 or 2 (x,y) position of target area
 
         random_init (bool): If True, initial end-effector position is set randomly (position is selected so that eef is
             within workspace boundaries and at least 0.15m away from edge of the target). If False, end-effector position
@@ -146,7 +147,7 @@ class Reaching2D(SingleArmEnv):
         env_configuration="default",
         controller_configs=None,
         gripper_types="default",
-        initialization_noise=None,
+        initialization_noise="default",
         table_full_size=(0.65, 0.8, 0.15),
         table_friction=(100, 100, 100),
         use_camera_obs=True,
@@ -170,10 +171,12 @@ class Reaching2D(SingleArmEnv):
         renderer="mujoco",
         renderer_config=None,
         target_half_size=(0.05, 0.05, 0.001), # target width, height, thickness
-        target_position=(0.0, 0.0), # target position (height above the table)
         random_init=True,
-        random_target=False,
+        # random_target=False,
     ):
+
+        targetA_position = np.array([0.1, 0.3])
+        targetB_position = np.array([0.1, -0.3]) # target position (height above the table)
 
         # settings for table top
         self.table_full_size = table_full_size
@@ -188,21 +191,37 @@ class Reaching2D(SingleArmEnv):
 
         # target
         self.target_half_size = target_half_size
-        self.target_position = target_position + self.table_offset[:2]
+        self.targetA_position = targetA_position + np.array(self.table_offset[:2])
+        self.targetB_position = targetB_position + np.array(self.table_offset[:2])
 
         # initial eef position
         self.initial_eef_pos = None
 
         # whether to use random eef position and target position
         self.random_init = random_init
-        self.random_target = random_target
+        # self.random_target = random_target
 
         # workspace boundaries
         self.workspace_x = (-0.2, 0.2)
         self.workspace_y = (-0.4, 0.4)
         self.workspace_z = (0.83, 1.3)
 
+        # random initialization area
+        self.random_init_x = 0.9 * np.array([self.workspace_x[0], 0])
+        self.random_init_y = 0.9 * np.array(self.workspace_y)
+
         self.reset_ready = False # hack to fix target initialized in wrong position issue
+
+        # flags for intermediate goals
+        self.reached_targetA = False # reached first target with gripper closed
+        self.released_at_A = False # opened gripper at first target
+        self.reached_targetB = False # reached second target with gripper open
+
+        # keep track of gripper release/close actions
+        self.gripper_state = 1 # 1 is closed, -1 is open
+        self.prev_gripper_state = 1
+        self.gripper_close_cnt = 0
+        self.gripper_open_cnt = 0
 
         super().__init__(
             robots=robots,
@@ -231,17 +250,16 @@ class Reaching2D(SingleArmEnv):
             renderer_config=renderer_config,
         )
 
-
     def reward(self, action=None): ### TODO ###
         """
         Reward function for the task.
 
         Sparse un-normalized reward:
 
-            - a discrete reward of 2.25 is provided if the gripper ends up in the target region
+            - a discrete reward of 10.0 is provided if entire task is complete
 
         Note that the final reward is normalized and scaled by
-        reward_scale / 2.25 as well so that the max score is equal to reward_scale
+        reward_scale / 10 as well so that the max score is equal to reward_scale
 
         Args:
             action (np array): [NOT USED]
@@ -250,11 +268,30 @@ class Reaching2D(SingleArmEnv):
             float: reward value
         """
         reward = 0.0
-
-        # sparse completion reward
-        if self._check_success():
-            reward = 10
         
+        # check if task is complete
+        if self._check_success():
+            reward = 10.0
+
+        # check intermediate goals
+        else:   
+            if not self.reached_targetA:
+                if (
+                    self._check_in_region(self.targetA_position, self.target_half_size, self._eef_xpos[:2])
+                    and self.gripper_state == 1 # TODO - change "gripper is closed" condition?
+                ): 
+                    # first goal (move to targetA with gripper closed) complete
+                    self.reached_targetA = True
+
+            elif self.reached_targetA and not self.released_at_A and self.gripper_state == -1: # TODO - change "gripper is released" condition?
+                # second goal (release gripper at targetA) complete
+                self.released_at_A = True
+
+            elif self.reached_targetA and self.released_at_A and not self.reached_targetB: # TODO - add gripper condition?
+                if self._check_in_region(self.targetB_position, self.target_half_size, self._eef_xpos):
+                    # final goal (move to targetB) complete
+                    self.reached_targetB = True
+
         # Scale reward if requested
         if self.reward_scale is not None:
             reward *= self.reward_scale / 10
@@ -281,25 +318,23 @@ class Reaching2D(SingleArmEnv):
 
         # Arena always gets set to zero origin
         mujoco_arena.set_origin([0, 0, 0])
-
-        # Initialize target object
-        if self.random_target: # sample target position if using random target initialization
-            self.target_position = np.concatenate((
-                np.random.uniform(self.workspace_x[0] + self.target_half_size[0], self.workspace_x[1] - self.target_half_size[0], 1), # x
-                np.random.uniform(self.workspace_y[0] + self.target_half_size[0], self.workspace_y[1] - self.target_half_size[1], 1), # y
-            ))
         
-        self.target = BoxObject(
-            name="target",
+        self.targetA = BoxObject(
+            name="targetA",
             size=self.target_half_size,
             rgba=(1,0,0,1),
+        )
+        self.targetB = BoxObject(
+            name="targetB",
+            size=self.target_half_size,
+            rgba=(0,0,1,1),
         )
 
         # task includes arena, robot, and objects of interest
         self.model = ManipulationTask(
             mujoco_arena=mujoco_arena,
             mujoco_robots=[robot.robot_model for robot in self.robots],
-            mujoco_objects=[self.target],
+            mujoco_objects=[self.targetA, self.targetB],
         )
 
     def _setup_references(self):
@@ -311,7 +346,8 @@ class Reaching2D(SingleArmEnv):
         super()._setup_references()
 
         # Additional object references from this env
-        self.target_body_id = self.sim.model.body_name2id(self.target.root_body)
+        self.targetA_body_id = self.sim.model.body_name2id(self.targetA.root_body)
+        self.targetB_body_id = self.sim.model.body_name2id(self.targetB.root_body)
 
     def _setup_observables(self):
             """
@@ -337,10 +373,14 @@ class Reaching2D(SingleArmEnv):
                     )
 
                 @sensor(modality=modality)
-                def target_pos(obs_cache):
-                    return self.target_position
+                def targetA_pos(obs_cache):
+                    return self.targetA_position
 
-                sensors = [target_pos, eef_xy]
+                @sensor(modality=modality)
+                def targetB_pos(obs_cache):
+                    return self.targetB_position
+
+                sensors = [targetA_pos, targetB_pos, eef_xy]
                 names = [s.__name__ for s in sensors]
 
                 # Create observables
@@ -360,13 +400,15 @@ class Reaching2D(SingleArmEnv):
         """
         super()._reset_internal()
 
-        target_xpos = np.concatenate((self.target_position, np.array([self.table_offset[2]+self.target_half_size[2], 0, 0, 0, 1])))
-        # target_xpos[2] = self.table_offset[2] + self.target.base_half_size[1]
-        self.sim.data.set_joint_qpos(self.target.joints[0], target_xpos)
+        targetA_xpos = np.concatenate((self.targetA_position, np.array([self.table_offset[2]+self.target_half_size[2], 0, 0, 0, 1])))
+        targetB_xpos = np.concatenate((self.targetB_position, np.array([self.table_offset[2]+self.target_half_size[2], 0, 0, 0, 1])))
+        print(targetA_xpos, targetB_xpos)
+        self.sim.data.set_joint_qpos(self.targetA.joints[0], targetA_xpos)
+        self.sim.data.set_joint_qpos(self.targetB.joints[0], targetB_xpos)
 
         self.reset_ready = True
 
-        print("TARGET PLACED AT: ", self.target_position)
+        # print("TARGET PLACED AT: ", self.target_position)
         # print("END reset internal")
 
     def visualize(self, vis_settings):
@@ -383,25 +425,32 @@ class Reaching2D(SingleArmEnv):
 
         # Color the gripper visualization site according to its distance to the cube
         if vis_settings["grippers"]:
-            self._visualize_gripper_to_target(gripper=self.robots[0].gripper, target=self.target)
+            self._visualize_gripper_to_target(gripper=self.robots[0].gripper, target=self.targetA)
 
-    def _check_success(self):
+    def _check_success(self): # TODO
         """
-        Check if ball has been placed into basket.
+        Check if task is complete: end effector moved to targetA -> released gripper at targetA -> moved to targetB
 
         Returns:
-            bool: True if ball is in basket
+            bool: True if entire task is complete
         """
-       
-        ##### Success = center point of end effector is within target cylinder #####
-        success = self._check_in_region(
-            region_center = self.target_position,
-            region_bounds = self.target_half_size,
-            coord = self._eef_xpos
-        )
 
-        return success
+        return self.reached_targetA and self.released_at_A and self.reached_targetB
 
+    def _detected_gripper_release(self):
+
+        """
+        Returns: True if gripper has been open for 10 or more consequtive steps
+        """
+        return self.gripper_open_cnt >= 10
+
+    def _detected_gripper_close(self):
+        """
+        Returns: True if gripper has been closed for 10 or more consequtive steps
+        """
+        return self.gripper_close_cnt >= 10
+
+    
     def _check_terminated(self):
         """
         Check if the task has completed one way or another. The following conditions lead to termination:
@@ -416,7 +465,7 @@ class Reaching2D(SingleArmEnv):
 
         # Prematurely terminate if task is success
         if self._check_success():
-            print("~~~~~~~~in target~~~~~~~~~~~~~~")
+            print("~~~~~~~~~~~~~~ TASK COMPLETE ~~~~~~~~~~~~~~")
             terminated = True
 
         return terminated
@@ -447,18 +496,23 @@ class Reaching2D(SingleArmEnv):
         action_in_bounds = self._check_action_in_bounds(action)
 
         # ignore z axis and orientation inputs
-        action[2:] = 0
-        # ignore gripper inputs
-        action[-1] = -1
+        action[2:-1] = 0
+
+        self.prev_gripper_state = self.gripper_state
+        self.gripper_state = action[-1]
+
+        if self.gripper_state == 1 and self.prev_gripper_state == 1:
+            self.gripper_close_cnt += 1
+            self.gripper_open_cnt = 0
+        elif self.gripper_state == -1 and self.prev_gripper_state == -1:
+            self.gripper_open_cnt += 1
+            self.gripper_close_cnt = 0
 
         # if end effector position is off the table, ignore the action
         if not action_in_bounds:
             action[:-1] = 0
             print("Action out of bounds")
         
-        # print("eefpos ", self._eef_xpos)
-        # print("target ", self.target_position)
-
         return super().step(action)
 
     def step_no_count(self, action):
@@ -500,32 +554,28 @@ class Reaching2D(SingleArmEnv):
         while not self.reset_ready:
             pass
 
+        # start with gripper closed
+        action = np.zeros(self.action_dim)
+        action[-1] = 1
+        for _ in range(5):
+            self.step_no_count(action)
+
+        # sample random eef initial position
         if self.random_init:
-            # sample random position inside workspace
-            self.initial_eef_pos = np.concatenate((
-                0.9*np.random.uniform(self.workspace_x[0], self.workspace_x[1], 1),
-                0.9*np.random.uniform(self.workspace_y[0], self.workspace_y[1], 1),
+            initial_eef_pos = np.concatenate((
+                np.random.uniform(self.random_init_x[0], self.random_init_x[1], 1),
+                np.random.uniform(self.random_init_y[0], self.random_init_y[1], 1)
             ))
-
-            # sample again if start position is already inside or too close to the target
-            thresh = np.array([0.15, 0.15]) # how far the starting position must be from target bounds 
-
-            while (self._check_in_region(self.target_position[:2],self.target_half_size[:2] + thresh, self.initial_eef_pos)):
-                self.initial_eef_pos = np.concatenate((
-                    0.9*np.random.uniform(self.workspace_x[0], self.workspace_x[1], 1),
-                    0.9*np.random.uniform(self.workspace_y[0], self.workspace_y[1], 1),
-                ))
-
-            # move the eef to the sampled initial position
+            # move eef to start position
             thresh = 0.005
-            while np.any(np.abs(self._eef_xpos[:2] - self.initial_eef_pos) > thresh):
-                action = 4 * (self.initial_eef_pos - self._eef_xpos[:2]) / np.linalg.norm(self.initial_eef_pos - self._eef_xpos[:2])
+            while np.any(np.abs(self._eef_xpos[:2] - initial_eef_pos) > thresh):
+                action = 4 * (initial_eef_pos - self._eef_xpos[:2]) / np.linalg.norm(initial_eef_pos - self._eef_xpos[:2])
                 action = np.concatenate((action, np.array([0, 0, 0, 0, -1])))
                 observations, reward, done, info = self.step_no_count(action)
                 # print("error to initial pos ", initial_pos - self._eef_xpos)
-        
+
         self.reset_ready = False
-        print(f"EEF position {self.initial_eef_pos} sampled based on target {self.target_position}")
+        # print(f"EEF position {self.initial_eef_pos} sampled based on target {self.target_position}")
         # print("End reset")
         return observations
 

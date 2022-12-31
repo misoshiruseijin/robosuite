@@ -25,21 +25,32 @@ class PrimitiveSkill():
             return_all_states (bool): if True, retun list of all obs, reward, done, info encountered during primitive action; if False, only return last state
         """
         self.env = env
-        self.controller_config = env.robot_configs[0]["controller_config"]
-        self.controller_type = self.controller_config["type"]
-        if self.controller_type == "OSC_POSE":
-            self.action_dim = 6
-        elif self.controller_type == "OSC_POSITION":
-            self.action_dim = 3
-        else:
-            raise Exception("Controller type must be OSC_POSE or OSC_POSITION")
-        
+
         if home_pos is None:
             self.home_pos = env._eef_xpos
         else:
             self.home_pos = home_pos
 
         self.return_all_states = return_all_states
+
+    def gripper_release(self):
+        """
+        Releases gripper
+
+        Args:
+            None
+        
+        Returns:
+            obs, reward, done, info from environment's step function
+        """
+        action = np.zeros(self.env.aciton_dim)
+        action[-1] = -1
+            
+        for _ in range(10):
+            obs, reward, done, info = self.env.step(action)
+        
+        return obs, reward, done, info
+
 
     def move_to_pos(self, obs, goal_pos, gripper_closed, info_list=None, robot_id=0, speed=0.15, thresh=0.001):
         """
@@ -81,13 +92,9 @@ class PrimitiveSkill():
             if np.abs(np.linalg.norm(error)) < slow_dist:
                 speed = slow_speed
 
-            action = speed * (error / np.linalg.norm(error)) # unit vector in direction of goal * speed
-            
-            # adjust output dimension
-            if self.action_dim == 6: 
-                action = np.concatenate([action, np.zeros(3)])
-
-            action = np.append(action, gripper_action)
+            action = np.zeros(self.env.action_dim)
+            action[:2] = speed * (error / np.linalg.norm(error)) # unit vector in direction of goal * speed            
+            action[-1] = gripper_action
 
             # take step in environment 
             obs, reward, done, info = self.env.step(action)
@@ -105,7 +112,9 @@ class PrimitiveSkill():
                 self.env.render()
         
         # make sure there is something to return
-        obs, reward, done, info = self.env.step(np.append(np.zeros(self.action_dim), gripper_action))
+        action = np.zeros(env.action_dim)
+        action[-1] = gripper_action
+        obs, reward, done, info = self.env.step(action)
         
         if self.return_all_states:
             obs_list.append(obs)
@@ -180,7 +189,8 @@ class PrimitiveSkill():
         obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=goal_pos, gripper_closed=False, robot_id=robot_id, speed=speed)
 
         # grip
-        action = np.append(np.zeros(self.action_dim), 1)
+        action = np.zeros(self.env.action_dim)
+        action[-1] = 1
         for _ in range(15):
             obs, reward, done, info = self.env.step(action)
             if self.env.has_renderer:
@@ -233,7 +243,8 @@ class PrimitiveSkill():
         obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=goal_pos, gripper_closed=True, robot_id=robot_id, speed=speed)
 
         # release object
-        action = np.append(np.zeros(self.action_dim), -1)
+        action = np.zeros(self.env.action_dim)
+        action[-1] = -1
         for _ in range(15):
             obs, reward, done, info = self.env.step(action)
             if self.env.has_renderer:
@@ -289,7 +300,8 @@ class PrimitiveSkill():
         obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=handle_pos, gripper_closed=False, robot_id=robot_id, speed=speed,)
 
         # grip
-        action = np.append(np.zeros(self.action_dim), 1)
+        action = np.zeros(self.env.action_dim)
+        action[-1] = 1
         for _ in range(15):
             obs, reward, done, info = self.env.step(action)
             if self.env.has_renderer:
@@ -299,14 +311,13 @@ class PrimitiveSkill():
         obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=pull_pos, gripper_closed=True, robot_id=robot_id, speed=speed, thresh=0.003)
 
         # stop
-        action = np.append(np.zeros(self.action_dim), 1)
         for _ in range(15):
             obs, reward, done, info = self.env.step(action)
             if self.env.has_renderer:
                 self.env.render()
 
         # release handle
-        action = np.append(np.zeros(self.action_dim), -1)
+        action[-1] = -1
         for _ in range(15):
             obs, reward, done, info = self.env.step(action)
             if self.env.has_renderer:
@@ -362,7 +373,8 @@ class PrimitiveSkill():
         obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=handle_pos, gripper_closed=False, robot_id=robot_id, speed=speed,)
 
         # grip
-        action = np.append(np.zeros(self.action_dim), 1)
+        action = np.zeros(self.env.action_dim)
+        action[-1] = 1
         for _ in range(15):
             obs, reward, done, info = self.env.step(action)
             if self.env.has_renderer:
@@ -372,14 +384,13 @@ class PrimitiveSkill():
         obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=pull_pos, gripper_closed=True, robot_id=robot_id, speed=speed, thresh=0.003)
 
         # stop
-        action = np.append(np.zeros(self.action_dim), 1)
         for _ in range(15):
             obs, reward, done, info = self.env.step(action)
             if self.env.has_renderer:
                 self.env.render()
 
         # release handle
-        action = np.append(np.zeros(self.action_dim), -1)
+        action[-1] = -1
         for _ in range(15):
             obs, reward, done, info = self.env.step(action)
             if self.env.has_renderer:

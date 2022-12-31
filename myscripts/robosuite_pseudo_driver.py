@@ -7,7 +7,9 @@ from robosuite.utils.input_utils import input2action
 from robosuite.wrappers import VisualizationWrapper
 from robosuite.utils.primitive_skills import PrimitiveSkill
 import pdb
-############### For BallBasket Environment #################
+
+
+############### OLD #################
 class BallBasketExperiment():
     def __init__(
         self,
@@ -918,7 +920,9 @@ class FrankaDrawer():
 
         obs = self.env.reset()
         # pdb.set_trace()
-    
+############### OLD #################
+
+
 def spacemouse_control(env, obs_to_print=["robot0_eef_pos"], indicator_on=True, gripper_closed=False):
     
     if indicator_on:
@@ -973,6 +977,9 @@ def spacemouse_control(env, obs_to_print=["robot0_eef_pos"], indicator_on=True, 
             for ob in obs_to_print:
                 print(f"{ob}: {obs[ob]}")
 
+            print("Reward ", reward)
+            # print("Done ", done)
+
             env.render()
 
 
@@ -992,7 +999,7 @@ def main():
     # Setup printing options for numbers
     np.set_printoptions(formatter={"float": lambda x: "{0:0.3f}".format(x)})
 
-    # spacemouse_control(env, gripper_closed=True, indicator_on=False)
+    spacemouse_control(env, gripper_closed=False, indicator_on=True)
     # env.render()
     # for _ in range(25):
     #     action = 0.05 * np.random.uniform(-1, 1, 6)
@@ -1005,36 +1012,77 @@ def main():
         env.render()
         while True: 
             action = np.array([0, 0, 0, 0, 0, 0, -1])
-            env.step(action)
+            obs, reward, done, info = env.step(action)
+            # print("eef pos ", obs["robot0_eef_pos"])
+            # print("CubeA pos ", obs["cubeA_pos"])
+            # print("CubeB pos ", obs["cubeB_pos"])
             env.render()
     
 
 if __name__ == "__main__":
 
     env = suite.make(
-        env_name="Reaching2D",
+        env_name="POCReaching",
         robots="Panda",
         controller_configs=load_controller_config(default_controller="OSC_POSE"),
-        gripper_types="default",
         initialization_noise=None,
         table_full_size=(0.65, 0.8, 0.15),
         table_friction=(100, 100, 100),
         use_camera_obs=False,
         use_object_obs=True,
-        reward_scale=1.0,
         has_renderer=True,
         has_offscreen_renderer=False,
         render_camera="frontview",
         ignore_done=True,
-        hard_reset=True,
         camera_names="frontview",
-        target_half_size=(0.05, 0.05, 0.001), # target width, height, thickness
-        target_position=(0.0, 0.0), # target position (height above the table)
         random_init=True,
-        random_target=False,
     )
 
+    # env = suite.make(
+    #     env_name="Cleanup",
+    #     robots="Panda",
+    #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
+    #     initialization_noise="default",
+    #     table_full_size=(0.8, 0.8, 0.05),
+    #     table_friction=(1., 5e-3, 1e-4),
+    #     table_offset=(0, 0, 0.8),
+    #     use_camera_obs=False,
+    #     use_object_obs=True,
+    #     reward_scale=1.0,
+    #     reward_shaping=False,
+    #     has_renderer=True,
+    #     has_offscreen_renderer=False,
+    #     render_camera="frontview",
+    #     ignore_done=True,
+    #     hard_reset=True,
+    #     camera_names="agentview",
+    #     task_config=None,
+    # )
 
+    # env = suite.make(
+    #     env_name="StackCustom",
+    #     robots="Panda",
+    #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
+    #     initialization_noise="default",
+    #     table_full_size=(0.8, 0.8, 0.05),
+    #     table_friction=(1.0, 5e-3, 1e-4),
+    #     use_camera_obs=False,
+    #     use_object_obs=True,
+    #     reward_scale=1.0,
+    #     placement_initializer=None,
+    #     has_renderer=True,
+    #     has_offscreen_renderer=False,
+    #     render_camera="frontview",
+    #     ignore_done=True,
+    #     hard_reset=True,
+    #     camera_names="agentview",
+    #     camera_heights=512,
+    #     camera_widths=512,
+    # )
+    # spacemouse_control(
+    #     env=env,
+    #     obs_to_print=["robot0_eef_pos", "cubeA_pos", "cubeB_pos"], 
+    # )
 
     # env = suite.make(
     #     env_name="Reaching2D",
@@ -1051,13 +1099,14 @@ if __name__ == "__main__":
     #     has_offscreen_renderer=False,
     #     render_camera="frontview",
     #     ignore_done=True,
+    #     hard_reset=True,
     #     camera_names="frontview",
     #     target_half_size=(0.05, 0.05, 0.001), # target width, height, thickness
     #     target_position=(0.0, 0.0), # target position (height above the table)
     #     random_init=True,
-    #     random_target=True,
+    #     random_target=False,
     # )
-    # spacemouse_control(env,)
+    # spacemouse_control(env)
 
     # env = suite.make(
     #     env_name="DrawerEnv",
