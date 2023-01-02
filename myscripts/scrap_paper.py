@@ -7,7 +7,24 @@ from robosuite import load_controller_config
 import pandas as pd
 import numpy as np
 
-from FSM_states_test import *
+# from FSM_states_test import *
+
+def func(angles):
+    """
+    normalize angle in rad to range [-pi, 2pi]
+    """
+    pi2 = 2 * np.pi
+    result = np.fmod( np.fmod(angles, pi2) + pi2, pi2)
+    print(result)
+    if result > np.pi:
+        print("[1]")
+        result = result - pi2
+        print("result", result)
+    if result < -np.pi:
+        print("[2]")
+        print("result", result)
+        result = result + pi2
+    return result
 
 def do_nothing(hdf5_path):
     f = h5py.File(hdf5_path)
@@ -31,20 +48,21 @@ def copy_model_file(hdf5_path):
     for key in f["data"].keys():
         f["data"][key].attrs["model_file"] = model_file
 
-env = suite.make(
-    env_name="Drop2",
-    controller_configs=load_controller_config(default_controller="OSC_POSE"),
-    robots="Panda",
-    has_renderer=True,
-    has_offscreen_renderer=False,
-    render_camera="frontview",
-    use_camera_obs=False,
-    control_freq=20,
-    ignore_done=True,
-)
+pdb.set_trace()
+# env = suite.make(
+#     env_name="Drop2",
+#     controller_configs=load_controller_config(default_controller="OSC_POSE"),
+#     robots="Panda",
+#     has_renderer=True,
+#     has_offscreen_renderer=False,
+#     render_camera="frontview",
+#     use_camera_obs=False,
+#     control_freq=20,
+#     ignore_done=True,
+# )
 
-obs = env.reset()
-pick_block_transition(env, obs, {"goal_pos":(0.16,0.16,0.988)})
+# obs = env.reset()
+# pick_block_transition(env, obs, {"goal_pos":(0.16,0.16,0.988)})
 
 
 # path1 = "/home/ayanoh/robosuite/robosuite/models/assets/demonstrations/franka_reaching_robosuite/reaching_100.hdf5"

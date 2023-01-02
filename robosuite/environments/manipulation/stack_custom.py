@@ -516,7 +516,17 @@ class StackCustom(SingleArmEnv):
         # Color the gripper visualization site according to its distance to the cube
         if vis_settings["grippers"]:
             self._visualize_gripper_to_target(gripper=self.robots[0].gripper, target=self.cubeA)
+    
+    def step(self, action):
 
+        # TODO - check action in bounds
+
+        # ignore orientation inputs except wrist angle
+        action[3:-2] = 0
+        
+        return super().step(action)
+
+        
     def _post_action(self, action):
         """
         In addition to super method, add additional info if requested

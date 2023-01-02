@@ -944,9 +944,8 @@ def spacemouse_control(env, obs_to_print=["robot0_eef_pos"], indicator_on=True, 
     device.start_control()
     while True:
         # Reset environment
-        obs = env.reset()
         env.modify_observable(observable_name="robot0_joint_pos", attribute="active", modifier=True)
-
+        obs = env.reset()
         # rendering setup
         env.render()
 
@@ -978,6 +977,7 @@ def spacemouse_control(env, obs_to_print=["robot0_eef_pos"], indicator_on=True, 
                 print(f"{ob}: {obs[ob]}")
 
             print("Reward ", reward)
+            print("action ", action)
             # print("Done ", done)
 
             env.render()
@@ -999,7 +999,7 @@ def main():
     # Setup printing options for numbers
     np.set_printoptions(formatter={"float": lambda x: "{0:0.3f}".format(x)})
 
-    spacemouse_control(env, gripper_closed=False, indicator_on=True)
+    spacemouse_control(env, obs_to_print=["robot0_joint_pos"], gripper_closed=False, indicator_on=True)
     # env.render()
     # for _ in range(25):
     #     action = 0.05 * np.random.uniform(-1, 1, 6)
@@ -1021,22 +1021,33 @@ def main():
 
 if __name__ == "__main__":
 
-    env = suite.make(
-        env_name="POCReaching",
-        robots="Panda",
-        controller_configs=load_controller_config(default_controller="OSC_POSE"),
-        initialization_noise=None,
-        table_full_size=(0.65, 0.8, 0.15),
-        table_friction=(100, 100, 100),
-        use_camera_obs=False,
-        use_object_obs=True,
-        has_renderer=True,
-        has_offscreen_renderer=False,
-        render_camera="frontview",
-        ignore_done=True,
-        camera_names="frontview",
-        random_init=True,
-    )
+    # env = suite.make(
+    #     env_name="POCReaching",
+    #     robots="Panda",
+    #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
+    #     initialization_noise=None,
+    #     table_full_size=(0.65, 0.8, 0.15),
+    #     table_friction=(100, 100, 100),
+    #     use_camera_obs=False,
+    #     use_object_obs=True,
+    #     has_renderer=True,
+    #     has_offscreen_renderer=False,
+    #     render_camera="frontview",
+    #     ignore_done=True,
+    #     camera_names="frontview",
+    #     random_init=False,
+    # )
+    # env.modify_observable(observable_name=f"robot0_joint_pos", attribute="active", modifier=True)
+
+    # obs = env.reset()
+
+    # p = PrimitiveSkill(env)
+    # obs, reward, done, info = p.move_to_pos(
+    #     obs=obs,
+    #     goal_pos=(0, 0, obs["robot0_eef_pos"][2]),
+    #     gripper_closed=True,
+    #     wrist_ori=0.0,
+    # )
 
     # env = suite.make(
     #     env_name="Cleanup",
@@ -1059,30 +1070,51 @@ if __name__ == "__main__":
     #     task_config=None,
     # )
 
-    # env = suite.make(
-    #     env_name="StackCustom",
-    #     robots="Panda",
-    #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
-    #     initialization_noise="default",
-    #     table_full_size=(0.8, 0.8, 0.05),
-    #     table_friction=(1.0, 5e-3, 1e-4),
-    #     use_camera_obs=False,
-    #     use_object_obs=True,
-    #     reward_scale=1.0,
-    #     placement_initializer=None,
-    #     has_renderer=True,
-    #     has_offscreen_renderer=False,
-    #     render_camera="frontview",
-    #     ignore_done=True,
-    #     hard_reset=True,
-    #     camera_names="agentview",
-    #     camera_heights=512,
-    #     camera_widths=512,
+    env = suite.make(
+        env_name="StackCustom",
+        robots="Panda",
+        controller_configs=load_controller_config(default_controller="OSC_POSE"),
+        initialization_noise="default",
+        table_full_size=(0.8, 0.8, 0.05),
+        table_friction=(1.0, 5e-3, 1e-4),
+        use_camera_obs=False,
+        use_object_obs=True,
+        reward_scale=1.0,
+        placement_initializer=None,
+        has_renderer=True,
+        has_offscreen_renderer=False,
+        render_camera="frontview",
+        ignore_done=True,
+        hard_reset=True,
+        camera_names="agentview",
+        camera_heights=512,
+        camera_widths=512,
+    )
+    env.modify_observable(observable_name=f"robot0_joint_pos", attribute="active", modifier=True)
+    obs = env.reset()
+    p = PrimitiveSkill(env)
+    # obs, rewad, done, info = p.move_to_pos(
+    #     obs=obs,
+    #     gripper_closed=False,
+    #     goal_pos=(0,0,0.9),
+    #     wrist_ori=0.3,
     # )
-    # spacemouse_control(
-    #     env=env,
-    #     obs_to_print=["robot0_eef_pos", "cubeA_pos", "cubeB_pos"], 
+    # obs, rewad, done, info = p.move_to_pos(
+    #     obs=obs,
+    #     gripper_closed=False,
+    #     goal_pos=(-0.05,0,1.0),
+    #     wrist_ori=0.0,
     # )
+    obs, rewad, done, info = p.pick(
+        obs=obs,
+        goal_pos=(0,0,0.9),
+        wrist_ori=0.3,
+    )
+    obs, rewad, done, info = p.place(
+        obs=obs,
+        goal_pos=(0,0,1.1),
+        wrist_ori=-0.3,
+    )
 
     # env = suite.make(
     #     env_name="Reaching2D",
