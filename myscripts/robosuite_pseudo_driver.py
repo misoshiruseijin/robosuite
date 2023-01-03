@@ -999,7 +999,7 @@ def main():
     # Setup printing options for numbers
     np.set_printoptions(formatter={"float": lambda x: "{0:0.3f}".format(x)})
 
-    spacemouse_control(env, obs_to_print=["robot0_joint_pos"], gripper_closed=False, indicator_on=True)
+    # spacemouse_control(env, obs_to_print=["robot0_joint_pos"], gripper_closed=False, indicator_on=True)
     # env.render()
     # for _ in range(25):
     #     action = 0.05 * np.random.uniform(-1, 1, 6)
@@ -1013,6 +1013,7 @@ def main():
         while True: 
             action = np.array([0, 0, 0, 0, 0, 0, -1])
             obs, reward, done, info = env.step(action)
+            pdb.set_trace()
             # print("eef pos ", obs["robot0_eef_pos"])
             # print("CubeA pos ", obs["cubeA_pos"])
             # print("CubeB pos ", obs["cubeB_pos"])
@@ -1095,7 +1096,7 @@ if __name__ == "__main__":
     p = PrimitiveSkill(env)
     obs, reward, done, info = p.push(
         obs=obs,
-        start_pos=obs["cubeA_pos"] + np.array([-0.05, -0.05, 0]),
+        start_pos=obs["cubeA_pos"],# + np.array([-0.05, -0.05, 0]),
         end_pos=obs["cubeA_pos"] + np.array([0.05, 0.05, 0]),
         wrist_ori=None,
     )

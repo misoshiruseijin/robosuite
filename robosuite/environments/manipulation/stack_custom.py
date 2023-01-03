@@ -180,6 +180,12 @@ class StackCustom(SingleArmEnv):
         # object placement initializer
         self.placement_initializer = placement_initializer
 
+        # workspace boundaries
+        self.workspace_x = (-0.2, 0.2)
+        self.workspace_y = (-0.4, 0.4)
+        self.workspace_z = (0.83, 1.3)
+
+
         super().__init__(
             robots=robots,
             env_configuration=env_configuration,
@@ -517,15 +523,24 @@ class StackCustom(SingleArmEnv):
         if vis_settings["grippers"]:
             self._visualize_gripper_to_target(gripper=self.robots[0].gripper, target=self.cubeA)
     
+    def _check_action_in_bounds(self, action):
+
+        sf = 2 # safety factor to prevent robot from moving out of bounds
+        x_in_bounds = self.workspace_x[0] < self._eef_xpos[0] + sf * action[0] / self.control_freq < self.workspace_x[1]
+        y_in_bounds = self.workspace_y[0] < self._eef_xpos[1] + sf * action[1] / self.control_freq < self.workspace_y[1]
+        return x_in_bounds and y_in_bounds
+    
     def step(self, action):
 
-        # TODO - check action in bounds
-
         # ignore orientation inputs except wrist angle
-        action[3:-2] = 0
+        action[3:-2] = 0        
         
+        # if end effector position is off the table, ignore the action
+        action_in_bounds = self._check_action_in_bounds(action)
+        if not action_in_bounds:
+            action[:-1] = 0
+            print("Action out of bounds")        
         return super().step(action)
-
         
     def _post_action(self, action):
         """

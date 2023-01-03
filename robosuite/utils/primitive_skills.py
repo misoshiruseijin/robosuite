@@ -35,7 +35,9 @@ class PrimitiveSkill():
         self.home_wrist_ori = self._wrap_to_pi(home_wrist_ori)
         self.return_all_states = return_all_states
 
-
+        self.move_to_external_call = False # controls whether step count is reset after move_to_pos call
+        self.steps = 0 # number of steps spent on one primitive skill
+        self.max_steps = 300 # number of steps each primitive can last
 
     def gripper_release(self):
         """
@@ -92,6 +94,11 @@ class PrimitiveSkill():
             self.env.render()
         
         while np.any(np.abs(error) > thresh):
+            print(self.steps)
+            # break if max steps is exceeded
+            if self.steps >= self.max_steps:
+                break
+
             print("eef pos ", eef_pos)
             print("goal pos ", goal_pos)
             # print("error ", error)
@@ -118,6 +125,8 @@ class PrimitiveSkill():
 
             if self.env.has_renderer:
                 self.env.render()
+
+            self.steps += 1
         
         # rotate wrist
         action = np.zeros(self.env.action_dim)
@@ -125,7 +134,12 @@ class PrimitiveSkill():
             goal_ori = self._wrap_to_pi(wrist_ori) # wrt home_wrist_ori
             cur_ori = self._wrap_to_pi(obs[f"robot{robot_id}_joint_pos"][-1]) - self.home_wrist_ori # wrt home_wrist_ori
             error = goal_ori - cur_ori
+
             while abs(error) >= wrist_thresh:
+                print(self.steps)
+                # break if max steps is exceeded
+                if self.steps >= self.max_steps:
+                    break    
                 cur_ori = self._wrap_to_pi(obs[f"robot{robot_id}_joint_pos"][-1]) - self.home_wrist_ori
                 error = goal_ori - cur_ori
                 action[-2] = -np.sign(error) * 0.2
@@ -134,11 +148,14 @@ class PrimitiveSkill():
                 obs, reward, done, info = self.env.step(action)
                 if self.env.has_renderer:
                     self.env.render()
+                
+                self.steps += 1
 
         # make sure there is something to return
         action = np.zeros(self.env.action_dim)
         action[-1] = gripper_action
         obs, reward, done, info = self.env.step(action)
+        self.steps += 1
         
         if self.return_all_states:
             obs_list.append(obs)
@@ -148,6 +165,9 @@ class PrimitiveSkill():
 
         if self.return_all_states:
             return obs_list, reward_list, done_list, info_list
+
+        if not self.move_to_external_call:
+            self.steps = 0
         
         return obs, reward, done, info
 
@@ -186,6 +206,7 @@ class PrimitiveSkill():
         Returns:
             obs, reward, done, info from environment's step function (or lists of these if self.return_all_states is True)
         """
+        self.move_to_external_call = True
 
         # make sure one of goal_pos or obj_id is provided
         assert not (goal_pos is None and obj_id is None), "Either goal_pos or obj_id must be given"
@@ -226,6 +247,8 @@ class PrimitiveSkill():
         # move to home position
         obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=self.home_pos, wrist_ori=0.0, gripper_closed=True, robot_id=robot_id, speed=speed)
 
+        self.move_to_external_call = False
+
         return obs, reward, done, info
     
     def place(self, obs, goal_pos=None, wrist_ori=None, obj_id=None, waypoint_height=None, robot_id=0, speed=0.15):
@@ -244,6 +267,8 @@ class PrimitiveSkill():
         Returns:
             obs, reward, done, info from environment's step function (or lists of these if self.return_all_states is True)
         """
+        self.move_to_external_call = True
+
         # make sure one of goal_pos or obj_id is provided
         assert not (goal_pos is None and obj_id is None), "Either goal_pos or obj_id must be given"
         assert not (goal_pos is not None and obj_id is not None), "Cannot provide both goal_pos and obj_id"
@@ -280,6 +305,8 @@ class PrimitiveSkill():
         # move to home position
         obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=self.home_pos, wrist_ori=0.0, gripper_closed=False, robot_id=robot_id, speed=speed)
 
+        self.move_to_external_call = False
+
         return obs, reward, done, info
     
     def push(self, obs, start_pos, end_pos, wrist_ori=None, waypoint_height=None, gripper_closed=True, robot_id=0, speed=0.15):
@@ -300,6 +327,7 @@ class PrimitiveSkill():
         Returns:
             obs, reward, done, info from environment's step function (or lists of these if self.return_all_states is True)
         """
+        self.move_to_external_call = True
 
         if waypoint_height is None:
             waypoint_height = self.home_pos[2]
@@ -321,6 +349,8 @@ class PrimitiveSkill():
         # move to home position
         obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=self.home_pos, wrist_ori=0.0, gripper_closed=False, robot_id=robot_id, speed=speed)
 
+        self.move_to_external_call = False
+
         return obs, reward, done, info
 
     def open_drawer(self, obs, drawer_obj_id, pull_dist, pull_direction=(1,-1), waypoint_height=None, robot_id=0, speed=0.15):
@@ -340,6 +370,7 @@ class PrimitiveSkill():
         Returns:
             obs, reward, done, info from environment's step function (or lists of these if self.return_all_states is True)
         """
+        self.move_to_external_call = True
         
         # make sure provided object is a drawer
         # NOTE: Environment must have dict named obj_body_id storing {obj_name : obj_id}. The drawer object must have "drawer" in it's name
@@ -394,6 +425,8 @@ class PrimitiveSkill():
         # return to home
         obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=self.home_pos, gripper_closed=False, robot_id=robot_id, speed=speed)
 
+        self.move_to_external_call = False
+
         return obs, reward, done, info
 
     def close_drawer(self, obs, drawer_obj_id, pull_dist, pull_direction=(1,1), waypoint_height=None, robot_id=0, speed=0.15):
@@ -413,6 +446,7 @@ class PrimitiveSkill():
         Returns:
             obs, reward, done, info from environment's step function (or lists of these if self.return_all_states is True)
         """
+        self.move_to_external_call = True
         
         # make sure provided object is a drawer
         # NOTE: Environment must have dict named obj_body_id storing {obj_name : obj_id}. The drawer object must have "drawer" in it's name
@@ -466,6 +500,8 @@ class PrimitiveSkill():
 
         # return to home
         obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=self.home_pos, gripper_closed=False, robot_id=robot_id, speed=speed)
+
+        self.move_to_external_call = False
 
         return obs, reward, done, info
 
