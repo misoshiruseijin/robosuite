@@ -282,6 +282,47 @@ class PrimitiveSkill():
 
         return obs, reward, done, info
     
+    def push(self, obs, start_pos, end_pos, wrist_ori=None, waypoint_height=None, gripper_closed=True, robot_id=0, speed=0.15):
+        """
+        Moves end effector to above push starting position, moves down to start position, moves to goal position, up, then back to the home position,
+        Positions are defined in world coordinates
+
+        Args:
+            obs: current observation
+            start_pos (3-tuple or array of floats): world coordinate location to start push
+            end_pos (3-tuple or array of floats): world coordinate location to end push
+            wrist_ori (float): wrist joint angle to keep while pushing
+            waypoint_height (float): height of waypoints. if none, uses home_pos height
+            gripper_closed (bool): if True, keeps gripper closed during pushing 
+            robot_id (int): id of robot to be controlled
+            speed (float): how fast the end effector will move (0,1]
+        
+        Returns:
+            obs, reward, done, info from environment's step function (or lists of these if self.return_all_states is True)
+        """
+
+        if waypoint_height is None:
+            waypoint_height = self.home_pos[2]
+        start_above_pos = (start_pos[0], start_pos[1], waypoint_height)
+        end_above_pos = (end_pos[0], end_pos[1], waypoint_height)
+
+        # move to above start position
+        obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=start_above_pos, wrist_ori=wrist_ori, gripper_closed=gripper_closed, robot_id=robot_id, speed=speed)
+
+        # move down to start position
+        obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=start_pos, wrist_ori=wrist_ori, gripper_closed=gripper_closed, robot_id=robot_id, speed=speed)
+
+        # push
+        obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=end_pos, wrist_ori=wrist_ori, gripper_closed=gripper_closed, robot_id=robot_id, speed=speed)
+
+        # move to above end position
+        obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=end_above_pos, wrist_ori=0.0, gripper_closed=gripper_closed, robot_id=robot_id, speed=speed)
+
+        # move to home position
+        obs, reward, done, info = self.move_to_pos(obs=obs, goal_pos=self.home_pos, wrist_ori=0.0, gripper_closed=False, robot_id=robot_id, speed=speed)
+
+        return obs, reward, done, info
+
     def open_drawer(self, obs, drawer_obj_id, pull_dist, pull_direction=(1,-1), waypoint_height=None, robot_id=0, speed=0.15):
         """
         Grips drawer handle and opens drawer by pull_dist (delta), then returns to home position. 

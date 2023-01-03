@@ -1093,6 +1093,12 @@ if __name__ == "__main__":
     env.modify_observable(observable_name=f"robot0_joint_pos", attribute="active", modifier=True)
     obs = env.reset()
     p = PrimitiveSkill(env)
+    obs, reward, done, info = p.push(
+        obs=obs,
+        start_pos=obs["cubeA_pos"] + np.array([-0.05, -0.05, 0]),
+        end_pos=obs["cubeA_pos"] + np.array([0.05, 0.05, 0]),
+        wrist_ori=None,
+    )
     # obs, rewad, done, info = p.move_to_pos(
     #     obs=obs,
     #     gripper_closed=False,
@@ -1105,16 +1111,17 @@ if __name__ == "__main__":
     #     goal_pos=(-0.05,0,1.0),
     #     wrist_ori=0.0,
     # )
-    obs, rewad, done, info = p.pick(
-        obs=obs,
-        goal_pos=(0,0,0.9),
-        wrist_ori=0.3,
-    )
-    obs, rewad, done, info = p.place(
-        obs=obs,
-        goal_pos=(0,0,1.1),
-        wrist_ori=-0.3,
-    )
+    # obs, rewad, done, info = p.pick(
+    #     obs=obs,
+    #     goal_pos=(0,0,0.9),
+    #     wrist_ori=0.3,
+    # )
+    # obs, rewad, done, info = p.place(
+    #     obs=obs,
+    #     goal_pos=(0,0,1.1),
+    #     wrist_ori=-0.3,
+    # )
+
 
     # env = suite.make(
     #     env_name="Reaching2D",
