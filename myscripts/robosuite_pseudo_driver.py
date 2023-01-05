@@ -999,7 +999,6 @@ def main():
     # Setup printing options for numbers
     np.set_printoptions(formatter={"float": lambda x: "{0:0.3f}".format(x)})
 
-    # spacemouse_control(env, obs_to_print=["robot0_joint_pos"], gripper_closed=False, indicator_on=True)
     # env.render()
     # for _ in range(25):
     #     action = 0.05 * np.random.uniform(-1, 1, 6)
@@ -1039,88 +1038,90 @@ if __name__ == "__main__":
     #     random_init=False,
     # )
     # env.modify_observable(observable_name=f"robot0_joint_pos", attribute="active", modifier=True)
-
     # obs = env.reset()
 
     # p = PrimitiveSkill(env)
-    # obs, reward, done, info = p.move_to_pos(
+    # obs, reward, done, info = p.move_to_pos_xy(
     #     obs=obs,
-    #     goal_pos=(0, 0, obs["robot0_eef_pos"][2]),
+    #     goal_pos=(0, 0.2),
     #     gripper_closed=True,
-    #     wrist_ori=0.0,
-    # )
-
-    # env = suite.make(
-    #     env_name="Cleanup",
-    #     robots="Panda",
-    #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
-    #     initialization_noise="default",
-    #     table_full_size=(0.8, 0.8, 0.05),
-    #     table_friction=(1., 5e-3, 1e-4),
-    #     table_offset=(0, 0, 0.8),
-    #     use_camera_obs=False,
-    #     use_object_obs=True,
-    #     reward_scale=1.0,
-    #     reward_shaping=False,
-    #     has_renderer=True,
-    #     has_offscreen_renderer=False,
-    #     render_camera="frontview",
-    #     ignore_done=True,
-    #     hard_reset=True,
-    #     camera_names="agentview",
-    #     task_config=None,
+    #     wrist_ori=0.2,
+    #     thresh=0.001
     # )
 
     env = suite.make(
-        env_name="StackCustom",
+        env_name="Cleanup",
         robots="Panda",
         controller_configs=load_controller_config(default_controller="OSC_POSE"),
         initialization_noise="default",
         table_full_size=(0.8, 0.8, 0.05),
-        table_friction=(1.0, 5e-3, 1e-4),
+        table_friction=(1., 5e-3, 1e-4),
+        table_offset=(0, 0, 0.8),
         use_camera_obs=False,
         use_object_obs=True,
         reward_scale=1.0,
-        placement_initializer=None,
+        reward_shaping=False,
         has_renderer=True,
         has_offscreen_renderer=False,
         render_camera="frontview",
         ignore_done=True,
         hard_reset=True,
         camera_names="agentview",
-        camera_heights=512,
-        camera_widths=512,
+        task_config=None,
     )
-    env.modify_observable(observable_name=f"robot0_joint_pos", attribute="active", modifier=True)
-    obs = env.reset()
-    p = PrimitiveSkill(env)
-    obs, reward, done, info = p.push(
-        obs=obs,
-        start_pos=obs["cubeA_pos"],# + np.array([-0.05, -0.05, 0]),
-        end_pos=obs["cubeA_pos"] + np.array([0.05, 0.05, 0]),
-        wrist_ori=None,
-    )
-    # obs, rewad, done, info = p.move_to_pos(
-    #     obs=obs,
-    #     gripper_closed=False,
-    #     goal_pos=(0,0,0.9),
-    #     wrist_ori=0.3,
+    env.render()
+    pdb.set_trace()
+    spacemouse_control(env, obs_to_print=["robot0_eef_pos", "pnp_obj_pos", "pnp_obj_quat", "push_obj_pos", "push_obj_quat"], gripper_closed=False, indicator_on=True)
+
+
+    # env = suite.make(
+    #     env_name="StackCustom",
+    #     robots="Panda",
+    #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
+    #     initialization_noise="default",
+    #     table_full_size=(0.8, 0.8, 0.05),
+    #     table_friction=(1.0, 5e-3, 1e-4),
+    #     use_camera_obs=False,
+    #     use_object_obs=True,
+    #     reward_scale=1.0,
+    #     placement_initializer=None,
+    #     has_renderer=True,
+    #     has_offscreen_renderer=False,
+    #     render_camera="frontview",
+    #     ignore_done=True,
+    #     hard_reset=True,
+    #     camera_names="agentview",
+    #     camera_heights=512,
+    #     camera_widths=512,
     # )
-    # obs, rewad, done, info = p.move_to_pos(
+    # env.modify_observable(observable_name=f"robot0_joint_pos", attribute="active", modifier=True)
+    # obs = env.reset()
+    # env.render()
+    # pdb.set_trace()
+    # p = PrimitiveSkill(env)
+    # obs, reward, done, info = p.move_to_pos(
     #     obs=obs,
-    #     gripper_closed=False,
-    #     goal_pos=(-0.05,0,1.0),
-    #     wrist_ori=0.0,
+    #     goal_pos=(0, 0, obs["robot0_eef_pos"][2]+0.1),
+    #     gripper_closed=True,
+    #     wrist_ori=0,
+    #     # thresh=0.005
+    # )
+    # obs, reward, done, info = p.gripper_release()
+    # obs, reward, done, info = p.push(
+    #     obs=obs,
+    #     start_pos=obs["cubeA_pos"],# + np.array([-0.05, -0.05, 0]),
+    #     end_pos=obs["cubeA_pos"] + np.array([0.05, 0.05, 0]),
+    #     wrist_ori=None,
     # )
     # obs, rewad, done, info = p.pick(
     #     obs=obs,
-    #     goal_pos=(0,0,0.9),
-    #     wrist_ori=0.3,
+    #     goal_pos=obs["cubeA_pos"],
+    #     wrist_ori=0.5*np.pi,
     # )
     # obs, rewad, done, info = p.place(
     #     obs=obs,
-    #     goal_pos=(0,0,1.1),
-    #     wrist_ori=-0.3,
+    #     goal_pos=(0,0,0.9),
+    #     wrist_ori=-0.5*np.pi,
     # )
 
 
@@ -1162,7 +1163,11 @@ if __name__ == "__main__":
     # prim = PrimitiveSkill(env)
     # obs = env.reset()
     # env.render()
+    # pdb.set_trace()
     # prim.open_drawer(obs, env.obj_body_id["drawer"], pull_dist=0.1)
+    # pdb.set_trace()
+    # prim.close_drawer(obs, env.obj_body_id["drawer"], pull_dist=0.05)
+    # pdb.set_trace()
 
     # env = suite.make(
     #     env_name="LeftRight",

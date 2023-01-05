@@ -11,10 +11,6 @@ from robosuite.models.objects import BoxObject
 from robosuite.models.tasks import ManipulationTask
 from robosuite.utils.placement_samplers import UniformRandomSampler
 from robosuite.utils import RandomizationError
-from robosuite.utils.observables import Observable, sensor
-
-
-import pdb
 
 DEFAULT_CLEANUP_CONFIG = {
     'use_pnp_rew': True,
@@ -166,7 +162,7 @@ class Cleanup(SingleArmEnv):
         camera_widths=256,
         camera_depths=False,
         task_config=None,
-        # skill_config=None,
+        skill_config=None,
     ):
         # settings for table top
         self.table_full_size = table_full_size
@@ -188,13 +184,6 @@ class Cleanup(SingleArmEnv):
         if task_config is not None:
             assert all([k in self.task_config for k in task_config])
             self.task_config.update(task_config)
-
-        self.gripper_state = -1 # -1 is open, 1 is closed
-
-        # workspace limits
-        self.workspace_x = (self.table_offset[0] - self.table_full_size[0]/2, self.table_offset[0] + self.table_full_size[0]/2)
-        self.workspace_y = (self.table_offset[1] - self.table_full_size[1]/2, self.table_offset[1] + self.table_full_size[1]/2)
-        self.workspace_z = (self.table_offset[2] + 0.03, self.table_offset[0] + 0.53)
 
         super().__init__(
             robots=robots,
@@ -218,20 +207,11 @@ class Cleanup(SingleArmEnv):
             camera_heights=camera_heights,
             camera_widths=camera_widths,
             camera_depths=camera_depths,
-            # skill_config=skill_config,
+            skill_config=skill_config,
         )
 
     def reward(self, action):
-        
-        # full completion reward only
-        reward = 0        
-
-        if self._check_success():
-            reward = 10
-
-        if self.reward_scale is not None:
-            reward = self.reward_scale * reward / 10
-
+        _, _, reward = self.reward_infos()
         return reward
 
     def reward_infos(self):
@@ -350,17 +330,106 @@ class Cleanup(SingleArmEnv):
             res = True
         return res
 
-    def in_push_target(self, obj_pos):
-        bin_pos = np.array(self.sim.data.body_xpos[self.bin_body_id])
-        res = False
-        if (
-            obj_pos[0] < bin_pos[0] + 0.10
-            and obj_pos[0] > self.table_offset[0] - self.table_full_size[0]
-            and not self.in_bin(obj_pos)
-        ):
-            res = True
-        return res
-        
+    def _get_env_info(self, action):
+        info = super()._get_env_info(action)
+
+        rews = dict(
+            r_reach=[],
+            r_grasp=[],
+            r_lift=[],
+            r_hover=[],
+            r_bin=[],
+
+            r_reach_push=[],
+            r_push=[],
+            d_push=[],
+        )
+        for i in range(self.task_config['num_pnp_objs']):
+            r, g, l, h, b = self.pnp_staged_rewards(obj_id=i)
+            rews['r_reach'].append(r / 0.1)
+            rews['r_grasp'].append(g / 0.35)
+            rews['r_lift'].append(l / 0.5)
+            rews['r_hover'].append(h / 0.7)
+            rews['r_bin'].append(b / 1.0)
+
+        for i in range(self.task_config['num_push_objs']):
+            r, p, d = self.push_staged_rewards(obj_id=i)
+            rews['r_reach_push'].append(r / 0.25)
+            rews['r_push'].append(p)
+            rews['d_push'].append(d)
+
+        for k in rews:
+            info[k] = np.sum(rews[k])
+            if k.startswith('d'):
+                info[k + '_min'] = np.min(rews[k])
+            else:
+                info[k + '_max'] = np.max(rews[k])
+
+        rew_pnp, rew_push, reward = self.reward_infos()
+        info['rew_pnp'] = rew_pnp
+        info['rew_push'] = rew_push
+        info['rew'] = reward
+
+        info['success_pnp'] = self._check_success_pnp()
+        info['success_push'] = self._check_success_push()
+        info['success'] = self._check_success()
+
+        return info
+
+    def _get_skill_info(self):
+        pos_info = dict(
+            grasp=[],
+            push=[],
+            reach=[],
+        )
+
+        bin_pos = self.sim.data.body_xpos[self.bin_body_id].copy()
+        obj_positions = self.obj_positions
+        num_pnp_objs = self.task_config['num_pnp_objs']
+
+        pnp_objs = obj_positions[:num_pnp_objs]
+        push_objs = obj_positions[num_pnp_objs:]
+
+        drop_pos = bin_pos + [0, 0, 0.15]
+
+        pos_info['grasp'] += pnp_objs
+        pos_info['push'] += push_objs
+        pos_info['reach'].append(drop_pos)
+
+        info = {}
+        for k in pos_info:
+            info[k + '_pos'] = pos_info[k]
+
+        return info
+    
+    @property
+    def obj_positions(self):
+        pnp_obj_positions = [
+            self.sim.data.body_xpos[self.pnp_obj_body_ids[i]].copy()
+            for i in range(self.task_config['num_pnp_objs'])
+        ]
+        push_obj_positions = [
+            self.sim.data.body_xpos[self.push_obj_body_ids[i]].copy()
+            for i in range(self.task_config['num_push_objs'])
+        ]
+        return pnp_obj_positions + push_obj_positions
+
+    @property
+    def obj_quats(self):
+        pnp_obj_quats = [
+            convert_quat(
+                np.array(self.sim.data.body_xquat[self.pnp_obj_body_ids[i]]), to="xyzw"
+            )
+            for i in range(self.task_config['num_pnp_objs'])
+        ]
+        push_obj_quats = [
+            convert_quat(
+                np.array(self.sim.data.body_xquat[self.push_obj_body_ids[i]]), to="xyzw"
+            )
+            for i in range(self.task_config['num_push_objs'])
+        ]
+        return pnp_obj_quats + push_obj_quats
+
     def _load_model(self):
         """
         Loads an xml model, puts it in self.model
@@ -406,25 +475,41 @@ class Cleanup(SingleArmEnv):
             mat_attrib=mat_attrib,
         )
 
-        # initialize objects
-        pnp_size = np.array([0.04, 0.022, 0.033]) * 0.75
-        self.pnp_obj = BoxObject(
-            name="obj_pnp",
-            size=pnp_size,
-            rgba=[1,0,0,1],
-            material=pnpmaterial,
-        )
+        self.pnp_objs = []
+        num_pnp_objs = self.task_config['num_pnp_objs']
+        for i in range(num_pnp_objs):
+            if num_pnp_objs > 1:
+                color = 0.25 + 0.75 * i / (num_pnp_objs - 1)
+            else:
+                color = 1.0
+            pnp_size = np.array([0.04, 0.022, 0.033]) * 0.75
+            obj = BoxObject(
+                name="obj_pnp_{}".format(i),
+                size_min=pnp_size,
+                size_max=pnp_size,
+                rgba=[color, 0, 0, 1],
+                material=pnpmaterial,
+            )
+            self.pnp_objs.append(obj)
 
-        push_size = np.array([0.0350, 0.0425, 0.0125]) * 1.20
-        self.push_obj = BoxObject(
-            name="obj_push",
-            size=push_size,
-            rgba=[0,1,0,1],
-            material=pushmaterial
-        )
+        self.push_objs = []
+        num_push_objs = self.task_config['num_push_objs']
+        for i in range(num_push_objs):
+            if num_push_objs > 1:
+                color = 0.25 + 0.75 * i / (num_push_objs - 1)
+            else:
+                color = 1.0
+            push_size = np.array([0.0350, 0.0425, 0.0125]) * 1.20
+            obj = BoxObject(
+                name="obj_push_{}".format(i),
+                size_min=push_size,
+                size_max=push_size,
+                rgba=[0, color, 0, 1],
+                material=pushmaterial,
+            )
+            self.push_objs.append(obj)
 
-        objs = [self.pnp_obj, self.push_obj]
-        
+        objs = self.pnp_objs + self.push_objs
         # Create placement initializer
         if self.placement_initializer is not None:
             self.placement_initializer.reset()
@@ -449,19 +534,29 @@ class Cleanup(SingleArmEnv):
             mujoco_objects=objs,
         )
 
-    def _setup_references(self):
+
+    def _get_reference(self):
         """
         Sets up references to important components. A reference is typically an
         index or a list of indices that point to the corresponding elements
         in a flatten array, which is how MuJoCo stores physical simulation data.
         """
-        super()._setup_references()
+        super()._get_reference()
 
         # Additional object references from this env
         self.table_body_id = self.sim.model.body_name2id("table")
 
-        self.pnp_obj_body_id = self.sim.model.body_name2id(self.pnp_obj.root_body)
-        self.push_obj_body_id = self.sim.model.body_name2id(self.push_obj.root_body)
+        self.pnp_obj_body_ids = []
+        for i in range(self.task_config['num_pnp_objs']):
+            obj = self.pnp_objs[i]
+            id = self.sim.model.body_name2id(obj.root_body)
+            self.pnp_obj_body_ids.append(id)
+
+        self.push_obj_body_ids = []
+        for i in range(self.task_config['num_push_objs']):
+            obj = self.push_objs[i]
+            id = self.sim.model.body_name2id(obj.root_body)
+            self.push_obj_body_ids.append(id)
 
         self.bin_body_id = self.sim.model.body_name2id("bin")
 
@@ -489,116 +584,67 @@ class Cleanup(SingleArmEnv):
             for obj_pos, obj_quat, obj in object_placements.values():
                 self.sim.data.set_joint_qpos(obj.joints[0], np.concatenate([np.array(obj_pos), np.array(obj_quat)]))
         
-    def _setup_observables(self):
-            """
-            Sets up observables to be used for this environment. Creates object-based observables if enabled
+    def _get_observation(self):
+        """
+        Returns an OrderedDict containing observations [(name_string, np.array), ...].
 
-            Returns:
-                OrderedDict: Dictionary mapping observable names to its corresponding Observable object
-            """
-            observables = super()._setup_observables()
+        Important keys:
 
-            # low-level object information
-            if self.use_object_obs:
-                # Get robot prefix and define observables modality
-                pf = self.robots[0].robot_model.naming_prefix
-                modality = "object"
+            `'robot-state'`: contains robot-centric information.
 
-                @sensor(modality=modality)
-                def eef_xyz_gripper(obs_cache):
-                    return (
-                        np.append(obs_cache[f"{pf}eef_pos"], self.gripper_state)
-                        if f"{pf}eef_pos" in obs_cache
-                        else np.zeros(4)
-                    )
- 
-                @sensor(modality=modality)
-                def pnp_obj_pos(obs_cache):
-                    return np.array(self.sim.data.body_xpos[self.pnp_obj_body_id])
+            `'object-state'`: requires @self.use_object_obs to be True. Contains object-centric information.
 
-                @sensor(modality=modality)
-                def pnp_obj_quat(obs_cache):
-                    return convert_quat(np.array(self.sim.data.body_xquat[self.pnp_obj_body_id]), to="xyzw")
+            `'image'`: requires @self.use_camera_obs to be True. Contains a rendered frame from the simulation.
 
-                @sensor(modality=modality)
-                def push_obj_pos(obs_cache):
-                    return np.array(self.sim.data.body_xpos[self.push_obj_body_id])
+            `'depth'`: requires @self.use_camera_obs and @self.camera_depth to be True.
+            Contains a rendered depth map from the simulation
 
-                @sensor(modality=modality)
-                def push_obj_quat(obs_cache):
-                    return convert_quat(np.array(self.sim.data.body_xquat[self.push_obj_body_id]), to="xyzw")
+        Returns:
+            OrderedDict: Observations from the environment
+        """
+        di = super()._get_observation()
 
-                sensors = [eef_xyz_gripper, pnp_obj_pos, pnp_obj_quat, push_obj_pos, push_obj_quat]
-                names = [s.__name__ for s in sensors]
+        # low-level object information
+        if self.use_object_obs:
+            # position and rotation of the first obj
+            obj_pos = np.array(self.obj_positions).flatten()
+            obj_quat = np.array(self.obj_quats).flatten()
+            di["obj_pos"] = obj_pos
+            di["obj_quat"] = obj_quat
 
-                # Create observables
-                for name, s in zip(names, sensors):
-                    observables[name] = Observable(
-                        name=name,
-                        sensor=s,
-                        sampling_rate=self.control_freq,
-                    )
-    
-            return observables
-    
-    def step(self, action):
+            di["object-state"] = np.concatenate(
+                [
+                    obj_pos,
+                    obj_quat,
+                ]
+            )
 
-        # ignore roll pitch inputs
-        action[3] = 0
-        action[4] = 0
+        return di
 
-        # update gripper state
-        self.gripper_state = action[-1]
+    def _check_success_pnp(self):
+        for i in range(self.task_config['num_pnp_objs']):
+            _, _, _, _, b = self.pnp_staged_rewards(obj_id=i)
+            if b < 1:
+                return False
+        return True
 
-        action_in_bounds = self._check_action_in_bounds(action)
-
-        # if end effector position is off the table, ignore the action
-        if not action_in_bounds:
-            action[:-1] = 0
-            print("Action out of bounds")
-        
-        return super().step(action)
-
-    # def _check_success_pnp(self):
-    #     for i in range(self.task_config['num_pnp_objs']):
-    #         _, _, _, _, b = self.pnp_staged_rewards(obj_id=i)
-    #         if b < 1:
-    #             return False
-    #     return True
-
-    # def _check_success_push(self):
-    #     for i in range(self.task_config['num_push_objs']):
-    #         _, _, d = self.push_staged_rewards(obj_id=i)
-    #         if d > 0.10:
-    #             return False
-    #     return True
-
-    # def _check_success(self):
-    #     if self.task_config['use_pnp_rew']:
-    #         if not self._check_success_pnp():
-    #             return False
-
-    #     if self.task_config['use_push_rew']:
-    #         if not self._check_success_push():
-    #             return False
-
-    #     return True
-
-    def _check_action_in_bounds(self, action):
-
-        sf = 2 # safety factor to prevent robot from moving out of bounds
-        x_in_bounds = self.workspace_x[0] < self._eef_xpos[0] + sf * action[0] / self.control_freq < self.workspace_x[1]
-        y_in_bounds = self.workspace_y[0] < self._eef_xpos[1] + sf * action[1] / self.control_freq < self.workspace_y[1]
-        return x_in_bounds and y_in_bounds
+    def _check_success_push(self):
+        for i in range(self.task_config['num_push_objs']):
+            _, _, d = self.push_staged_rewards(obj_id=i)
+            if d > 0.10:
+                return False
+        return True
 
     def _check_success(self):
-        """
-        returns True if pnp_obj is in bin and push_obj is in target region
-        """
-        if self.in_bin(self.sim.data.body_xpos[self.pnp_obj_body_id]) and self.in_push_target(self.sim.data.body_xpos[self.push_obj_body_id]):
-            print("SUCCESS")
-            return True
-        return False
+        if self.task_config['use_pnp_rew']:
+            if not self._check_success_pnp():
+                return False
+
+        if self.task_config['use_push_rew']:
+            if not self._check_success_push():
+                return False
+
+        return True
 
     def _get_info_pnp(self, obj_id=0):
         pnp_obj_pos = self.sim.data.body_xpos[self.pnp_obj_body_ids[obj_id]]

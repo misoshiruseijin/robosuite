@@ -282,15 +282,19 @@ class POCReaching(SingleArmEnv):
                 ): 
                     # first goal (move to targetA with gripper closed) complete
                     self.reached_targetA = True
+                    print("-----REACHED TARGET A-----")
 
             elif self.reached_targetA and not self.released_at_A and self.gripper_state == -1: # TODO - change "gripper is released" condition?
                 # second goal (release gripper at targetA) complete
                 self.released_at_A = True
+                print("-----RELEASED AT TARGET A-----")
+
 
             elif self.reached_targetA and self.released_at_A and not self.reached_targetB: # TODO - add gripper condition?
                 if self._check_in_region(self.targetB_position, self.target_half_size, self._eef_xpos):
                     # final goal (move to targetB) complete
                     self.reached_targetB = True
+                    print("-----REACHED TARGET B-----")
 
         # Scale reward if requested
         if self.reward_scale is not None:
@@ -495,8 +499,8 @@ class POCReaching(SingleArmEnv):
 
         action_in_bounds = self._check_action_in_bounds(action)
 
-        # ignore z axis and orientation inputs
-        action[2:-1] = 0
+        # ignore orientation inputs
+        action[3:-1] = 0
 
         self.prev_gripper_state = self.gripper_state
         self.gripper_state = action[-1]

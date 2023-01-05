@@ -1,6 +1,8 @@
 """
 Basic, hardcoded parameterized primitive motions
 
+Suggested wrist angle range [-0.5pi, 0.5pi]
+
 NOTE Currently, only move_to_pos works with option return_all_states = True
 """
 import numpy as np
@@ -32,12 +34,13 @@ class PrimitiveSkill():
         else:
             self.home_pos = home_pos
 
-        self.home_wrist_ori = self._wrap_to_pi(home_wrist_ori)
+        self.home_wrist_ori = _wrap_to_pi(home_wrist_ori)
         self.return_all_states = return_all_states
 
         self.move_to_external_call = False # controls whether step count is reset after move_to_pos call
+        self.ignore_z = False # set to True when calling move_to_xy
         self.steps = 0 # number of steps spent on one primitive skill
-        self.max_steps = 300 # number of steps each primitive can last
+        self.max_steps = 150 # number of steps each primitive can last
 
     def gripper_release(self):
         """
@@ -49,15 +52,17 @@ class PrimitiveSkill():
         Returns:
             obs, reward, done, info from environment's step function
         """
-        action = np.zeros(self.env.aciton_dim)
+        action = np.zeros(self.env.action_dim)
         action[-1] = -1
             
-        for _ in range(10):
+        for _ in range(15):
             obs, reward, done, info = self.env.step(action)
+            if self.env.has_renderer:
+                self.env.render()
         
         return obs, reward, done, info
 
-    def move_to_pos(self, obs, goal_pos, gripper_closed, wrist_ori=None, info_list=None, robot_id=0, speed=0.15, thresh=0.001, wrist_thresh=0.1):
+    def move_to_pos(self, obs, goal_pos, gripper_closed, wrist_ori=None, info_list=None, robot_id=0, speed=0.15, thresh=0.001, wrist_thresh=0.05):
         """
         Moves end effector to target position (x, y, z) coordinate in a straight line path.
         Cannot be interrupted until target position is reached.
@@ -101,7 +106,8 @@ class PrimitiveSkill():
 
             print("eef pos ", eef_pos)
             print("goal pos ", goal_pos)
-            # print("error ", error)
+            print("error ", error)
+            print(np.abs(error) > thresh)
 
             # if close to goal, reduce speed
             if np.abs(np.linalg.norm(error)) < slow_dist:
@@ -131,16 +137,16 @@ class PrimitiveSkill():
         # rotate wrist
         action = np.zeros(self.env.action_dim)
         if wrist_ori is not None:
-            goal_ori = self._wrap_to_pi(wrist_ori) # wrt home_wrist_ori
-            cur_ori = self._wrap_to_pi(obs[f"robot{robot_id}_joint_pos"][-1]) - self.home_wrist_ori # wrt home_wrist_ori
+            goal_ori = _wrap_to_pi(wrist_ori)
+            cur_ori = 2 * np.arccos(_wrap_to_pi(obs[f"robot{robot_id}_eef_quat"][0])) # extract yaw from quat
             error = goal_ori - cur_ori
 
             while abs(error) >= wrist_thresh:
-                print(self.steps)
                 # break if max steps is exceeded
                 if self.steps >= self.max_steps:
+                    print(f"max steps {self.max_steps} for primitive reached. terminating")
                     break    
-                cur_ori = self._wrap_to_pi(obs[f"robot{robot_id}_joint_pos"][-1]) - self.home_wrist_ori
+                cur_ori = _wrap_to_pi(obs[f"robot{robot_id}_joint_pos"][-1]) - self.home_wrist_ori
                 error = goal_ori - cur_ori
                 action[-2] = -np.sign(error) * 0.2
                 if error < 0.1:
@@ -166,8 +172,9 @@ class PrimitiveSkill():
         if self.return_all_states:
             return obs_list, reward_list, done_list, info_list
 
-        if not self.move_to_external_call:
-            self.steps = 0
+        # if not self.move_to_external_call:
+        #     self.steps = 0
+        self.steps = 0
         
         return obs, reward, done, info
 
@@ -186,7 +193,7 @@ class PrimitiveSkill():
             obs, reward, done, info from environment's step function (or lists of these if self.return_all_states is True)
         """
 
-        goal_pos = np.append(goal_pos, 0)
+        goal_pos = np.append(goal_pos, obs[f"robot{robot_id}_eef_pos"][2])
         return self.move_to_pos(obs=obs, goal_pos=goal_pos, gripper_closed=gripper_closed, wrist_ori=wrist_ori, robot_id=robot_id, speed=speed, thresh=thresh)
 
     def pick(self, obs, goal_pos=None, wrist_ori=None, obj_id=None, waypoint_height=None, robot_id=0, speed=0.15):
@@ -309,7 +316,7 @@ class PrimitiveSkill():
 
         return obs, reward, done, info
     
-    def push(self, obs, start_pos, end_pos, wrist_ori=None, waypoint_height=None, gripper_closed=True, robot_id=0, speed=0.15):
+    def push(self, obs, start_pos, end_pos, wrist_ori=None, waypoint_height=None, gripper_closed=False, robot_id=0, speed=0.15):
         """
         Moves end effector to above push starting position, moves down to start position, moves to goal position, up, then back to the home position,
         Positions are defined in world coordinates
@@ -505,14 +512,14 @@ class PrimitiveSkill():
 
         return obs, reward, done, info
 
-    def _wrap_to_pi(self, angles):
-        """
-        normalize angle in rad to range [-pi, pi]
-        """
-        pi2 = 2 * np.pi
-        result = np.fmod( np.fmod(angles, pi2) + pi2, pi2)
-        if result > np.pi:
-            result = result - pi2
-        if result < -np.pi:
-            result = result + pi2
-        return result
+def _wrap_to_pi(angles):
+    """
+    normalize angle in rad to range [-pi, pi]
+    """
+    pi2 = 2 * np.pi
+    result = np.fmod( np.fmod(angles, pi2) + pi2, pi2)
+    if result > np.pi:
+        result = result - pi2
+    if result < -np.pi:
+        result = result + pi2
+    return result
