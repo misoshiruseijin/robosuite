@@ -99,15 +99,16 @@ class PrimitiveSkill():
             self.env.render()
         
         while np.any(np.abs(error) > thresh):
-            print(self.steps)
+            # print(self.steps)
             # break if max steps is exceeded
             if self.steps >= self.max_steps:
+                print("Reached max steps for move to - terminating move_to")
                 break
 
-            print("eef pos ", eef_pos)
-            print("goal pos ", goal_pos)
-            print("error ", error)
-            print(np.abs(error) > thresh)
+            # print("eef pos ", eef_pos)
+            # print("goal pos ", goal_pos)
+            # print("error ", error)
+            # print(np.abs(error) > thresh)
 
             # if close to goal, reduce speed
             if np.abs(np.linalg.norm(error)) < slow_dist:
@@ -169,12 +170,10 @@ class PrimitiveSkill():
             done_list.append(done)
             info_list.append(info)
 
+        self.steps = 0
+
         if self.return_all_states:
             return obs_list, reward_list, done_list, info_list
-
-        # if not self.move_to_external_call:
-        #     self.steps = 0
-        self.steps = 0
         
         return obs, reward, done, info
 

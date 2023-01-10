@@ -4,9 +4,10 @@ import redis
 from robosuite import load_controller_config
 from robosuite.devices import Keyboard, SpaceMouse
 from robosuite.utils.input_utils import input2action
-from robosuite.wrappers import VisualizationWrapper
+from robosuite.wrappers import VisualizationWrapper, DomainRandomizationWrapper
 from robosuite.utils.primitive_skills import PrimitiveSkill
 import pdb
+import time
 
 
 ############### OLD #################
@@ -1006,13 +1007,21 @@ def main():
     #     env.step(action)
     #     env.render()
 
+    # obs = env.reset()
+    # start_time = time.time()
+    # while time.time() - start_time < 10:
+    #     action = np.array([0, 0, 0, 0, 0, 0, -1])
+    #     obs, reward, done, info = env.step(action)
+    #     env.render()
+    # print(env.steps)
+
     while True:
         obs = env.reset()
         env.render()
         while True: 
             action = np.array([0, 0, 0, 0, 0, 0, -1])
             obs, reward, done, info = env.step(action)
-            pdb.set_trace()
+            # pdb.set_trace()
             # print("eef pos ", obs["robot0_eef_pos"])
             # print("CubeA pos ", obs["cubeA_pos"])
             # print("CubeB pos ", obs["cubeB_pos"])
@@ -1020,6 +1029,33 @@ def main():
     
 
 if __name__ == "__main__":
+
+    env = suite.make(
+        env_name="Lift2",
+        robots="Panda",
+        controller_configs=load_controller_config(default_controller="OSC_POSE"),
+        use_camera_obs=False,
+        has_renderer=True,
+        has_offscreen_renderer=False,
+        ignore_done=True,
+        render_camera="frontview",
+        camera_names="frontview"
+    )
+    obs = env.reset()
+    env.render()
+    # env = DomainRandomizationWrapper(env)
+    p = PrimitiveSkill(env)
+    p.pick(
+        obs=obs,
+        goal_pos=obs["cube_pos"],
+        speed=0.8
+    )
+    p.place(
+        obs=obs,
+        goal_pos=(0, 0, env.table_offset[2]+0.035),
+        speed=0.8
+    )
+
 
     # env = suite.make(
     #     env_name="POCReaching",
@@ -1049,29 +1085,29 @@ if __name__ == "__main__":
     #     thresh=0.001
     # )
 
-    env = suite.make(
-        env_name="Cleanup",
-        robots="Panda",
-        controller_configs=load_controller_config(default_controller="OSC_POSE"),
-        initialization_noise="default",
-        table_full_size=(0.8, 0.8, 0.05),
-        table_friction=(1., 5e-3, 1e-4),
-        table_offset=(0, 0, 0.8),
-        use_camera_obs=False,
-        use_object_obs=True,
-        reward_scale=1.0,
-        reward_shaping=False,
-        has_renderer=True,
-        has_offscreen_renderer=False,
-        render_camera="frontview",
-        ignore_done=True,
-        hard_reset=True,
-        camera_names="agentview",
-        task_config=None,
-    )
-    env.render()
-    pdb.set_trace()
-    spacemouse_control(env, obs_to_print=["robot0_eef_pos", "pnp_obj_pos", "pnp_obj_quat", "push_obj_pos", "push_obj_quat"], gripper_closed=False, indicator_on=True)
+    # env = suite.make(
+    #     env_name="Cleanup",
+    #     robots="Panda",
+    #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
+    #     initialization_noise="default",
+    #     table_full_size=(0.8, 0.8, 0.05),
+    #     table_friction=(1., 5e-3, 1e-4),
+    #     table_offset=(0, 0, 0.8),
+    #     use_camera_obs=False,
+    #     use_object_obs=True,
+    #     reward_scale=1.0,
+    #     reward_shaping=False,
+    #     has_renderer=True,
+    #     has_offscreen_renderer=False,
+    #     render_camera="frontview",
+    #     ignore_done=True,
+    #     hard_reset=True,
+    #     camera_names="agentview",
+    #     task_config=None,
+    # )
+    # env.render()
+    # pdb.set_trace()
+    # spacemouse_control(env, obs_to_print=["robot0_eef_pos", "pnp_obj_pos", "pnp_obj_quat", "push_obj_pos", "push_obj_quat"], gripper_closed=False, indicator_on=True)
 
 
     # env = suite.make(
@@ -1095,6 +1131,7 @@ if __name__ == "__main__":
     #     camera_widths=512,
     # )
     # env.modify_observable(observable_name=f"robot0_joint_pos", attribute="active", modifier=True)
+    # pdb.set_trace()
     # obs = env.reset()
     # env.render()
     # pdb.set_trace()

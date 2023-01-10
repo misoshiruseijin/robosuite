@@ -11,7 +11,7 @@ Example:
 import imageio
 import numpy as np
 
-import robosuite.utils.macros as macros
+import robosuite.macros as macros
 from robosuite import make
 from robosuite.wrappers.visualization_wrapper import VisualizationWrapper
 from robosuite.controllers import load_controller_config
@@ -1349,6 +1349,113 @@ def manual_record_spacemouse(env, device, video_path="video.mp4", camera_names=[
 
     return action_hist, eef_pos_hist, reward_hist
 
+################### Flashing Cube Pick and Place #########################
+def record_cube_flash(video_path="video.mp4", camera_names="frontview", cube_color="red", change_color_every_steps=1, fps=20):
+    # initialize environment with offscreen renderer
+    env = make(
+        env_name="LiftFlash",
+        robots="Panda",
+        controller_configs=load_controller_config(default_controller="OSC_POSE"),
+        initialization_noise=None,
+        table_full_size=(0.8, 2.0, 0.01),
+        use_camera_obs=True,
+        use_object_obs=True,
+        has_renderer=False,
+        has_offscreen_renderer=True,
+        render_camera="frontview",
+        ignore_done=True,
+        camera_names=camera_names,
+        camera_heights=512,
+        camera_widths=512,
+        cube_color=cube_color,
+        change_color_every_steps=change_color_every_steps,
+    )
+
+    p = PrimitiveSkill(env, return_all_states=True)
+    # p.move_to_external_call = True
+    
+    obs = env.reset()
+
+    # create a video writer with imageio
+    writer = imageio.get_writer(video_path, fps=fps)
+
+    # move to above cube
+    print("[1] move to above pos")
+    obs, reward, done, info = p.move_to_pos(
+        obs=obs,
+        goal_pos=(0, 0, p.home_pos[2]),
+        gripper_closed=False
+    )
+    for ob in obs:
+        frame = ob[camera_names + "_image"]
+        writer.append_data(frame)
+
+    print("[2] move to pick pos")
+    # move down
+    obs, reward, done, info = p.move_to_pos(
+        obs=obs[-1],
+        goal_pos=(0, 0, env.table_offset[2]+env.cube_half_size[2]),
+        gripper_closed=False
+    )
+    for ob in obs:
+        frame = ob[camera_names + "_image"]
+        writer.append_data(frame)
+
+    print("[3] grip")
+    # grip
+    for _ in range(15):
+        action = np.array([0, 0, 0, 0, 0, 0, 1])
+        obs, reward, done, info = env.step(action)
+        frame = obs[camera_names + "_image"]
+        writer.append_data(frame)
+
+    print("[4] move to above pos")
+    # pdb.set_trace()
+    # move up
+    obs, reward, done, info = p.move_to_pos(
+        obs=obs,
+        goal_pos=(0, 0, p.home_pos[2]),
+        gripper_closed=True
+    )
+    for ob in obs:
+        frame = ob[camera_names + "_image"]
+        writer.append_data(frame)
+
+    # pdb.set_trace()
+    print("[5] move down")
+    # move down
+    obs, reward, done, info = p.move_to_pos(
+        obs=obs[-1],
+        goal_pos=(0, 0, env.table_offset[2]+env.cube_half_size[2]),
+        gripper_closed=True
+    )
+    for ob in obs:
+        frame = ob[camera_names + "_image"]
+        writer.append_data(frame)
+
+    print("[6] release")
+    # release
+    for _ in range(15):
+        action = np.array([0, 0, 0, 0, 0, 0, -1])
+        obs, reward, done, info = env.step(action)
+        frame = obs[camera_names + "_image"]
+        writer.append_data(frame)
+
+    print("[7] move to above pos")
+    # move up
+    obs, reward, done, info = p.move_to_pos(
+        obs=obs,
+        goal_pos=(0, 0, p.home_pos[2]),
+        gripper_closed=False
+    )
+    for ob in obs:
+        frame = ob[camera_names + "_image"]
+        writer.append_data(frame)
+        
+    writer.close()
+
+    # return action_hist, eef_pos_hist, ball_pos_hist, ball_side
+
 
 if __name__ == "__main__":
 
@@ -1360,62 +1467,71 @@ if __name__ == "__main__":
         "gray" : (0.75,0.75,0.75,1),
     }
 
-    # record_left_right()
-    n_videos = 20
-    save_dir = "videos/left_right"
-    os.makedirs(save_dir, exist_ok=True)
+    ########### Primitive Speed Check ##############
 
-    n_right = 0
-    n_left = 0
 
-    for i in range(n_videos):
-        print(f"\nRecording video {i}...")
-        # record video
-        video_path = os.path.join(save_dir, f"video{i}.mp4")
-        action_hist, eef_pos_hist, ball_pos_hist, ball_side = record_left_right(
-            video_path=video_path,
-            camera_names="frontview2",
-            ball_rgba=(0.75,0.75,0.75,1),
-        )
+    # ############## Flashing Cube ###############
+    # save_dir = "videos/flashing_cube"
+    # os.makedirs(save_dir, exist_ok=True)
+    # record_cube_flash(change_color_every_steps=4, fps=24)
+
+
+
+    ############ Ball Rolling ###############
+    # n_videos = 20
+    # save_dir = "videos/left_right"
+    # os.makedirs(save_dir, exist_ok=True)
+
+    # n_right = 0
+    # n_left = 0
+
+    # for i in range(n_videos):
+    #     print(f"\nRecording video {i}...")
+    #     # record video
+    #     video_path = os.path.join(save_dir, f"video{i}.mp4")
+    #     action_hist, eef_pos_hist, ball_pos_hist, ball_side = record_left_right(
+    #         video_path=video_path,
+    #         camera_names="frontview2",
+    #         ball_rgba=(0.75,0.75,0.75,1),
+    #     )
         
-        if ball_side == "left":
-            n_left += 1
-        elif ball_side == "right":
-            n_right += 1
-        print(f"left: {n_left}, right: {n_right}")
+    #     if ball_side == "left":
+    #         n_left += 1
+    #     elif ball_side == "right":
+    #         n_right += 1
+    #     print(f"left: {n_left}, right: {n_right}")
 
-        # make 2 copies of video and rename
-        shutil.copyfile(video_path, os.path.join(save_dir, f"video{i}_goal_right_result_{ball_side}.mp4"))
-        os.rename(video_path, os.path.join(save_dir, f"video{i}_goal_left_result_{ball_side}.mp4"))
+    #     # make 2 copies of video and rename
+    #     shutil.copyfile(video_path, os.path.join(save_dir, f"video{i}_goal_right_result_{ball_side}.mp4"))
+    #     os.rename(video_path, os.path.join(save_dir, f"video{i}_goal_left_result_{ball_side}.mp4"))
 
-        # save datafile
-        n = len(action_hist)
-        csv_path = os.path.join(save_dir, f"video{i}_goal_left_result_{ball_side}.csv")
-        df = pd.DataFrame(
-            data={
-                "step" : np.arange(n),
-                "action" : pd.Series(action_hist),
-                "eef_pos" : pd.Series(eef_pos_hist),
-                "ball_pos" : pd.Series(ball_pos_hist),
-                "ball_ended_up_on" : pd.Series([ball_side] * n),
-                "ball_goal_side" : pd.Series(["left"] * n)
-            }
-        )
-        df.to_csv(csv_path, index=False)
+    #     # save datafile
+    #     n = len(action_hist)
+    #     csv_path = os.path.join(save_dir, f"video{i}_goal_left_result_{ball_side}.csv")
+    #     df = pd.DataFrame(
+    #         data={
+    #             "step" : np.arange(n),
+    #             "action" : pd.Series(action_hist),
+    #             "eef_pos" : pd.Series(eef_pos_hist),
+    #             "ball_pos" : pd.Series(ball_pos_hist),
+    #             "ball_ended_up_on" : pd.Series([ball_side] * n),
+    #             "ball_goal_side" : pd.Series(["left"] * n)
+    #         }
+    #     )
+    #     df.to_csv(csv_path, index=False)
 
-        csv_path = os.path.join(save_dir, f"video{i}_goal_right_result_{ball_side}.csv")
-        df = pd.DataFrame(
-            data={
-                "step" : np.arange(n),
-                "action" : pd.Series(action_hist),
-                "eef_pos" : pd.Series(eef_pos_hist),
-                "ball_pos" : pd.Series(ball_pos_hist),
-                "ball_ended_up_on" : pd.Series([ball_side] * n),
-                "ball_goal_side" : pd.Series(["right"] * n)
-            }
-        )
-        df.to_csv(csv_path, index=False)
-
+    #     csv_path = os.path.join(save_dir, f"video{i}_goal_right_result_{ball_side}.csv")
+    #     df = pd.DataFrame(
+    #         data={
+    #             "step" : np.arange(n),
+    #             "action" : pd.Series(action_hist),
+    #             "eef_pos" : pd.Series(eef_pos_hist),
+    #             "ball_pos" : pd.Series(ball_pos_hist),
+    #             "ball_ended_up_on" : pd.Series([ball_side] * n),
+    #             "ball_goal_side" : pd.Series(["right"] * n)
+    #         }
+    #     )
+    #     df.to_csv(csv_path, index=False)
 
 
     ############ Obstacle Avoidance (Manual Record) ###############
