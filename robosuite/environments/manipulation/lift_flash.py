@@ -4,7 +4,7 @@ import numpy as np
 
 from robosuite.environments.manipulation.single_arm_env import SingleArmEnv
 from robosuite.models.arenas import TableArena
-from robosuite.models.objects import BoxObject
+from robosuite.models.objects import BoxObject, BlockObject, BlockWithLEDObject
 from robosuite.models.tasks import ManipulationTask
 from robosuite.utils.mjcf_utils import CustomMaterial
 from robosuite.utils.observables import Observable, sensor
@@ -139,7 +139,7 @@ class LiftFlash(SingleArmEnv):
         env_configuration="default",
         controller_configs=None,
         gripper_types="default",
-        initialization_noise="default",
+        initialization_noise=None,
         table_full_size=(0.8, 0.8, 0.05),
         table_friction=(1.0, 5e-3, 1e-4),
         use_camera_obs=True,
@@ -149,7 +149,7 @@ class LiftFlash(SingleArmEnv):
         placement_initializer=None,
         has_renderer=False,
         has_offscreen_renderer=True,
-        render_camera="frontview",
+        render_camera="frontview2",
         render_collision_mesh=False,
         render_visual_mesh=True,
         render_gpu_device_id=-1,
@@ -164,7 +164,8 @@ class LiftFlash(SingleArmEnv):
         camera_segmentations=None,  # {None, instance, class, element}
         renderer="mujoco",
         renderer_config=None,
-        cube_color="red", # color of cube
+        cube_rgba=(0, 0, 0, 1), # color of cube - black by default
+        led_color="white", # color of LED
         change_color_every_steps=1, # flash cube color every n steps
     ):
         # settings for table top
@@ -184,19 +185,21 @@ class LiftFlash(SingleArmEnv):
 
         # cube color and flashing frequency
         rgbas = {
-            "red" : (1, 0, 0, 1),
-            "blue" : (0, 0, 1, 1),
-            "green" : (0, 1, 0, 1),
-            "white" : (1, 1, 1, 1),
-            "gray" : (0.5, 0.5, 0.5, 1) 
+            "red" : (1, 0, 0, 0.5),
+            "blue" : (0, 0, 1, 0.5),
+            "green" : (0, 1, 0, 0.5),
+            "white" : (1, 1, 1, 0.5),
+            "gray" : (0.5, 0.5, 0.5, 0.5),
         }
         self.change_color_every_steps = change_color_every_steps
-        self.colors = [rgbas[cube_color], rgbas["white"]]
+        self.led_rgba = rgbas[led_color]
+        self.colors = [self.led_rgba, (0, 0, 0, 0)]
         self.color_idx = 0
 
         self.steps = 0
 
         self.cube_half_size = (0.03, 0.03, 0.03)
+        self.cube_rgba = cube_rgba
 
         super().__init__(
             robots=robots,
@@ -297,28 +300,37 @@ class LiftFlash(SingleArmEnv):
         mujoco_arena.set_origin([0, 0, 0])
 
         # initialize objects of interest
-        tex_attrib = {
-            "type": "cube",
-        }
-        mat_attrib = {
-            "texrepeat": "1 1",
-            "specular": "0.4",
-            "shininess": "0.1",
-        }
-        redwood = CustomMaterial(
-            texture="WoodRed",
-            tex_name="redwood",
-            mat_name="redwood_mat",
-            tex_attrib=tex_attrib,
-            mat_attrib=mat_attrib,
-        )
-        self.cube = BoxObject(
-            name="cube",
-            size=self.cube_half_size,  # [0.015, 0.015, 0.015],
-            rgba=[1, 0, 0, 1],
-            # material=redwood,
-        )
+        # tex_attrib = {
+        #     "type": "cube",
+        # }
+        # mat_attrib = {
+        #     "texrepeat": "1 1",
+        #     "specular": "1.0",
+        #     "shininess": "0.1",
+        #     "emission": "1.0"
+        # }
+        # redwood = CustomMaterial(
+        #     texture="WoodRed",
+        #     tex_name="redwood",
+        #     mat_name="redwood_mat",
+        #     tex_attrib=tex_attrib,
+        #     mat_attrib=mat_attrib,
+        # )
+        # self.cube = BoxObject(
+        #     name="cube",
+        #     size=self.cube_half_size,  # [0.015, 0.015, 0.015],
+        #     rgba=[1, 0, 0, 1],
+        #     material=redwood
+        # )
 
+        self.cube = BlockWithLEDObject(
+            name="cube",
+            body_half_size=self.cube_half_size,
+            led_radius=0.015,
+            block_rgba=self.cube_rgba,
+            led_rgba=self.led_rgba,
+        )
+        
         # Create placement initializer
         if self.placement_initializer is not None:
             self.placement_initializer.reset()
@@ -353,9 +365,14 @@ class LiftFlash(SingleArmEnv):
 
         # Additional object references from this env
         self.cube_body_id = self.sim.model.body_name2id(self.cube.root_body)
-        self.cube_geom_vis_ids = []
+        # self.cube_geom_vis_ids = []
+        self.led_geom_vis_ids = []
+        # for vis in self.cube.visual_geoms:
+        #     self.cube_geom_vis_ids.append(self.sim.model.geom_name2id(vis))
+
         for vis in self.cube.visual_geoms:
-            self.cube_geom_vis_ids.append(self.sim.model.geom_name2id(vis))
+            if "led" in vis:
+                self.led_geom_vis_ids.append(self.sim.model.geom_name2id(vis))
 
     def _setup_observables(self):
         """
@@ -420,6 +437,13 @@ class LiftFlash(SingleArmEnv):
         #     for obj_pos, obj_quat, obj in object_placements.values():
         #         self.sim.data.set_joint_qpos(obj.joints[0], np.concatenate([np.array(obj_pos), np.array(obj_quat)]))
 
+    def _switch_led_on_off(self):
+
+        self.color_idx = not self.color_idx
+            
+        for id in self.led_geom_vis_ids:
+            self.sim.model.geom_rgba[id] = self.colors[self.color_idx]
+
     def visualize(self, vis_settings):
         """
         In addition to super call, visualize gripper site proportional to the distance to the cube.
@@ -455,13 +479,9 @@ class LiftFlash(SingleArmEnv):
         # self.sim.model.geom_rgba[cube id] = [0., 1., 0., 1.]
         # add counter to control frequency
         self.steps += 1
+        # pdb.set_trace()
         if self.steps % self.change_color_every_steps == 0:
-            self.color_idx = not self.color_idx
-            # print("step ", self.steps)
-            for id in self.cube_geom_vis_ids:
-                # print("id", id)
-                self.sim.model.geom_rgba[id] = self.colors[self.color_idx]
-                # print(self.sim.model.geom_rgba[id])
+            self._switch_led_on_off()
             
         return super().step(action)
 

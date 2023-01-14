@@ -10,3 +10,4 @@ from .stage import StageObject
 from .grid_wall import GridWallObject
 from .cylinder_post import CylinderPostObject
 from .sphere_ball import SphereBallObject
+from .block_with_led import BlockWithLEDObject

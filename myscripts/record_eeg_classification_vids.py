@@ -1350,7 +1350,7 @@ def manual_record_spacemouse(env, device, video_path="video.mp4", camera_names=[
     return action_hist, eef_pos_hist, reward_hist
 
 ################### Flashing Cube Pick and Place #########################
-def record_cube_flash(video_path="video.mp4", camera_names="frontview", cube_color="red", change_color_every_steps=1, fps=20):
+def record_cube_flash(video_path="video.mp4", camera_names="frontview2", cube_rgba=(0,0,0,1), led_color="white", change_color_every_steps=1, fps=20):
     # initialize environment with offscreen renderer
     env = make(
         env_name="LiftFlash",
@@ -1362,12 +1362,13 @@ def record_cube_flash(video_path="video.mp4", camera_names="frontview", cube_col
         use_object_obs=True,
         has_renderer=False,
         has_offscreen_renderer=True,
-        render_camera="frontview",
+        render_camera="frontview2",
         ignore_done=True,
         camera_names=camera_names,
         camera_heights=512,
         camera_widths=512,
-        cube_color=cube_color,
+        cube_rgba=cube_rgba,
+        led_color=led_color,
         change_color_every_steps=change_color_every_steps,
     )
 
@@ -1467,14 +1468,11 @@ if __name__ == "__main__":
         "gray" : (0.75,0.75,0.75,1),
     }
 
-    ########### Primitive Speed Check ##############
-
 
     # ############## Flashing Cube ###############
     # save_dir = "videos/flashing_cube"
     # os.makedirs(save_dir, exist_ok=True)
-    # record_cube_flash(change_color_every_steps=4, fps=24)
-
+    record_cube_flash(change_color_every_steps=4, fps=24)
 
 
     ############ Ball Rolling ###############

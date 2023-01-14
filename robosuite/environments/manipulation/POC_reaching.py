@@ -8,11 +8,14 @@ from robosuite.models.objects import BoxObject
 
 from robosuite.models.tasks import ManipulationTask
 from robosuite.utils.observables import Observable, sensor
-from robosuite.utils.transform_utils import convert_quat
+from robosuite.utils.primitive_skills import PrimitiveSkill
 
 from robosuite.controllers import load_controller_config
 import pdb
 import time
+
+from collections import OrderedDict
+
 
 class POCReaching(SingleArmEnv):
     """
@@ -136,7 +139,6 @@ class POCReaching(SingleArmEnv):
 
         random_target (bool): If True, value of target_position is ignored and target is placed randomly on the table.
 
-        
     Raises:
         AssertionError: [Invalid number of robots specified]
     """
@@ -173,6 +175,7 @@ class POCReaching(SingleArmEnv):
         target_half_size=(0.05, 0.05, 0.001), # target width, height, thickness
         random_init=True,
         # random_target=False,
+        use_skills=False, 
     ):
 
         targetA_position = np.array([0.1, 0.3])
@@ -223,6 +226,15 @@ class POCReaching(SingleArmEnv):
         self.gripper_close_cnt = 0
         self.gripper_open_cnt = 0
 
+        # primitive skill mode
+        self.use_skills = use_skills  
+        self.skill = PrimitiveSkill(
+            skill_indices={
+                0 : "move_to_xy",
+                1 : "gripper_release",
+            }
+        )
+
         super().__init__(
             robots=robots,
             env_configuration=env_configuration,
@@ -249,6 +261,8 @@ class POCReaching(SingleArmEnv):
             renderer=renderer,
             renderer_config=renderer_config,
         )
+
+        self.cur_obs = self.reset()         
 
     def reward(self, action=None): ### TODO ###
         """
@@ -453,8 +467,7 @@ class POCReaching(SingleArmEnv):
         Returns: True if gripper has been closed for 10 or more consequtive steps
         """
         return self.gripper_close_cnt >= 10
-
-    
+ 
     def _check_terminated(self):
         """
         Check if the task has completed one way or another. The following conditions lead to termination:
@@ -497,27 +510,43 @@ class POCReaching(SingleArmEnv):
 
     def step(self, action):
 
-        action_in_bounds = self._check_action_in_bounds(action)
+        # if using primitive skills
+        if self.use_skills:
+            skill_done = False
+            # TODO - sum rewards?
+            obs = self.cur_obs
+            while not skill_done:
+                action_ll, skill_done = self.skill.get_action(action, obs)
+                obs, reward, done, info = super().step(action_ll)
+                if self.has_renderer:
+                    self.render()
+            self.cur_obs = obs
 
-        # ignore orientation inputs
-        action[3:-1] = 0
-
-        self.prev_gripper_state = self.gripper_state
-        self.gripper_state = action[-1]
-
-        if self.gripper_state == 1 and self.prev_gripper_state == 1:
-            self.gripper_close_cnt += 1
-            self.gripper_open_cnt = 0
-        elif self.gripper_state == -1 and self.prev_gripper_state == -1:
-            self.gripper_open_cnt += 1
-            self.gripper_close_cnt = 0
-
-        # if end effector position is off the table, ignore the action
-        if not action_in_bounds:
-            action[:-1] = 0
-            print("Action out of bounds")
+            return self.cur_obs, reward, done, info
         
-        return super().step(action)
+        # if using low level action commands
+        else:
+            action_in_bounds = self._check_action_in_bounds(action)
+
+            # ignore orientation inputs
+            action[3:-1] = 0
+
+            self.prev_gripper_state = self.gripper_state
+            self.gripper_state = action[-1]
+
+            if self.gripper_state == 1 and self.prev_gripper_state == 1:
+                self.gripper_close_cnt += 1
+                self.gripper_open_cnt = 0
+            elif self.gripper_state == -1 and self.prev_gripper_state == -1:
+                self.gripper_open_cnt += 1
+                self.gripper_close_cnt = 0
+
+            # if end effector position is off the table, ignore the action
+            if not action_in_bounds:
+                action[:-1] = 0
+                print("Action out of bounds")
+            
+            return super().step(action)
 
     def step_no_count(self, action):
         """
