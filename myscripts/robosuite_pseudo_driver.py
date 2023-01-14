@@ -154,40 +154,40 @@ if __name__ == "__main__":
     #     speed=0.8
     # )
 
-    env = suite.make(
-        env_name="POCReaching",
-        robots="Panda",
-        controller_configs=load_controller_config(default_controller="OSC_POSE"),
-        initialization_noise=None,
-        table_full_size=(0.65, 0.8, 0.15),
-        table_friction=(100, 100, 100),
-        use_camera_obs=False,
-        use_object_obs=True,
-        has_renderer=True,
-        has_offscreen_renderer=False,
-        render_camera="frontview",
-        ignore_done=True,
-        camera_names="frontview",
-        random_init=False,
-        use_skills=True,
-    )
+    # env = suite.make(
+    #     env_name="POCReaching",
+    #     robots="Panda",
+    #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
+    #     initialization_noise=None,
+    #     table_full_size=(0.65, 0.8, 0.15),
+    #     table_friction=(100, 100, 100),
+    #     use_camera_obs=False,
+    #     use_object_obs=True,
+    #     has_renderer=True,
+    #     has_offscreen_renderer=False,
+    #     render_camera="frontview",
+    #     ignore_done=True,
+    #     camera_names="frontview",
+    #     random_init=False,
+    #     use_skills=True,
+    # )
 
-    # spacemouse_control(env)
-    obs = env.reset()
-    env.render()
-    targetA_pos = obs["targetA_pos"]
-    targetB_pos = obs["targetB_pos"]
+    # # spacemouse_control(env)
+    # obs = env.reset()
+    # env.render()
+    # targetA_pos = obs["targetA_pos"]
+    # targetB_pos = obs["targetB_pos"]
 
-    # move to target A
-    one_hot = np.array([1, 0])
-    param = np.array([targetA_pos[0], targetA_pos[1], 0, 1])
-    obs, reward, done, info = env.step(np.concatenate([one_hot, param]))
-    # gripper release
-    obs, reward, done, info = env.step(np.array([0, 1]))
-    # move to target B
-    one_hot = np.array([1, 0])
-    param = np.array([targetB_pos[0], targetB_pos[1], 0, -1])
-    obs, reward, done, info = env.step(np.concatenate([one_hot, param]))
+    # # move to target A
+    # one_hot = np.array([1, 0])
+    # param = np.array([targetA_pos[0], targetA_pos[1], 0, 1])
+    # obs, reward, done, info = env.step(np.concatenate([one_hot, param]))
+    # # gripper release
+    # obs, reward, done, info = env.step(np.array([0, 1]))
+    # # move to target B
+    # one_hot = np.array([1, 0])
+    # param = np.array([targetB_pos[0], targetB_pos[1], 0, -1])
+    # obs, reward, done, info = env.step(np.concatenate([one_hot, param]))
     # action = np.concatenate([one_hot,  param])
     # obs, reward, done, info = env.step(action)
     # pdb.set_trace()
@@ -373,18 +373,29 @@ if __name__ == "__main__":
     #     ignore_done=True,
     # )
 
-    # env = suite.make(
-    #     env_name="Lift2",
-    #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
-    #     robots="Panda",
-    #     has_renderer=True,
-    #     has_offscreen_renderer=False,
-    #     render_camera="frontview",
-    #     use_camera_obs=False,
-    #     control_freq=20,
-    #     ignore_done=True,
-    # )
+    env = suite.make(
+        env_name="Lift2",
+        controller_configs=load_controller_config(default_controller="OSC_POSE"),
+        robots="Panda",
+        has_renderer=True,
+        has_offscreen_renderer=False,
+        render_camera="frontview",
+        use_camera_obs=False,
+        control_freq=20,
+        ignore_done=True,
+        use_skills=True,
+    )
+    obs = env.reset()
+    one_hot = np.array([0, 1, 0])
+    params = np.append(obs["cube_pos"], 0)
+    action = np.concatenate([one_hot, params])
+    obs, reward, done, info = env.step(action)
 
+    one_hot = np.array([0, 0, 1])
+    params = np.array([0, 0, 0.9, 0])
+    action = np.concatenate([one_hot, params])
+    obs, reward, done, info = env.step(action)
+    
     # env = suite.make(
     #     env_name="Reaching2DObstacle",
     #     controller_configs=load_controller_config(default_controller="OSC_POSE"),

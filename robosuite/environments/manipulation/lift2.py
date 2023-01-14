@@ -10,6 +10,7 @@ from robosuite.utils.mjcf_utils import CustomMaterial
 from robosuite.utils.observables import Observable, sensor
 from robosuite.utils.placement_samplers import UniformRandomSampler
 from robosuite.utils.transform_utils import convert_quat
+from robosuite.utils.primitive_skills import PrimitiveSkill
 
 import pdb
 
@@ -167,6 +168,7 @@ class Lift2(SingleArmEnv):
         renderer="mujoco",
         renderer_config=None,
         obj_rgba=(1,0,0,1),
+        use_skills=False,
     ):
         # settings for table top
         self.table_full_size = table_full_size
@@ -185,6 +187,16 @@ class Lift2(SingleArmEnv):
 
         # object color
         self.obj_rgba = obj_rgba
+
+        # primitive skill mode
+        self.use_skills = use_skills  
+        self.skill = PrimitiveSkill(
+            skill_indices={
+                0 : "move_to",
+                1 : "pick",
+                2: "place",
+            }
+        )
 
         super().__init__(
             robots=robots,
@@ -212,6 +224,8 @@ class Lift2(SingleArmEnv):
             renderer=renderer,
             renderer_config=renderer_config,
         )
+
+        self.cur_obs = self.reset()         
 
     def reward(self, action=None):
         """
@@ -401,6 +415,25 @@ class Lift2(SingleArmEnv):
             # Loop through all objects and reset their positions
             for obj_pos, obj_quat, obj in object_placements.values():
                 self.sim.data.set_joint_qpos(obj.joints[0], np.concatenate([np.array(obj_pos), np.array(obj_quat)]))
+
+    def step(self, action):
+
+        # if using primitive skills
+        if self.use_skills:
+            skill_done = False
+            # TODO - sum rewards?
+            obs = self.cur_obs
+            while not skill_done:
+                action_ll, skill_done = self.skill.get_action(action, obs)
+                obs, reward, done, info = super().step(action_ll)
+                if self.has_renderer:
+                    self.render()
+            self.cur_obs = obs
+
+            return self.cur_obs, reward, done, info
+
+        else:
+            return super().step(action)
 
     def visualize(self, vis_settings):
         """
