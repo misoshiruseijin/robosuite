@@ -186,6 +186,8 @@ class StackCustom(SingleArmEnv):
         self.workspace_z = (0.83, 1.3)
         self.yaw_bounds = (-0.5*np.pi, 0.5*np.pi)
 
+        # gripper state
+        self.gripper_state = -1 
 
         super().__init__(
             robots=robots,
@@ -425,6 +427,27 @@ class StackCustom(SingleArmEnv):
             pf = self.robots[0].robot_model.naming_prefix
             modality = "object"
 
+            # eef observations
+            @sensor(modality=modality)
+            def eef_xyz(obs_cache):
+                return (
+                    np.array(obs_cache[f"{pf}eef_pos"])
+                    if f"{pf}eef_pos" is obs_cache
+                    else np.zeros(3)
+                )
+
+            @sensor(modality=modality)
+            def eef_yaw(obs_cache):
+                return (
+                    quat2yaw(np.array(obs_cache[f"{pf}eef_quat"]))
+                    if f"{pf}eef_quat" is obs_cache
+                    else 0.0
+                )
+
+            @sensor(modality=modality)
+            def gripper_state(obs_cache):
+                return self.gripper_state
+
             # position and rotation of the first cube
             @sensor(modality=modality)
             def cubeA_pos(obs_cache):
@@ -478,7 +501,12 @@ class StackCustom(SingleArmEnv):
                     else np.zeros(3)
                 )
 
-            sensors = [cubeA_pos, cubeA_quat, cubeA_pos_yaw, cubeB_pos, cubeB_quat, cubeB_pos_yaw, gripper_to_cubeA, gripper_to_cubeB, cubeA_to_cubeB]
+            sensors = [
+                eef_xyz, eef_yaw, gripper_state,
+                cubeA_pos, cubeA_quat, cubeA_pos_yaw,
+                cubeB_pos, cubeB_quat, cubeB_pos_yaw,
+                gripper_to_cubeA, gripper_to_cubeB, cubeA_to_cubeB
+                ]
             names = [s.__name__ for s in sensors]
 
             # Create observables
@@ -545,6 +573,10 @@ class StackCustom(SingleArmEnv):
     
     def step(self, action):
 
+        ## TODO - case when using skills 
+
+
+        ### when using low level actions
         # ignore orientation inputs except wrist angle
         action[3:-2] = 0        
         
@@ -552,7 +584,10 @@ class StackCustom(SingleArmEnv):
         action_in_bounds = self._check_action_in_bounds(action)
         if not action_in_bounds:
             action[:-1] = 0
-            print("Action out of bounds")        
+            print("Action out of bounds")   
+        
+        self.gripper_state = action[-1] # update gripper state
+
         return super().step(action)
         
     def _post_action(self, action):

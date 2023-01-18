@@ -12,19 +12,20 @@ from robosuite.models.tasks import ManipulationTask
 from robosuite.utils.placement_samplers import UniformRandomSampler
 from robosuite.utils import RandomizationError
 from robosuite.utils.observables import Observable, sensor
+from robosuite.utils.transform_utils import quat2yaw
 
 
 import pdb
 
-DEFAULT_CLEANUP_CONFIG = {
-    'use_pnp_rew': True,
-    'use_push_rew': True,
-    'rew_type': 'sum',
-    'num_pnp_objs': 1,
-    'num_push_objs': 1,
-    'shaped_push_rew': False,
-    'push_scale_fac': 5.0,
-}
+# DEFAULT_CLEANUP_CONFIG = {
+#     'use_pnp_rew': True,
+#     'use_push_rew': True,
+#     'rew_type': 'sum',
+#     'num_pnp_objs': 1,
+#     'num_push_objs': 1,
+#     'shaped_push_rew': False,
+#     'push_scale_fac': 5.0,
+# }
 
 
 class Cleanup(SingleArmEnv):
@@ -166,7 +167,6 @@ class Cleanup(SingleArmEnv):
         camera_widths=256,
         camera_depths=False,
         task_config=None,
-        # skill_config=None,
     ):
         # settings for table top
         self.table_full_size = table_full_size
@@ -184,7 +184,7 @@ class Cleanup(SingleArmEnv):
         self.placement_initializer = placement_initializer
 
         # Get config
-        self.task_config = DEFAULT_CLEANUP_CONFIG.copy()
+        # self.task_config = DEFAULT_CLEANUP_CONFIG.copy()
         if task_config is not None:
             assert all([k in self.task_config for k in task_config])
             self.task_config.update(task_config)
@@ -505,12 +505,24 @@ class Cleanup(SingleArmEnv):
                 modality = "object"
 
                 @sensor(modality=modality)
-                def eef_xyz_gripper(obs_cache):
+                def eef_xyz(obs_cache):
                     return (
-                        np.append(obs_cache[f"{pf}eef_pos"], self.gripper_state)
+                        np.array(obs_cache[f"{pf}eef_pos"])
                         if f"{pf}eef_pos" in obs_cache
                         else np.zeros(4)
                     )
+                
+                @sensor(modality=modality)
+                def eef_yaw(obs_cache):
+                    return (
+                        quat2yaw(np.array(obs_cache[f"{pf}eef_quat"]))
+                        if f"{pf}eef_quat" is obs_cache
+                        else 0.0
+                    )
+                
+                @sensor(modality=modality)
+                def gripper_state(obs_cache):
+                    return self.gripper_state
  
                 @sensor(modality=modality)
                 def pnp_obj_pos(obs_cache):
@@ -521,14 +533,27 @@ class Cleanup(SingleArmEnv):
                     return convert_quat(np.array(self.sim.data.body_xquat[self.pnp_obj_body_id]), to="xyzw")
 
                 @sensor(modality=modality)
+                def pnp_obj_yaw(obs_cache):
+                    return quat2yaw(convert_quat(np.array(self.sim.data.body_xquat[self.pnp_obj_body_id]), to="xyzw"))
+
+                @sensor(modality=modality)
                 def push_obj_pos(obs_cache):
                     return np.array(self.sim.data.body_xpos[self.push_obj_body_id])
 
                 @sensor(modality=modality)
                 def push_obj_quat(obs_cache):
                     return convert_quat(np.array(self.sim.data.body_xquat[self.push_obj_body_id]), to="xyzw")
+      
+                @sensor(modality=modality)
+                def push_obj_yaw(obs_cache):
+                    return quat2yaw(convert_quat(np.array(self.sim.data.body_xquat[self.push_obj_body_id]), to="xyzw"))
 
-                sensors = [eef_xyz_gripper, pnp_obj_pos, pnp_obj_quat, push_obj_pos, push_obj_quat]
+                sensors = [
+                    eef_xyz, eef_yaw, gripper_state, 
+                    pnp_obj_pos, pnp_obj_quat, pnp_obj_yaw,
+                    push_obj_pos, push_obj_quat, push_obj_yaw
+                ]
+
                 names = [s.__name__ for s in sensors]
 
                 # Create observables
@@ -543,6 +568,9 @@ class Cleanup(SingleArmEnv):
     
     def step(self, action):
 
+        ###### TODO - when using skills ######
+        
+        ###### when using low level actions ######
         # ignore roll pitch inputs
         action[3] = 0
         action[4] = 0
@@ -559,6 +587,7 @@ class Cleanup(SingleArmEnv):
         
         return super().step(action)
 
+    ###### Intermediate Rewards #########
     # def _check_success_pnp(self):
     #     for i in range(self.task_config['num_pnp_objs']):
     #         _, _, _, _, b = self.pnp_staged_rewards(obj_id=i)
