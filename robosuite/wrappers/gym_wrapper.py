@@ -53,7 +53,7 @@ class GymWrapper(Wrapper, Env):
         self.env.spec = None
         self.metadata = None
 
-        # set up observation and action spaces
+        # set up observation space
         obs = self.env.reset()
         self.modality_dims = {key: obs[key].shape for key in self.keys}
         flat_ob = self._flatten_obs(obs)
@@ -61,8 +61,20 @@ class GymWrapper(Wrapper, Env):
         high = np.inf * np.ones(self.obs_dim)
         low = -high
         self.observation_space = spaces.Box(low=low, high=high)
-        low, high = self.env.action_spec
-        self.action_space = spaces.Box(low=low, high=high)
+
+        # set up action space
+        if getattr(self.env, 'use_skills', False):
+            num_skills = self.env.num_skills
+            max_num_params = 4
+            param_max = 0.5
+            # high = np.concatenate([np.ones(num_skills), param_max * np.ones(max_num_params)])
+            # low = np.concatenate([np.zeros(num_skills), -param_max * np.ones(max_num_params)])
+            high = np.concatenate([np.ones(num_skills), np.array([0.2, 0.4, 1, 1])])
+            low = np.concatenate([np.zeros(num_skills), np.array([-0.2, -0.4, -1, -1])])
+            self.action_space = spaces.Box(low=low, high=high)
+        else:
+            low, high = self.env.action_spec
+            self.action_space = spaces.Box(low=low, high=high)
 
     def _flatten_obs(self, obs_dict, verbose=False):
         """
