@@ -40,6 +40,7 @@ class PrimitiveSkill():
             "push",
             "gripper_release",
             "gripper_close",
+            "atomic",
         ]
 
         self.name_to_skill = {
@@ -49,6 +50,17 @@ class PrimitiveSkill():
             "gripper_close" : self._gripper_close,
             "pick" : self._pick,
             "place" : self._place,
+            "atomic": self._atomic,
+        }
+
+        self.name_to_num_params = {
+            "move_to" : 5,
+            "move_to_xy" : 4,
+            "gripper_release" : 0,
+            "gripper_close" : 0,
+            "pick" : 4,
+            "place" : 4,
+            "atomic": 7,
         }
 
         self.skill_indices = skill_indices
@@ -61,12 +73,14 @@ class PrimitiveSkill():
                 4 : "push",
                 5 : "gripper_release",
                 6 : "gripper_close",
+                7 : "atomic",
             }
 
         for key in self.skill_indices.keys():
             assert self.skill_indices[key] in self.skill_names, f"skill {self.skill_indices[key]} is undefined. skill name must be one of {self.skill_names}"
 
         self.n_skills = len(self.skill_indices)
+        self.max_num_params = max([self.name_to_num_params[skill_name] for skill_name in self.skill_indices.values()])
 
         # self.move_to_external_call = False # controls whether step count is reset after move_to_pos call
         # self.ignore_z = False # set to True when calling move_to_xy
@@ -97,6 +111,10 @@ class PrimitiveSkill():
         # extract params
         params = action[self.n_skills:]
         return skill(obs, params)
+
+    def _atomic(self, obs, params, robot_id=0):
+        action = np.array(params)
+        return action, True
         
     def _move_to(self, obs, params, robot_id=0, speed=0.3, thresh=0.001, yaw_thresh=0.005):
         
@@ -266,12 +284,6 @@ class PrimitiveSkill():
         """
         max_steps = 15
         action = np.array([0, 0, 0, 0, 0, 0, 1])
-
-        while self.grip_steps < max_steps:
-            self.grip_steps += 1
-            return action, False
-        
-        self.grip_steps = 0
         return action, True
 
     def _pick(self, obs, params, robot_id=0, speed=0.3, thresh=0.001, yaw_thresh=0.005):       

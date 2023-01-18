@@ -440,7 +440,7 @@ class MujocoEnv(metaclass=EnvMeta):
         """
         raise NotImplementedError
 
-    def render(self):
+    def render(self, **kwargs):
         """
         Renders to an on-screen window.
         """

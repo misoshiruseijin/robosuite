@@ -65,12 +65,10 @@ class GymWrapper(Wrapper, Env):
         # set up action space
         if getattr(self.env, 'use_skills', False):
             num_skills = self.env.num_skills
-            max_num_params = 4
-            param_max = 0.5
-            # high = np.concatenate([np.ones(num_skills), param_max * np.ones(max_num_params)])
-            # low = np.concatenate([np.zeros(num_skills), -param_max * np.ones(max_num_params)])
-            high = np.concatenate([np.ones(num_skills), np.array([0.2, 0.4, 1, 1])])
-            low = np.concatenate([np.zeros(num_skills), np.array([-0.2, -0.4, -1, -1])])
+            max_num_params = self.env.skill.max_num_params
+            param_max = 1.0
+            high = np.concatenate([np.ones(num_skills), param_max * np.ones(max_num_params)])
+            low = np.concatenate([np.zeros(num_skills), -param_max * np.ones(max_num_params)])
             self.action_space = spaces.Box(low=low, high=high)
         else:
             low, high = self.env.action_spec
