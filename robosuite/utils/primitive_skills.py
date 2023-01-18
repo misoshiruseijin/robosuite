@@ -113,7 +113,8 @@ class PrimitiveSkill():
             skill_done: True if goal skill completed successfully or if max allowed steps is reached
         """
         goal_pos = params[:3]
-        goal_yaw = params[3]
+        # goal_yaw = params[3]
+        goal_yaw = None
         gripper_action = 1 if params[4] > 0 else -1
 
         max_steps = 150
@@ -176,7 +177,8 @@ class PrimitiveSkill():
             skill_done: True if goal skill completed successfully or if max allowed steps is reached
         """
         goal_pos = params[:2]
-        goal_yaw = params[2]
+        # goal_yaw = params[2]
+        goal_yaw = self.home_wrist_ori
         gripper_action = 1 if params[3] > 0 else -1
 
         max_steps = 150

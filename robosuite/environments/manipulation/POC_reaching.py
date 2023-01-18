@@ -234,6 +234,7 @@ class POCReaching(SingleArmEnv):
                 1 : "gripper_release",
             }
         )
+        self.num_skills = self.skill.n_skills
 
         super().__init__(
             robots=robots,
@@ -406,6 +407,14 @@ class POCReaching(SingleArmEnv):
                 def targetB_pos(obs_cache):
                     return self.targetB_position
 
+                @sensor(modality=modality)
+                def eef_xy_gripper(obs_cache):
+                    return (
+                        np.append(np.array(obs_cache[f"{pf}eef_pos"][:2]), self.gripper_state)
+                        if f"{pf}eef_pos" in obs_cache
+                        else np.zeros(3)
+                    ) 
+
                 sensors = [targetA_pos, targetB_pos, eef_xy, eef_xy_gripper]
                 names = [s.__name__ for s in sensors]
 
@@ -523,14 +532,16 @@ class POCReaching(SingleArmEnv):
             skill_done = False
             # TODO - sum rewards?
             obs = self.cur_obs
+            total_reward = 0
             while not skill_done:
                 action_ll, skill_done = self.skill.get_action(action, obs)
                 obs, reward, done, info = super().step(action_ll)
+                total_reward += reward
                 if self.has_renderer:
                     self.render()
             self.cur_obs = obs
 
-            return self.cur_obs, reward, done, info
+            return self.cur_obs, total_reward, done, info
         
         # if using low level action commands
         else:
