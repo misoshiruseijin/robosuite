@@ -39,6 +39,7 @@ class PrimitiveSkill():
             "place",
             "push",
             "gripper_release",
+            "gripper_close",
         ]
 
         self.name_to_skill = {
@@ -63,7 +64,7 @@ class PrimitiveSkill():
             }
 
         for key in self.skill_indices.keys():
-            assert self.skill_indices[key] in self.skill_names, f"skill name must be one of {self.skill_names}"
+            assert self.skill_indices[key] in self.skill_names, f"skill {self.skill_indices[key]} is undefined. skill name must be one of {self.skill_names}"
 
         self.n_skills = len(self.skill_indices)
 

@@ -391,6 +391,14 @@ class POCReaching(SingleArmEnv):
                     )
 
                 @sensor(modality=modality)
+                def eef_xy_gripper(obs_cache):
+                    return (
+                        np.append(np.array(obs_cache[f"{pf}eef_pos"][:2]), self.gripper_state)
+                        if f"{pf}eef_pos" in obs_cache
+                        else np.zeros(3)
+                    )  
+
+                @sensor(modality=modality)
                 def targetA_pos(obs_cache):
                     return self.targetA_position
 
@@ -398,7 +406,7 @@ class POCReaching(SingleArmEnv):
                 def targetB_pos(obs_cache):
                     return self.targetB_position
 
-                sensors = [targetA_pos, targetB_pos, eef_xy]
+                sensors = [targetA_pos, targetB_pos, eef_xy, eef_xy_gripper]
                 names = [s.__name__ for s in sensors]
 
                 # Create observables

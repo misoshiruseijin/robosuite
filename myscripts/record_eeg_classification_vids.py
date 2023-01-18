@@ -1457,6 +1457,62 @@ def record_cube_flash(video_path="video.mp4", camera_names="frontview2", cube_rg
 
     # return action_hist, eef_pos_hist, ball_pos_hist, ball_side
 
+import threading
+import time
+def flash_cube(env, freq=2):
+    interval = 0.5 / freq
+    prev_time = time.time()
+    while True:
+        cur_time = time.time()
+        if cur_time - prev_time >= interval:
+            env._switch_led_on_off()
+            prev_time = cur_time
+
+def record_cube_flash(video_path="video.mp4", camera_names="frontview2", cube_rgba=(0,0,0,1), led_color="white", flash_freq=2):
+    
+    writer = imageio.get_writer(video_path, fps=30)
+    
+    env = make(
+        env_name="LiftFlash",
+        robots="Panda",
+        controller_configs=load_controller_config(default_controller="OSC_POSE"),
+        use_camera_obs=True,
+        # use_camera_obs=False,
+        # has_renderer=True,
+        has_renderer=False,
+        has_offscreen_renderer=True,
+        # has_offscreen_renderer=False,
+        ignore_done=True,
+        render_camera="frontview2",
+        camera_names="frontview2",
+    )
+
+    obs = env.reset()
+    p = PrimitiveSkill()
+
+    flash_thread = threading.Thread(target=flash_cube, args=(env, flash_freq))
+    flash_thread.start()
+
+    # do pick and place
+    skill_done = False
+    initial_cube_pos = obs["cube_pos"]
+    goal = np.append(initial_cube_pos, 0)
+    print("pick")
+    while not skill_done:
+        action, skill_done = p._pick(obs=obs, params=goal)
+        obs, reward, done, info = env.step(action)
+        frame = obs[camera_names + "_image"]
+        writer.append_data(frame)
+
+    print("place")
+    skill_done = False
+    while not skill_done:
+        action, skill_done = p.place(obs=obs, params=goal)
+        obs, reward, done, info = env.step(action)
+        frame = obs[camera_names + "_image"]
+        writer.append_data(frame)  
+
+    writer.close()
 
 if __name__ == "__main__":
 
@@ -1472,7 +1528,9 @@ if __name__ == "__main__":
     # ############## Flashing Cube ###############
     # save_dir = "videos/flashing_cube"
     # os.makedirs(save_dir, exist_ok=True)
-    record_cube_flash(change_color_every_steps=4, fps=24)
+    
+    record_cube_flash()
+
 
 
     ############ Ball Rolling ###############

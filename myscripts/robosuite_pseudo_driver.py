@@ -4,7 +4,7 @@ import redis
 from robosuite import load_controller_config
 from robosuite.devices import Keyboard, SpaceMouse
 from robosuite.utils.input_utils import input2action
-from robosuite.wrappers import VisualizationWrapper, DomainRandomizationWrapper
+from robosuite.wrappers import GymWrapper, VisualizationWrapper, DomainRandomizationWrapper
 from robosuite.utils.primitive_skills import PrimitiveSkill
 import pdb
 import time
@@ -119,19 +119,31 @@ if __name__ == "__main__":
 
     from robosuite.utils.primitive_skills import _wrap_to_pi, _quat_to_yaw
 
-    # env = suite.make(
-    #     env_name="LiftFlash",
-    #     robots="Panda",
-    #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
-    #     use_camera_obs=False,
-    #     has_renderer=True,
-    #     has_offscreen_renderer=False,
-    #     ignore_done=True,
-    #     render_camera="frontview2",
-    #     camera_names="frontview2",
-    # )
-    # obs = env.reset()
-    # env.render()
+    env = suite.make(
+        env_name="LiftFlash",
+        robots="Panda",
+        controller_configs=load_controller_config(default_controller="OSC_POSE"),
+        use_camera_obs=False,
+        has_renderer=True,
+        has_offscreen_renderer=False,
+        ignore_done=True,
+        render_camera="frontview2",
+        camera_names="frontview2",
+    )
+    obs = env.reset()
+    env.render()
+    prev_time = time.time()
+    interval = 0.5 / 2 # 2 Hz
+    pdb.set_trace()
+    while True:
+        cur_time = time.time()
+        print(cur_time - prev_time)
+        if cur_time - prev_time >= interval:
+            env._switch_led_on_off()
+            prev_time = cur_time
+        env.render()
+        
+
 
     # spacemouse_control(env, obs_to_print=[])
 
@@ -154,6 +166,8 @@ if __name__ == "__main__":
     #     speed=0.8
     # )
 
+    # from robosuite import load_controller_config
+
     # env = suite.make(
     #     env_name="POCReaching",
     #     robots="Panda",
@@ -169,10 +183,11 @@ if __name__ == "__main__":
     #     ignore_done=True,
     #     camera_names="frontview",
     #     random_init=False,
-    #     use_skills=True,
+    #     use_skills=False,
     # )
+    
+    # spacemouse_control(env, obs_to_print=["eef_xy_gripper"])
 
-    # # spacemouse_control(env)
     # obs = env.reset()
     # env.render()
     # targetA_pos = obs["targetA_pos"]
@@ -373,28 +388,28 @@ if __name__ == "__main__":
     #     ignore_done=True,
     # )
 
-    env = suite.make(
-        env_name="Lift2",
-        controller_configs=load_controller_config(default_controller="OSC_POSE"),
-        robots="Panda",
-        has_renderer=True,
-        has_offscreen_renderer=False,
-        render_camera="frontview",
-        use_camera_obs=False,
-        control_freq=20,
-        ignore_done=True,
-        use_skills=True,
-    )
-    obs = env.reset()
-    one_hot = np.array([0, 1, 0])
-    params = np.append(obs["cube_pos"], 0)
-    action = np.concatenate([one_hot, params])
-    obs, reward, done, info = env.step(action)
+    # env = suite.make(
+    #     env_name="Lift2",
+    #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
+    #     robots="Panda",
+    #     has_renderer=True,
+    #     has_offscreen_renderer=False,
+    #     render_camera="frontview",
+    #     use_camera_obs=False,
+    #     control_freq=20,
+    #     ignore_done=True,
+    #     use_skills=True,
+    # )
+    # obs = env.reset()
+    # one_hot = np.array([0, 1, 0])
+    # params = np.append(obs["cube_pos"], 0)
+    # action = np.concatenate([one_hot, params])
+    # obs, reward, done, info = env.step(action)
 
-    one_hot = np.array([0, 0, 1])
-    params = np.array([0, 0, 0.9, 0])
-    action = np.concatenate([one_hot, params])
-    obs, reward, done, info = env.step(action)
+    # one_hot = np.array([0, 0, 1])
+    # params = np.array([0, 0, 0.9, 0])
+    # action = np.concatenate([one_hot, params])
+    # obs, reward, done, info = env.step(action)
     
     # env = suite.make(
     #     env_name="Reaching2DObstacle",

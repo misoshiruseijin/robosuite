@@ -166,7 +166,8 @@ class LiftFlash(SingleArmEnv):
         renderer_config=None,
         cube_rgba=(0, 0, 0, 1), # color of cube - black by default
         led_color="white", # color of LED
-        change_color_every_steps=1, # flash cube color every n steps
+        # change_color_every_steps=1, # flash cube color every n steps
+        flash_freq=6, # LED flashing frequency in Hz
     ):
         # settings for table top
         self.table_full_size = table_full_size
@@ -191,7 +192,8 @@ class LiftFlash(SingleArmEnv):
             "white" : (1, 1, 1, 0.5),
             "gray" : (0.5, 0.5, 0.5, 0.5),
         }
-        self.change_color_every_steps = change_color_every_steps
+        # self.change_color_every_steps = change_color_every_steps
+        self.flash_interval = 0.5 / flash_freq
         self.led_rgba = rgbas[led_color]
         self.colors = [self.led_rgba, (0, 0, 0, 0)]
         self.color_idx = 0
@@ -473,17 +475,17 @@ class LiftFlash(SingleArmEnv):
         # cube is higher than the table top above a margin
         return cube_height > table_height + 0.04
 
-    def step(self, action):
-        # pdb.set_trace()
-        # get cube id from self.sim.model._geom_name2id
-        # self.sim.model.geom_rgba[cube id] = [0., 1., 0., 1.]
-        # add counter to control frequency
-        self.steps += 1
-        # pdb.set_trace()
-        if self.steps % self.change_color_every_steps == 0:
-            self._switch_led_on_off()
+    # def step(self, action):
+    #     # pdb.set_trace()
+    #     # get cube id from self.sim.model._geom_name2id
+    #     # self.sim.model.geom_rgba[cube id] = [0., 1., 0., 1.]
+    #     # add counter to control frequency
+    #     self.steps += 1
+    #     # pdb.set_trace()
+    #     # if self.steps % self.change_color_every_steps == 0:
+    #     #     self._switch_led_on_off()
             
-        return super().step(action)
+    #     return super().step(action)
 
     def reset(self):
         observations = super().reset()
