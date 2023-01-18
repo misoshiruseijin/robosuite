@@ -75,6 +75,11 @@ class PrimitiveSkill():
         self.phase = 0 # keeps track of phase in multi-step skills
         self.prev_success = False 
 
+        self.workspace_bounds_x = (-0.2, 0.2)
+        self.workspace_bounds_y = (-0.4, 0.4)
+        self.workspace_bounds_z = (0.83, 1.3)
+        self.yaw_bounds = (-0.5*np.pi, 0.5*np.pi)
+
     def get_action(self, action, obs):
         """
         Args:
@@ -85,7 +90,6 @@ class PrimitiveSkill():
             action (7-tuple): action commands for simulation environment - (position commands, orientation commands, gripper command)    
             skill_done (bool): True if goal skill completed successfully or if max allowed steps is reached
         """
-        # pdb.set_trace()
         # choose right skill
         skill_idx = np.argmax(action[:self.n_skills])
         skill = self.name_to_skill[self.skill_indices[skill_idx]]
@@ -108,13 +112,14 @@ class PrimitiveSkill():
             speed (float): controls magnitude of position commands. Values over ~0.75 is not recommended
             thresh (float): how close end effector position must be to the goal for skill to be complete
             yaw_thresh (float): how close end effector yaw angle must be to the goal value for skill to be complete
+            normalized input (bool): set to True if input parameters are normalized to [-1, 1]. set to False to use raw params
         Returns:
             action: 7d action commands for simulation environment - (position commands, orientation commands, gripper command)
             skill_done: True if goal skill completed successfully or if max allowed steps is reached
         """
         goal_pos = params[:3]
-        # goal_yaw = params[3]
-        goal_yaw = None
+        goal_yaw = params[3]
+        # goal_yaw = None
         gripper_action = 1 if params[4] > 0 else -1
 
         max_steps = 150
@@ -172,13 +177,14 @@ class PrimitiveSkill():
             speed (float): controls magnitude of position commands. Values over ~0.75 is not recommended
             thresh (float): how close end effector position must be to the goal for skill to be complete
             yaw_thresh (float): how close end effector yaw angle must be to the goal value for skill to be complete
+            normalized input (bool): set to True if input parameters are normalized to [-1, 1]. set to False to use raw params
         Returns:
             action: 7d action commands for simulation environment - (position commands, orientation commands, gripper command)
             skill_done: True if goal skill completed successfully or if max allowed steps is reached
         """
         goal_pos = params[:2]
-        # goal_yaw = params[2]
-        goal_yaw = self.home_wrist_ori
+        goal_yaw = params[2]
+        # goal_yaw = self.home_wrist_ori
         gripper_action = 1 if params[3] > 0 else -1
 
         max_steps = 150
@@ -198,7 +204,7 @@ class PrimitiveSkill():
         cur_ori = _quat_to_yaw(obs[f"robot{robot_id}_eef_quat"])
         ori_error = goal_ori - cur_ori
         # print("ori cur, goal ", cur_ori, goal_ori)
-        print("pos, ori", eef_pos, cur_ori)
+        # print("pos, ori", eef_pos, cur_ori)
         pos_reached = np.all(np.abs(pos_error) < thresh)
         ori_reached = np.abs(ori_error) < yaw_thresh
 
@@ -280,6 +286,7 @@ class PrimitiveSkill():
             speed (float): controls magnitude of position commands. Values over ~0.75 is not recommended
             thresh (float): how close end effector position must be to the goal for skill to be complete
             yaw_thresh (float): how close end effector yaw angle must be to the goal value for skill to be complete
+            normalized input (bool): set to True if input parameters are normalized to [-1, 1]. set to False to use raw params
         Returns:
             action: 7d action commands for simulation environment - (position commands, orientation commands, gripper command)
             skill_done: True if goal skill completed successfully or if max allowed steps is reached
@@ -297,13 +304,13 @@ class PrimitiveSkill():
         # phase 0: move to above grip site
         if self.phase == 0:
             params = np.concatenate([above_pos, np.array([goal_yaw, -1])])
-            action, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed)
+            action, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh)
             return action, False
 
         # phase 1: move down to grip site
         if self.phase == 1:
             params = np.concatenate([goal_pos, np.array([goal_yaw, -1])])
-            action, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed)
+            action, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh)
             return action, False
 
         # phase 2: grip
@@ -314,13 +321,13 @@ class PrimitiveSkill():
         # phase 3: lift
         if self.phase == 3:
             params = np.concatenate([above_pos, np.array([goal_yaw, 1])])
-            action, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed)
+            action, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh)
             return action, False
 
         # phase 4: move to home
         if self.phase == 4:
             params = np.concatenate([self.home_pos, np.array([goal_yaw, 1])])
-            action, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed)
+            action, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh)
             if self.prev_success:
                 self.steps = 0
                 self.phase = 0
@@ -340,6 +347,7 @@ class PrimitiveSkill():
             speed (float): controls magnitude of position commands. Values over ~0.75 is not recommended
             thresh (float): how close end effector position must be to the goal for skill to be complete
             yaw_thresh (float): how close end effector yaw angle must be to the goal value for skill to be complete
+            normalized input (bool): set to True if input parameters are normalized to [-1, 1]. set to False to use raw params
         Returns:
             action: 7d action commands for simulation environment - (position commands, orientation commands, gripper command)
             skill_done: True if goal skill completed successfully or if max allowed steps is reached

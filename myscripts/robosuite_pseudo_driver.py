@@ -119,29 +119,29 @@ if __name__ == "__main__":
 
     from robosuite.utils.primitive_skills import _wrap_to_pi, _quat_to_yaw
 
-    env = suite.make(
-        env_name="LiftFlash",
-        robots="Panda",
-        controller_configs=load_controller_config(default_controller="OSC_POSE"),
-        use_camera_obs=False,
-        has_renderer=True,
-        has_offscreen_renderer=False,
-        ignore_done=True,
-        render_camera="frontview2",
-        camera_names="frontview2",
-    )
-    obs = env.reset()
-    env.render()
-    prev_time = time.time()
-    interval = 0.5 / 2 # 2 Hz
-    pdb.set_trace()
-    while True:
-        cur_time = time.time()
-        print(cur_time - prev_time)
-        if cur_time - prev_time >= interval:
-            env._switch_led_on_off()
-            prev_time = cur_time
-        env.render()
+    # env = suite.make(
+    #     env_name="LiftFlash",
+    #     robots="Panda",
+    #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
+    #     use_camera_obs=False,
+    #     has_renderer=True,
+    #     has_offscreen_renderer=False,
+    #     ignore_done=True,
+    #     render_camera="frontview2",
+    #     camera_names="frontview2",
+    # )
+    # obs = env.reset()
+    # env.render()
+    # prev_time = time.time()
+    # interval = 0.5 / 2 # 2 Hz
+    # pdb.set_trace()
+    # while True:
+    #     cur_time = time.time()
+    #     print(cur_time - prev_time)
+    #     if cur_time - prev_time >= interval:
+    #         env._switch_led_on_off()
+    #         prev_time = cur_time
+    #     env.render()
         
 
 
@@ -168,25 +168,29 @@ if __name__ == "__main__":
 
     # from robosuite import load_controller_config
 
-    # env = suite.make(
-    #     env_name="POCReaching",
-    #     robots="Panda",
-    #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
-    #     initialization_noise=None,
-    #     table_full_size=(0.65, 0.8, 0.15),
-    #     table_friction=(100, 100, 100),
-    #     use_camera_obs=False,
-    #     use_object_obs=True,
-    #     has_renderer=True,
-    #     has_offscreen_renderer=False,
-    #     render_camera="frontview",
-    #     ignore_done=True,
-    #     camera_names="frontview",
-    #     random_init=False,
-    #     use_skills=False,
-    # )
-    
-    # spacemouse_control(env, obs_to_print=["eef_xy_gripper"])
+    env = suite.make(
+        env_name="POCReaching",
+        robots="Panda",
+        controller_configs=load_controller_config(default_controller="OSC_POSE"),
+        initialization_noise=None,
+        table_full_size=(0.65, 0.8, 0.15),
+        table_friction=(100, 100, 100),
+        use_camera_obs=False,
+        use_object_obs=True,
+        has_renderer=True,
+        has_offscreen_renderer=False,
+        render_camera="frontview",
+        ignore_done=True,
+        camera_names="frontview",
+        random_init=False,
+        use_skills=False,
+    )
+    obs = env.reset()
+    env.render()
+    # action = np.array([1., 0., -1., -1., 1., 1.])
+    # env.step(action)
+
+    spacemouse_control(env, obs_to_print=["eef_xy_gripper", "eef_yaw"])
 
     # obs = env.reset()
     # env.render()

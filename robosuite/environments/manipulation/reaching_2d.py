@@ -11,6 +11,8 @@ from robosuite.utils.observables import Observable, sensor
 from robosuite.utils.transform_utils import convert_quat
 
 from robosuite.controllers import load_controller_config
+from robosuite.utils.primitive_skills import PrimitiveSkill
+
 import pdb
 import time
 
@@ -173,6 +175,8 @@ class Reaching2D(SingleArmEnv):
         target_position=(0.0, 0.0), # target position (height above the table)
         random_init=True,
         random_target=False,
+        use_skills=False,
+        normalized_params=True,
     ):
 
         # settings for table top
@@ -201,8 +205,20 @@ class Reaching2D(SingleArmEnv):
         self.workspace_x = (-0.2, 0.2)
         self.workspace_y = (-0.4, 0.4)
         self.workspace_z = (0.83, 1.3)
+        self.yaw_bounds = (-0.5*np.pi, 0.5*np.pi)
 
         self.reset_ready = False # hack to fix target initialized in wrong position issue
+
+        # primitive skill mode - TODO: which skills should be used for MAPLE?
+        self.use_skills = use_skills  
+        self.skill = PrimitiveSkill(
+            skill_indices={
+                0 : "move_to_xy",
+                1 : "gripper_release",
+            }
+        )
+        self.num_skills = self.skill.n_skills
+        self.normalized_params = normalized_params
 
         super().__init__(
             robots=robots,
@@ -444,22 +460,40 @@ class Reaching2D(SingleArmEnv):
 
     def step(self, action):
 
-        action_in_bounds = self._check_action_in_bounds(action)
+        # if using primitive skills
+        if self.use_skills:
+            skill_done = False
+            # TODO - sum rewards?
+            obs = self.cur_obs
+            total_reward = 0
 
-        # ignore z axis and orientation inputs
-        action[2:] = 0
-        # ignore gripper inputs
-        action[-1] = -1
+            if self.normalized_params: # scale parameters if input params are normalized values
+                action[self.num_skills:] = self._scale_params(action[self.num_skills:])
+            
+            while not skill_done:
+                action_ll, skill_done = self.skill.get_action(action, obs)
+                obs, reward, done, info = super().step(action_ll)
+                total_reward += reward
+                if self.has_renderer:
+                    self.render()
+            self.cur_obs = obs
 
-        # if end effector position is off the table, ignore the action
-        if not action_in_bounds:
-            action[:-1] = 0
-            print("Action out of bounds")
+            return self.cur_obs, total_reward, done, info
         
-        # print("eefpos ", self._eef_xpos)
-        # print("target ", self.target_position)
+        else:
+            action_in_bounds = self._check_action_in_bounds(action)
 
-        return super().step(action)
+            # ignore z axis and orientation inputs
+            action[2:] = 0
+            # ignore gripper inputs
+            action[-1] = -1
+
+            # if end effector position is off the table, ignore the action
+            if not action_in_bounds:
+                action[:-1] = 0
+                print("Action out of bounds")
+            
+            return super().step(action)
 
     def step_no_count(self, action):
         """
@@ -549,3 +583,13 @@ class Reaching2D(SingleArmEnv):
         done = done or self._check_terminated()
 
         return reward, done, info
+
+    def _scale_params(self, params): # TODO - update after deciding which primitive skills to use
+        """
+        Scales normalized parameter ([-1, 1]) to appropriate raw values
+        """
+        params[0] = params[0] * 0.5 * (self.workspace_x[1] - self.workspace_x[0]) - np.mean(self.workspace_x)
+        params[1] = params[1] * 0.5 * (self.workspace_y[1] - self.workspace_y[0]) - np.mean(self.workspace_y)
+        params[2] = params[2] * 0.5 * (self.workspace_z[1] - self.workspace_z[0]) - np.mean(self.workspace_z)
+        params[3] = params[3] * 0.5 * (self.yaw_bounds[1] - self.yaw_bounds[0]) - np.mean(self.yaw_bounds)
+        return params

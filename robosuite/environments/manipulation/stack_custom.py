@@ -9,7 +9,7 @@ from robosuite.models.tasks import ManipulationTask
 from robosuite.utils.mjcf_utils import CustomMaterial
 from robosuite.utils.observables import Observable, sensor
 from robosuite.utils.placement_samplers import UniformRandomSampler
-from robosuite.utils.transform_utils import convert_quat
+from robosuite.utils.transform_utils import convert_quat, quat2yaw
 
 
 class StackCustom(SingleArmEnv):
@@ -184,6 +184,7 @@ class StackCustom(SingleArmEnv):
         self.workspace_x = (-0.2, 0.2)
         self.workspace_y = (-0.4, 0.4)
         self.workspace_z = (0.83, 1.3)
+        self.yaw_bounds = (-0.5*np.pi, 0.5*np.pi)
 
 
         super().__init__(
@@ -434,6 +435,12 @@ class StackCustom(SingleArmEnv):
                 return convert_quat(np.array(self.sim.data.body_xquat[self.cubeA_body_id]), to="xyzw")
 
             @sensor(modality=modality)
+            def cubeA_pos_yaw(obs_cache):
+                pos = np.array(self.sim.data.body_xpos[self.cubeA_body_id])
+                quat = convert_quat(np.array(self.sim.data.body_xquat[self.cubeA_body_id]), to="xyzw")
+                return np.append(pos, quat2yaw(quat))
+
+            @sensor(modality=modality)
             def cubeB_pos(obs_cache):
                 return np.array(self.sim.data.body_xpos[self.cubeB_body_id])
 
@@ -441,6 +448,12 @@ class StackCustom(SingleArmEnv):
             def cubeB_quat(obs_cache):
                 return convert_quat(np.array(self.sim.data.body_xquat[self.cubeB_body_id]), to="xyzw")
 
+            @sensor(modality=modality)
+            def cubeB_pos_yaw(obs_cache):
+                pos = np.array(self.sim.data.body_xpos[self.cubeB_body_id])
+                quat = convert_quat(np.array(self.sim.data.body_xquat[self.cubeB_body_id]), to="xyzw")
+                return np.append(pos, quat2yaw(quat))
+                
             @sensor(modality=modality)
             def gripper_to_cubeA(obs_cache):
                 return (
@@ -465,7 +478,7 @@ class StackCustom(SingleArmEnv):
                     else np.zeros(3)
                 )
 
-            sensors = [cubeA_pos, cubeA_quat, cubeB_pos, cubeB_quat, gripper_to_cubeA, gripper_to_cubeB, cubeA_to_cubeB]
+            sensors = [cubeA_pos, cubeA_quat, cubeA_pos_yaw, cubeB_pos, cubeB_quat, cubeB_pos_yaw, gripper_to_cubeA, gripper_to_cubeB, cubeA_to_cubeB]
             names = [s.__name__ for s in sensors]
 
             # Create observables

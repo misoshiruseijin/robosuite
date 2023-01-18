@@ -9,6 +9,7 @@ from robosuite.models.objects import BoxObject
 from robosuite.models.tasks import ManipulationTask
 from robosuite.utils.observables import Observable, sensor
 from robosuite.utils.primitive_skills import PrimitiveSkill
+from robosuite.utils.transform_utils import quat2yaw
 
 from robosuite.controllers import load_controller_config
 import pdb
@@ -139,6 +140,9 @@ class POCReaching(SingleArmEnv):
 
         random_target (bool): If True, value of target_position is ignored and target is placed randomly on the table.
 
+        normalized_params (bool): only relevant when use_skills=True
+            Set to True if input skill parameters are normalized to [-1,1]. Set to False if input skill parameters are raw values
+
     Raises:
         AssertionError: [Invalid number of robots specified]
     """
@@ -176,6 +180,7 @@ class POCReaching(SingleArmEnv):
         random_init=True,
         # random_target=False,
         use_skills=False, 
+        normalized_params=True, 
     ):
 
         targetA_position = np.array([0.1, 0.3])
@@ -208,6 +213,7 @@ class POCReaching(SingleArmEnv):
         self.workspace_x = (-0.2, 0.2)
         self.workspace_y = (-0.4, 0.4)
         self.workspace_z = (0.83, 1.3)
+        self.yaw_bounds = (-0.5*np.pi, 0.5*np.pi)
 
         # random initialization area
         self.random_init_x = 0.9 * np.array([self.workspace_x[0], 0])
@@ -232,9 +238,14 @@ class POCReaching(SingleArmEnv):
             skill_indices={
                 0 : "move_to_xy",
                 1 : "gripper_release",
+                # TODO - add atomic action
             }
         )
         self.num_skills = self.skill.n_skills
+        self.normalized_params = normalized_params
+
+        # whether reward has been given - completion reward is only given once
+        self.reward_given = False
 
         super().__init__(
             robots=robots,
@@ -285,8 +296,9 @@ class POCReaching(SingleArmEnv):
         reward = 0.0
         
         # check if task is complete
-        if self._check_success():
+        if self._check_success() and not self.reward_given:
             reward = 10.0
+            self.reward_given = True
 
         # check intermediate goals
         else:   
@@ -400,6 +412,14 @@ class POCReaching(SingleArmEnv):
                     )  
 
                 @sensor(modality=modality)
+                def eef_yaw(obs_cache):
+                    return (
+                        quat2yaw(obs_cache[f"{pf}eef_quat"])
+                        if f"{pf}eef_quat" in obs_cache
+                        else 0
+                    )
+
+                @sensor(modality=modality)
                 def targetA_pos(obs_cache):
                     return self.targetA_position
 
@@ -407,15 +427,7 @@ class POCReaching(SingleArmEnv):
                 def targetB_pos(obs_cache):
                     return self.targetB_position
 
-                @sensor(modality=modality)
-                def eef_xy_gripper(obs_cache):
-                    return (
-                        np.append(np.array(obs_cache[f"{pf}eef_pos"][:2]), self.gripper_state)
-                        if f"{pf}eef_pos" in obs_cache
-                        else np.zeros(3)
-                    ) 
-
-                sensors = [targetA_pos, targetB_pos, eef_xy, eef_xy_gripper]
+                sensors = [targetA_pos, targetB_pos, eef_xy, eef_xy_gripper, eef_yaw]
                 names = [s.__name__ for s in sensors]
 
                 # Create observables
@@ -462,7 +474,7 @@ class POCReaching(SingleArmEnv):
         if vis_settings["grippers"]:
             self._visualize_gripper_to_target(gripper=self.robots[0].gripper, target=self.targetA)
 
-    def _check_success(self): # TODO
+    def _check_success(self): 
         """
         Check if task is complete: end effector moved to targetA -> released gripper at targetA -> moved to targetB
 
@@ -533,12 +545,19 @@ class POCReaching(SingleArmEnv):
             # TODO - sum rewards?
             obs = self.cur_obs
             total_reward = 0
+
+            if self.normalized_params: # scale parameters if input params are normalized values
+                action[self.num_skills:] = self._scale_params(action[self.num_skills:])
+            
+            self.prev_gripper_state = self.gripper_state
+
             while not skill_done:
                 action_ll, skill_done = self.skill.get_action(action, obs)
                 obs, reward, done, info = super().step(action_ll)
                 total_reward += reward
                 if self.has_renderer:
                     self.render()
+                self.gripper_state = action_ll[-1]
             self.cur_obs = obs
 
             return self.cur_obs, total_reward, done, info
@@ -651,3 +670,13 @@ class POCReaching(SingleArmEnv):
         done = done or self._check_terminated()
 
         return reward, done, info
+
+    def _scale_params(self, params):
+        """
+        Scales normalized parameter ([-1, 1]) to appropriate raw values
+        """
+        params[0] = params[0] * 0.5 * (self.workspace_x[1] - self.workspace_x[0]) - np.mean(self.workspace_x)
+        params[1] = params[1] * 0.5 * (self.workspace_y[1] - self.workspace_y[0]) - np.mean(self.workspace_y)
+        params[2] = params[2] * 0.5 * (self.workspace_z[1] - self.workspace_z[0]) - np.mean(self.workspace_z)
+        params[3] = params[3] * 0.5 * (self.yaw_bounds[1] - self.yaw_bounds[0]) - np.mean(self.yaw_bounds)
+        return params

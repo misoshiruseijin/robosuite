@@ -46,6 +46,16 @@ _AXES2TUPLE = {
 
 _TUPLE2AXES = dict((v, k) for k, v in _AXES2TUPLE.items())
 
+def quat2yaw(quat): # myutil
+    """
+    Given quaternion "xyzw", returns yaw [rad]
+    """
+    x = quat[0]
+    y = quat[1]
+    z = quat[2]
+    w = quat[3]
+    quat = quat / np.linalg.norm(quat)
+    return np.arctan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
 
 def convert_quat(q, to="xyzw"):
     """
