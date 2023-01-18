@@ -625,6 +625,12 @@ class POCReaching(SingleArmEnv):
         while not self.reset_ready:
             pass
 
+        # reset conditions
+        self.reward_given = False
+        self.reached_targetA = False # reached first target with gripper closed
+        self.released_at_A = False # opened gripper at first target
+        self.reached_targetB = False # reached second target with gripper open
+
         # start with gripper closed
         action = np.zeros(self.action_dim)
         action[-1] = 1
@@ -677,6 +683,5 @@ class POCReaching(SingleArmEnv):
         """
         params[0] = params[0] * 0.5 * (self.workspace_x[1] - self.workspace_x[0]) - np.mean(self.workspace_x)
         params[1] = params[1] * 0.5 * (self.workspace_y[1] - self.workspace_y[0]) - np.mean(self.workspace_y)
-        params[2] = params[2] * 0.5 * (self.workspace_z[1] - self.workspace_z[0]) - np.mean(self.workspace_z)
-        params[3] = params[3] * 0.5 * (self.yaw_bounds[1] - self.yaw_bounds[0]) - np.mean(self.yaw_bounds)
+        params[2] = params[2] * 0.5 * (self.yaw_bounds[1] - self.yaw_bounds[0]) - np.mean(self.yaw_bounds)
         return params
