@@ -164,6 +164,8 @@ class StackCustom(SingleArmEnv):
         camera_segmentations=None,  # {None, instance, class, element}
         renderer="mujoco",
         renderer_config=None,
+        use_skills=False,
+        normalized_params=True,
     ):
         # settings for table top
         self.table_full_size = table_full_size
@@ -543,7 +545,6 @@ class StackCustom(SingleArmEnv):
 
         # Prematurely terminate if task is success
         if self._check_success():
-            print("~~~~~~~~~~~~~~TASK SUCCESS~~~~~~~~~~~~~~")
             terminated = True
 
         return terminated
@@ -569,7 +570,8 @@ class StackCustom(SingleArmEnv):
         sf = 2 # safety factor to prevent robot from moving out of bounds
         x_in_bounds = self.workspace_x[0] < self._eef_xpos[0] + sf * action[0] / self.control_freq < self.workspace_x[1]
         y_in_bounds = self.workspace_y[0] < self._eef_xpos[1] + sf * action[1] / self.control_freq < self.workspace_y[1]
-        return x_in_bounds and y_in_bounds
+        z_in_bounds = self.workspace_z[0] < self._eef_xpos[2] + sf * action[2] / self.control_freq < self.workspace_z[1]
+        return x_in_bounds and y_in_bounds and z_in_bounds
     
     def step(self, action):
 
