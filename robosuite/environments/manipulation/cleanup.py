@@ -571,6 +571,10 @@ class Cleanup(SingleArmEnv):
         ###### TODO - when using skills ######
         
         ###### when using low level actions ######
+        # if input action dimension is 5, input is assumed to be [x, y, z, yaw, gripper]
+        if action.shape[0] == 5:
+            action = np.concatenate([action[:3], np.zeros(2), action[3:]])
+
         # ignore roll pitch inputs
         action[3] = 0
         action[4] = 0

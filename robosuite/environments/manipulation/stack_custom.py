@@ -577,8 +577,13 @@ class StackCustom(SingleArmEnv):
 
 
         ### when using low level actions
-        # ignore orientation inputs except wrist angle
-        action[3:-2] = 0        
+        # if input action dimension is 5, input is assumed to be [x, y, z, yaw, gripper]
+        if action.shape[0] == 5:
+            action = np.concatenate([action[:3], np.zeros(2), action[3:]])
+
+        # ignore roll and pitch inputs
+        action[3] = 0
+        action[4] = 0        
         
         # if end effector position is off the table, ignore the action
         action_in_bounds = self._check_action_in_bounds(action)

@@ -8,7 +8,7 @@ from robosuite.models.objects import BoxObject
 
 from robosuite.models.tasks import ManipulationTask
 from robosuite.utils.observables import Observable, sensor
-from robosuite.utils.transform_utils import convert_quat
+from robosuite.utils.transform_utils import convert_quat, quat2yaw
 
 from robosuite.controllers import load_controller_config
 from robosuite.utils.primitive_skills import PrimitiveSkill
@@ -220,6 +220,12 @@ class Reaching2D(SingleArmEnv):
         self.num_skills = self.skill.n_skills
         self.normalized_params = normalized_params
 
+        # gripper state
+        self.gripper_state = -1 # 1 is closed, -1 is opened
+
+        # flags
+        self.reward_given = False
+
         super().__init__(
             robots=robots,
             env_configuration=env_configuration,
@@ -248,7 +254,7 @@ class Reaching2D(SingleArmEnv):
         )
 
 
-    def reward(self, action=None): ### TODO ###
+    def reward(self, action=None):
         """
         Reward function for the task.
 
@@ -268,8 +274,10 @@ class Reaching2D(SingleArmEnv):
         reward = 0.0
 
         # sparse completion reward
-        if self._check_success():
+        if self._check_success() and not self.reward_given:
             reward = 10
+            self.reward_given = True
+            print("~~~~~~~~in target~~~~~~~~~~~~~~")
         
         # Scale reward if requested
         if self.reward_scale is not None:
@@ -345,18 +353,30 @@ class Reaching2D(SingleArmEnv):
                 modality = "object"
 
                 @sensor(modality=modality)
-                def eef_xy(obs_cache):
+                def eef_xyz(obs_cache):
                     return (
-                        obs_cache[f"{pf}eef_pos"][:2] 
+                        obs_cache[f"{pf}eef_pos"] 
                         if f"{pf}eef_pos" in obs_cache
-                        else np.zeros(2)
+                        else np.zeros(3)
                     )
+
+                @sensor(modality=modality)
+                def eef_yaw(obs_cache):
+                    return (
+                        quat2yaw(obs_cache[f"{pf}eef_quat"])
+                        if f"{pf}eef_quat" in obs_cache
+                        else 0
+                    )
+
+                @sensor(modality=modality)
+                def gripper_state(obs_cache):
+                    return self.gripper_state
 
                 @sensor(modality=modality)
                 def target_pos(obs_cache):
                     return self.target_position
 
-                sensors = [target_pos, eef_xy]
+                sensors = [target_pos, eef_xyz, eef_yaw, gripper_state]
                 names = [s.__name__ for s in sensors]
 
                 # Create observables
@@ -432,7 +452,6 @@ class Reaching2D(SingleArmEnv):
 
         # Prematurely terminate if task is success
         if self._check_success():
-            print("~~~~~~~~in target~~~~~~~~~~~~~~")
             terminated = True
 
         return terminated
@@ -463,7 +482,6 @@ class Reaching2D(SingleArmEnv):
         # if using primitive skills
         if self.use_skills:
             skill_done = False
-            # TODO - sum rewards?
             obs = self.cur_obs
             total_reward = 0
 
@@ -479,19 +497,21 @@ class Reaching2D(SingleArmEnv):
             self.cur_obs = obs
 
             return self.cur_obs, total_reward, done, info
-        
-        else:
-            action_in_bounds = self._check_action_in_bounds(action)
 
-            # ignore z axis and orientation inputs
-            action[2:] = 0
-            # ignore gripper inputs
-            action[-1] = -1
+        # if using low level inputs        
+        else:
+            # if input action dimension is 5, input is assumed to be [x, y, z, yaw, gripper]
+            if action.shape[0] == 5:
+                action = np.concatenate([action[:3], np.zeros(2), action[3:]])
+
+            action_in_bounds = self._check_action_in_bounds(action)
 
             # if end effector position is off the table, ignore the action
             if not action_in_bounds:
                 action[:-1] = 0
                 print("Action out of bounds")
+            
+            self.gripper_state = action[-1]
             
             return super().step(action)
 
@@ -529,6 +549,9 @@ class Reaching2D(SingleArmEnv):
     def reset(self):
         print("Resetting....")
         observations = super().reset()
+
+        # reset flags
+        self.reward_given = False
 
         # wait for reset_internal to run
         while not self.reset_ready:

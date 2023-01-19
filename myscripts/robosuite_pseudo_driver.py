@@ -38,8 +38,9 @@ def spacemouse_control(env, obs_to_print=["robot0_eef_pos"], indicator_on=True, 
         # Initialize device control
         device.start_control()
         steps = 0
-
-        while True:
+        done = False
+        # while True:
+        while not done:
             # set active robot
             active_robot = env.robots[0]
             # get action
@@ -63,8 +64,8 @@ def spacemouse_control(env, obs_to_print=["robot0_eef_pos"], indicator_on=True, 
 
             for ob in obs_to_print:
                 print(f"{ob}: {obs[ob]}")
-            print("steps", steps)
-            # print("Reward ", reward)
+            # print("steps", steps)
+            print("Reward ", reward)
             # print("action ", action[3:-1])
             # print("yaw", _quat_to_yaw(obs[f"robot0_eef_quat"]))
             # print("Done ", done)
@@ -142,10 +143,6 @@ if __name__ == "__main__":
     #         env._switch_led_on_off()
     #         prev_time = cur_time
     #     env.render()
-        
-
-
-    # spacemouse_control(env, obs_to_print=[])
 
     # p = PrimitiveSkill()
     # skill_done = False
@@ -166,8 +163,6 @@ if __name__ == "__main__":
     #     speed=0.8
     # )
 
-    # from robosuite import load_controller_config
-
     env = suite.make(
         env_name="POCReaching",
         robots="Panda",
@@ -183,9 +178,17 @@ if __name__ == "__main__":
         ignore_done=True,
         camera_names="frontview",
         random_init=False,
-        use_skills=True,
+        use_skills=False,
         normalized_params=False,
     )
+    obs = env.reset()
+    pdb.set_trace()
+    spacemouse_control(env, obs_to_print=["subgoal_states"])
+
+    # while True:
+    #     action = np.array([1, 1, 1, 0, 1])
+    #     env.step(action)
+    #     env.render()
 
     while True:
         obs = env.reset()
@@ -195,23 +198,34 @@ if __name__ == "__main__":
         targetB_pos = obs["targetB_pos"]
         height = obs["robot0_eef_pos"][2]
 
+        eef_pos_0 = obs["robot0_eef_pos"][:2]
+        u = (targetA_pos - eef_pos_0) / np.linalg.norm(targetA_pos - eef_pos_0)
+
         # move to target A
         one_hot = np.array([1., 0.])
         param = np.array([targetA_pos[0], targetA_pos[1], height, 0., 1.])
+        # param = np.array([1.1*u[0], 1.1*u[1], height, 0., 1.])
         obs, reward, done, info = env.step(np.concatenate([one_hot, param]))
-        print("steps", env.timestep)
+        pdb.set_trace()
+
+        # # move out of target A
+        # one_hot = np.array([1., 0.])
+        # param = np.array([eef_pos_0[0], eef_pos_0[1], height, 0., 1.])
+        # # param = np.array([1.1*u[0], 1.1*u[1], height, 0., 1.])
+        # obs, reward, done, info = env.step(np.concatenate([one_hot, param]))
+        # pdb.set_trace()
+
         # gripper release
         obs, reward, done, info = env.step(np.array([0, 1, 0, 0, 0, 0, 0]))
-        print("steps", env.timestep)
+        pdb.set_trace()
 
         # move to target B
         param = np.array([targetB_pos[0], targetB_pos[1], height, 0., -1.])
         obs, reward, done, info = env.step(np.concatenate([one_hot, param]))
         action = np.concatenate([one_hot,  param])
-        print("steps", env.timestep)
-
 
         print("reward", reward)
+        pdb.set_trace()
 
     # action = np.array([1., 0., -1., -1., 1., 1.])
     # env.step(action)
@@ -265,6 +279,11 @@ if __name__ == "__main__":
     #     task_config=None,
     # )
     # env.render()
+    # while True:
+    #     action = np.array([1, 1, 1, 0, 1])
+    #     env.step(action)
+    #     env.render()
+
     # pdb.set_trace()
     # spacemouse_control(env, obs_to_print=["robot0_eef_pos", "pnp_obj_pos", "pnp_obj_quat", "push_obj_pos", "push_obj_quat"], gripper_closed=False, indicator_on=True)
 
@@ -289,6 +308,7 @@ if __name__ == "__main__":
     #     camera_heights=512,
     #     camera_widths=512,
     # )
+
     # env.modify_observable(observable_name=f"robot0_joint_pos", attribute="active", modifier=True)
     # pdb.set_trace()
     # obs = env.reset()
@@ -343,6 +363,7 @@ if __name__ == "__main__":
     #     random_init=True,
     #     random_target=False,
     # )
+
     # spacemouse_control(env)
 
     # env = suite.make(

@@ -223,6 +223,7 @@ class POCReaching(SingleArmEnv):
 
         # flags for intermediate goals
         self.reached_targetA = False # reached first target with gripper closed
+        self.moved_out_of_A = False # moved out of target A without releasing gripper
         self.released_at_A = False # opened gripper at first target
         self.reached_targetB = False # reached second target with gripper open
 
@@ -275,9 +276,42 @@ class POCReaching(SingleArmEnv):
 
         self.cur_obs = self.reset()         
 
-    def reward(self, action=None): ### TODO ###
+    def reward(self, action=None): 
         """
         Reward function for the task.
+
+        Sparse un-normalized reward:
+
+            - a discrete reward of 10.0 is provided if entire task is complete
+
+        Note that the final reward is normalized and scaled by
+        reward_scale / 10 as well so that the max score is equal to reward_scale
+
+        Args:
+            action (np array): [NOT USED]
+
+        Returns:
+            float: reward value
+        """
+        reward = 0.0
+                
+        # check if task is complete
+        if self._check_success() and not self.reward_given:
+            reward = 10.0
+            if not self.use_skills:
+                self.reward_given = True
+                print("~~~~~~~~~~~~~~ TASK COMPLETE ~~~~~~~~~~~~~~")
+
+        # Scale reward if requested
+        if self.reward_scale is not None:
+            reward *= self.reward_scale / 10
+
+        return reward
+
+
+    def _reward(self, action=None): 
+        """
+        Reward function for the task. Used when using primitive skills
 
         Sparse un-normalized reward:
 
@@ -300,34 +334,45 @@ class POCReaching(SingleArmEnv):
             self.reward_given = True
             print("~~~~~~~~~~~~~~ TASK COMPLETE ~~~~~~~~~~~~~~")
 
-        # check intermediate goals
-        else:   
-            if not self.reached_targetA:
-                if (
-                    self._check_in_region(self.targetA_position, self.target_half_size, self._eef_xpos[:2])
-                    and self.gripper_state == 1 # TODO - change "gripper is closed" condition?
-                ): 
-                    # first goal (move to targetA with gripper closed) complete
-                    self.reached_targetA = True
-                    print("-----REACHED TARGET A-----")
-
-            elif self.reached_targetA and not self.released_at_A and self.gripper_state == -1: # TODO - change "gripper is released" condition?
-                # second goal (release gripper at targetA) complete
-                self.released_at_A = True
-                print("-----RELEASED AT TARGET A-----")
-
-
-            elif self.reached_targetA and self.released_at_A and not self.reached_targetB: # TODO - add gripper condition?
-                if self._check_in_region(self.targetB_position, self.target_half_size, self._eef_xpos):
-                    # final goal (move to targetB) complete
-                    self.reached_targetB = True
-                    print("-----REACHED TARGET B-----")
-
         # Scale reward if requested
         if self.reward_scale is not None:
             reward *= self.reward_scale / 10
 
         return reward
+
+    def _update_intermediate_goals(self):
+        if not self.reached_targetA:
+            if self._eef_in_targetA() and self.gripper_state == 1: 
+                # first goal (move to targetA with gripper closed) complete
+                self.reached_targetA = True
+                self.moved_out_of_A = False
+                print("-----REACHED TARGET A-----")
+        
+        elif (
+            self.reached_targetA # previous subgoal met
+            and not self.released_at_A # has not released at A
+            and not self._eef_in_targetA() # has moved out of A
+        ):
+            # second subgoal failed -> must start from first subgoal
+            self.moved_out_of_A = True
+            self.reached_targetA = False
+            print("-----Moved out of targetA without releasing-----")
+
+        elif (
+            self.reached_targetA # previous subgoal is satisfied
+            and not self.moved_out_of_A # has not moved out of target A after satisfying previous subgoal
+            and not self.released_at_A # has not released gripper at target A
+            and self.gripper_state == -1 # gripper is opened
+        ):
+            # second goal (release gripper at targetA) complete
+            self.released_at_A = True
+            print("-----RELEASED AT TARGET A-----")
+
+        elif self.reached_targetA and self.released_at_A and not self.reached_targetB:
+            if self._check_in_region(self.targetB_position, self.target_half_size, self._eef_xpos):
+                # final goal (move to targetB) complete
+                self.reached_targetB = True
+                print("-----REACHED TARGET B-----")
 
     def _load_model(self):
         """
@@ -396,20 +441,16 @@ class POCReaching(SingleArmEnv):
                 modality = "object"
 
                 @sensor(modality=modality)
-                def eef_xy(obs_cache):
+                def eef_xyz(obs_cache):
                     return (
-                        obs_cache[f"{pf}eef_pos"][:2] 
+                        obs_cache[f"{pf}eef_pos"]
                         if f"{pf}eef_pos" in obs_cache
-                        else np.zeros(2)
+                        else np.zeros(3)
                     )
 
                 @sensor(modality=modality)
-                def eef_xy_gripper(obs_cache):
-                    return (
-                        np.append(np.array(obs_cache[f"{pf}eef_pos"][:2]), self.gripper_state)
-                        if f"{pf}eef_pos" in obs_cache
-                        else np.zeros(3)
-                    )  
+                def gripper_state(obs_cache):
+                    return self.gripper_state
 
                 @sensor(modality=modality)
                 def eef_yaw(obs_cache):
@@ -427,7 +468,11 @@ class POCReaching(SingleArmEnv):
                 def targetB_pos(obs_cache):
                     return self.targetB_position
 
-                sensors = [targetA_pos, targetB_pos, eef_xy, eef_xy_gripper, eef_yaw]
+                @sensor(modality=modality)
+                def subgoal_states(obs_cache):
+                    return np.array([self.reached_targetA, self.released_at_A, self.reached_targetB]).astype(float)
+
+                sensors = [targetA_pos, targetB_pos, eef_xyz, gripper_state, eef_yaw, subgoal_states]
                 names = [s.__name__ for s in sensors]
 
                 # Create observables
@@ -454,9 +499,6 @@ class POCReaching(SingleArmEnv):
         self.sim.data.set_joint_qpos(self.targetB.joints[0], targetB_xpos)
 
         self.reset_ready = True
-
-        # print("TARGET PLACED AT: ", self.target_position)
-        # print("END reset internal")
 
     def visualize(self, vis_settings):
         """
@@ -536,14 +578,18 @@ class POCReaching(SingleArmEnv):
         y_in_bounds = self.workspace_y[0] < self._eef_xpos[1] + sf * action[1] / self.control_freq < self.workspace_y[1]
         return x_in_bounds and y_in_bounds
 
+    def _eef_in_targetA(self):
+        return self._check_in_region(self.targetA_position, self.target_half_size, self._eef_xpos[:2])
+
+    def _eef_in_targetB(self):
+        return self._check_in_region(self.targetB_position, self.target_half_size, self._eef_xpos[:2])
+
     def step(self, action):
 
         # if using primitive skills
         if self.use_skills:
             skill_done = False
-            # TODO - sum rewards?
             obs = self.cur_obs
-            total_reward = 0
 
             if self.normalized_params: # scale parameters if input params are normalized values
                 action[self.num_skills:] = self._scale_params(action[self.num_skills:])
@@ -553,20 +599,27 @@ class POCReaching(SingleArmEnv):
             while not skill_done:
                 action_ll, skill_done = self.skill.get_action(action, obs)
                 obs, reward, done, info = super().step(action_ll)
-                total_reward += reward
                 if self.has_renderer:
                     self.render()
                 self.gripper_state = action_ll[-1]
             self.cur_obs = obs
-
-            return self.cur_obs, total_reward, done, info
+            self._update_intermediate_goals()
+            reward = self._reward()
+            return self.cur_obs, reward, done, info
         
         # if using low level action commands
         else:
+            self._update_intermediate_goals()
+
+            # if input action dimension is 5, input is assumed to be [x, y, z, yaw, gripper]
+            if action.shape[0] == 5:
+                action = np.concatenate([action[:3], np.zeros(2), action[3:]])
+
             action_in_bounds = self._check_action_in_bounds(action)
 
-            # ignore orientation inputs
-            action[3:-1] = 0
+            # ignore roll and pitch inputs
+            action[3] = 0
+            action[4] = 0
 
             self.prev_gripper_state = self.gripper_state
             self.gripper_state = action[-1]
@@ -627,6 +680,7 @@ class POCReaching(SingleArmEnv):
         # reset conditions
         self.reward_given = False
         self.reached_targetA = False # reached first target with gripper closed
+        self.moved_out_of_A = False
         self.released_at_A = False # opened gripper at first target
         self.reached_targetB = False # reached second target with gripper open
 
@@ -676,7 +730,7 @@ class POCReaching(SingleArmEnv):
 
         return reward, done, info
 
-    def _scale_params(self, params):
+    def _scale_params(self, params): # TODO
         """
         Scales normalized parameter ([-1, 1]) to appropriate raw values
         """
