@@ -588,7 +588,7 @@ class POCReaching(SingleArmEnv):
 
         # if using primitive skills
         if self.use_skills:
-            skill_done = False
+            done, skill_done = False, False
             obs = self.cur_obs
 
             if self.normalized_params: # scale parameters if input params are normalized values
@@ -596,14 +596,17 @@ class POCReaching(SingleArmEnv):
             
             self.prev_gripper_state = self.gripper_state
 
-            while not skill_done:
+            while not done and not skill_done:
                 action_ll, skill_done = self.skill.get_action(action, obs)
                 obs, reward, done, info = super().step(action_ll)
                 if self.has_renderer:
                     self.render()
                 self.gripper_state = action_ll[-1]
             self.cur_obs = obs
-            self._update_intermediate_goals()
+
+            if skill_done:
+                self._update_intermediate_goals()
+            
             reward = self._reward()
             return self.cur_obs, reward, done, info
         
