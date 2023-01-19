@@ -236,9 +236,8 @@ class POCReaching(SingleArmEnv):
         self.use_skills = use_skills  
         self.skill = PrimitiveSkill(
             skill_indices={
-                0 : "move_to_xy",
+                0 : "move_to",
                 1 : "gripper_release",
-                # TODO - add atomic action
             }
         )
         self.num_skills = self.skill.n_skills
@@ -299,6 +298,7 @@ class POCReaching(SingleArmEnv):
         if self._check_success() and not self.reward_given:
             reward = 10.0
             self.reward_given = True
+            print("~~~~~~~~~~~~~~ TASK COMPLETE ~~~~~~~~~~~~~~")
 
         # check intermediate goals
         else:   
@@ -511,7 +511,6 @@ class POCReaching(SingleArmEnv):
 
         # Prematurely terminate if task is success
         if self._check_success():
-            print("~~~~~~~~~~~~~~ TASK COMPLETE ~~~~~~~~~~~~~~")
             terminated = True
 
         return terminated
@@ -681,7 +680,9 @@ class POCReaching(SingleArmEnv):
         """
         Scales normalized parameter ([-1, 1]) to appropriate raw values
         """
+        print("param", params)
         params[0] = params[0] * 0.5 * (self.workspace_x[1] - self.workspace_x[0]) - np.mean(self.workspace_x)
         params[1] = params[1] * 0.5 * (self.workspace_y[1] - self.workspace_y[0]) - np.mean(self.workspace_y)
-        params[2] = params[2] * 0.5 * (self.yaw_bounds[1] - self.yaw_bounds[0]) - np.mean(self.yaw_bounds)
+        params[2] = params[2] * 0.5 * (self.workspace_z[1] - self.workspace_z[0]) - np.mean(self.workspace_z)
+        params[3] = params[3] * 0.5 * (self.yaw_bounds[1] - self.yaw_bounds[0]) - np.mean(self.yaw_bounds)
         return params

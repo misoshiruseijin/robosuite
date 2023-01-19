@@ -183,14 +183,40 @@ if __name__ == "__main__":
         ignore_done=True,
         camera_names="frontview",
         random_init=False,
-        use_skills=False,
+        use_skills=True,
+        normalized_params=False,
     )
-    obs = env.reset()
-    env.render()
+
+    while True:
+        obs = env.reset()
+        env.render()
+
+        targetA_pos = obs["targetA_pos"]
+        targetB_pos = obs["targetB_pos"]
+        height = obs["robot0_eef_pos"][2]
+
+        # move to target A
+        one_hot = np.array([1., 0.])
+        param = np.array([targetA_pos[0], targetA_pos[1], height, 0., 1.])
+        obs, reward, done, info = env.step(np.concatenate([one_hot, param]))
+        print("steps", env.timestep)
+        # gripper release
+        obs, reward, done, info = env.step(np.array([0, 1, 0, 0, 0, 0, 0]))
+        print("steps", env.timestep)
+
+        # move to target B
+        param = np.array([targetB_pos[0], targetB_pos[1], height, 0., -1.])
+        obs, reward, done, info = env.step(np.concatenate([one_hot, param]))
+        action = np.concatenate([one_hot,  param])
+        print("steps", env.timestep)
+
+
+        print("reward", reward)
+
     # action = np.array([1., 0., -1., -1., 1., 1.])
     # env.step(action)
 
-    spacemouse_control(env, obs_to_print=["eef_xy_gripper", "eef_yaw"])
+    # spacemouse_control(env, obs_to_print=["eef_xy_gripper", "eef_yaw"])
 
     # obs = env.reset()
     # env.render()
@@ -208,11 +234,7 @@ if __name__ == "__main__":
     # param = np.array([targetB_pos[0], targetB_pos[1], 0, -1])
     # obs, reward, done, info = env.step(np.concatenate([one_hot, param]))
     # action = np.concatenate([one_hot,  param])
-    # obs, reward, done, info = env.step(action)
-    # pdb.set_trace()
-    # env.modify_observable(observable_name=f"robot0_joint_pos", attribute="active", modifier=True)
-    # obs = env.reset()
-
+    
     # p = PrimitiveSkill(env)
     # obs, reward, done, info = p.move_to_pos_xy(
     #     obs=obs,

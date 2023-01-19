@@ -205,7 +205,7 @@ class PrimitiveSkill():
         # goal_yaw = self.home_wrist_ori
         gripper_action = 1 if params[3] > 0 else -1
 
-        max_steps = 150
+        max_steps = 200
         slow_speed = 0.15
         ori_speed = 0.05
         slow_dist = 0.02 # slow down when the end effector is slow_dist away from goal
