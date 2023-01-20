@@ -613,8 +613,6 @@ class POCReaching(SingleArmEnv):
         
         # if using low level action commands
         else:
-            self._update_intermediate_goals()
-
             # if input action dimension is 5, input is assumed to be [x, y, z, yaw, gripper]
             if action.shape[0] == 5:
                 action = np.concatenate([action[:3], np.zeros(2), action[3:]])
@@ -640,7 +638,11 @@ class POCReaching(SingleArmEnv):
                 action[:-1] = 0
                 print("Action out of bounds")
             
-            return super().step(action)
+            obs, reward, done, info =  super().step(action)
+
+            self._update_intermediate_goals()
+            
+            return obs, reward, done, info
 
     def step_no_count(self, action):
         """
@@ -727,12 +729,12 @@ class POCReaching(SingleArmEnv):
                 - (bool) whether the current episode is completed or not
                 - (dict) info about current env step
         """
-        reward, done, info = super()._post_action(action)
+        reward, _, info = super()._post_action(action)
 
         # allow episode to finish early if allowed
-        done = done or self._check_terminated()
+        self.done = self.done or self._check_terminated()
 
-        return reward, done, info
+        return reward, self.done, info
 
     def _scale_params(self, params): # TODO
         """
