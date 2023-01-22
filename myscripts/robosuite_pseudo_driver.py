@@ -163,69 +163,69 @@ if __name__ == "__main__":
     #     speed=0.8
     # )
 
-    env = suite.make(
-        env_name="POCReaching",
-        robots="Panda",
-        controller_configs=load_controller_config(default_controller="OSC_POSE"),
-        initialization_noise=None,
-        table_full_size=(0.65, 0.8, 0.15),
-        table_friction=(100, 100, 100),
-        use_camera_obs=False,
-        use_object_obs=True,
-        has_renderer=True,
-        has_offscreen_renderer=False,
-        render_camera="frontview",
-        ignore_done=True,
-        camera_names="frontview",
-        random_init=False,
-        use_skills=False,
-        normalized_params=False,
-    )
-    obs = env.reset()
-    pdb.set_trace()
-    spacemouse_control(env, obs_to_print=["subgoal_states"])
+    # env = suite.make(
+    #     env_name="POCReaching",
+    #     robots="Panda",
+    #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
+    #     initialization_noise=None,
+    #     table_full_size=(0.65, 0.8, 0.15),
+    #     table_friction=(100, 100, 100),
+    #     use_camera_obs=False,
+    #     use_object_obs=True,
+    #     has_renderer=True,
+    #     has_offscreen_renderer=False,
+    #     render_camera="frontview",
+    #     ignore_done=True,
+    #     camera_names="frontview",
+    #     random_init=False,
+    #     use_skills=False,
+    #     normalized_params=False,
+    # )
+    # obs = env.reset()
+    # pdb.set_trace()
+    # spacemouse_control(env, obs_to_print=["subgoal_states"])
 
     # while True:
     #     action = np.array([1, 1, 1, 0, 1])
     #     env.step(action)
     #     env.render()
 
-    while True:
-        obs = env.reset()
-        env.render()
+    # while True:
+    #     obs = env.reset()
+    #     env.render()
 
-        targetA_pos = obs["targetA_pos"]
-        targetB_pos = obs["targetB_pos"]
-        height = obs["robot0_eef_pos"][2]
+    #     targetA_pos = obs["targetA_pos"]
+    #     targetB_pos = obs["targetB_pos"]
+    #     height = obs["robot0_eef_pos"][2]
 
-        eef_pos_0 = obs["robot0_eef_pos"][:2]
-        u = (targetA_pos - eef_pos_0) / np.linalg.norm(targetA_pos - eef_pos_0)
+    #     eef_pos_0 = obs["robot0_eef_pos"][:2]
+    #     u = (targetA_pos - eef_pos_0) / np.linalg.norm(targetA_pos - eef_pos_0)
 
-        # move to target A
-        one_hot = np.array([1., 0.])
-        param = np.array([targetA_pos[0], targetA_pos[1], height, 0., 1.])
-        # param = np.array([1.1*u[0], 1.1*u[1], height, 0., 1.])
-        obs, reward, done, info = env.step(np.concatenate([one_hot, param]))
-        pdb.set_trace()
+    #     # move to target A
+    #     one_hot = np.array([1., 0.])
+    #     param = np.array([targetA_pos[0], targetA_pos[1], height, 0., 1.])
+    #     # param = np.array([1.1*u[0], 1.1*u[1], height, 0., 1.])
+    #     obs, reward, done, info = env.step(np.concatenate([one_hot, param]))
+    #     pdb.set_trace()
 
-        # # move out of target A
-        # one_hot = np.array([1., 0.])
-        # param = np.array([eef_pos_0[0], eef_pos_0[1], height, 0., 1.])
-        # # param = np.array([1.1*u[0], 1.1*u[1], height, 0., 1.])
-        # obs, reward, done, info = env.step(np.concatenate([one_hot, param]))
-        # pdb.set_trace()
+    #     # # move out of target A
+    #     # one_hot = np.array([1., 0.])
+    #     # param = np.array([eef_pos_0[0], eef_pos_0[1], height, 0., 1.])
+    #     # # param = np.array([1.1*u[0], 1.1*u[1], height, 0., 1.])
+    #     # obs, reward, done, info = env.step(np.concatenate([one_hot, param]))
+    #     # pdb.set_trace()
 
-        # gripper release
-        obs, reward, done, info = env.step(np.array([0, 1, 0, 0, 0, 0, 0]))
-        pdb.set_trace()
+    #     # gripper release
+    #     obs, reward, done, info = env.step(np.array([0, 1, 0, 0, 0, 0, 0]))
+    #     pdb.set_trace()
 
-        # move to target B
-        param = np.array([targetB_pos[0], targetB_pos[1], height, 0., -1.])
-        obs, reward, done, info = env.step(np.concatenate([one_hot, param]))
-        action = np.concatenate([one_hot,  param])
+    #     # move to target B
+    #     param = np.array([targetB_pos[0], targetB_pos[1], height, 0., -1.])
+    #     obs, reward, done, info = env.step(np.concatenate([one_hot, param]))
+    #     action = np.concatenate([one_hot,  param])
 
-        print("reward", reward)
-        pdb.set_trace()
+    #     print("reward", reward)
+    #     pdb.set_trace()
 
     # action = np.array([1., 0., -1., -1., 1., 1.])
     # env.step(action)
@@ -258,87 +258,72 @@ if __name__ == "__main__":
     #     thresh=0.001
     # )
 
-    # env = suite.make(
-    #     env_name="Cleanup",
-    #     robots="Panda",
-    #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
-    #     initialization_noise="default",
-    #     table_full_size=(0.8, 0.8, 0.05),
-    #     table_friction=(1., 5e-3, 1e-4),
-    #     table_offset=(0, 0, 0.8),
-    #     use_camera_obs=False,
-    #     use_object_obs=True,
-    #     reward_scale=1.0,
-    #     reward_shaping=False,
-    #     has_renderer=True,
-    #     has_offscreen_renderer=False,
-    #     render_camera="frontview",
-    #     ignore_done=True,
-    #     hard_reset=True,
-    #     camera_names="agentview",
-    #     task_config=None,
-    # )
-    # env.render()
-    # while True:
-    #     action = np.array([1, 1, 1, 0, 1])
-    #     env.step(action)
-    #     env.render()
+    env = suite.make(
+        env_name="Cleanup",
+        robots="Panda",
+        controller_configs=load_controller_config(default_controller="OSC_POSE"),
+        reward_scale=1.0,
+        has_renderer=True,
+        use_camera_obs=False,
+        has_offscreen_renderer=False,
+        ignore_done=False,
+        use_skills=True,
+        normalized_params=False,
+    )
+    obs = env.reset()
+    pnp_pos = obs["pnp_obj_pos"]
+    push_pos = obs["push_obj_pos"]
 
-    # pdb.set_trace()
-    # spacemouse_control(env, obs_to_print=["robot0_eef_pos", "pnp_obj_pos", "pnp_obj_quat", "push_obj_pos", "push_obj_quat"], gripper_closed=False, indicator_on=True)
+    # push
+    push_pos = obs["push_obj_pos"]
+    if push_pos[1] < 0.1:
+        action = np.array([0, 0, 1, push_pos[0], push_pos[1]-0.1, push_pos[2]+0.005, 0.15, push_pos[1], push_pos[2]+0.005, 0, 1])
+        obs, reward, done, info = env.step(action)
+        pdb.set_trace()
+        push_pos = obs["push_obj_pos"]
+    action = np.array([0, 0, 1, push_pos[0]+0.1, push_pos[1], push_pos[2]+0.005, -0.12, 0.15, push_pos[2]+0.005, 0, 1])
+    obs, reward, done, info = env.step(action)
+    pdb.set_trace()
+
+# push_pos = obs["push_obj_pos"]
+# action = np.array([0, 0, 1, push_pos[0]+0.1, push_pos[1], push_pos[2], -0.1, 0.15, push_pos[2], 0, 1])
+
+    # pnp
+    action = np.array([1, 0, 0, pnp_pos[0], pnp_pos[1], pnp_pos[2], 0.])
+    obs, reward, done, info = env.step(action)
+    action = np.array([0, 1, 0, -0.1, -0.1, pnp_pos[2]+0.07, 0])
+    obs, reward, done, info = env.step(action)
+    pdb.set_trace()
 
 
     # env = suite.make(
     #     env_name="StackCustom",
     #     robots="Panda",
     #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
-    #     initialization_noise="default",
-    #     table_full_size=(0.8, 0.8, 0.05),
-    #     table_friction=(1.0, 5e-3, 1e-4),
     #     use_camera_obs=False,
     #     use_object_obs=True,
     #     reward_scale=1.0,
-    #     placement_initializer=None,
     #     has_renderer=True,
     #     has_offscreen_renderer=False,
-    #     render_camera="frontview",
-    #     ignore_done=True,
-    #     hard_reset=True,
-    #     camera_names="agentview",
-    #     camera_heights=512,
-    #     camera_widths=512,
+    #     ignore_done=False,
+    #     use_skills=True,
+    #     normalized_params=False,
     # )
 
-    # env.modify_observable(observable_name=f"robot0_joint_pos", attribute="active", modifier=True)
-    # pdb.set_trace()
     # obs = env.reset()
-    # env.render()
+    # cubeA_pos = obs["cubeA_pos"]
+    # cubeB_pos = obs["cubeB_pos"]
+
+    # action = np.concatenate([np.array([1., 0.]), cubeA_pos[:2], np.array([0.,0., 1])])
+    # obs, reward, done, info = env.step(action)
     # pdb.set_trace()
-    # p = PrimitiveSkill(env)
-    # obs, reward, done, info = p.move_to_pos(
-    #     obs=obs,
-    #     goal_pos=(0, 0, obs["robot0_eef_pos"][2]+0.1),
-    #     gripper_closed=True,
-    #     wrist_ori=0,
-    #     # thresh=0.005
-    # )
-    # obs, reward, done, info = p.gripper_release()
-    # obs, reward, done, info = p.push(
-    #     obs=obs,
-    #     start_pos=obs["cubeA_pos"],# + np.array([-0.05, -0.05, 0]),
-    #     end_pos=obs["cubeA_pos"] + np.array([0.05, 0.05, 0]),
-    #     wrist_ori=None,
-    # )
-    # obs, rewad, done, info = p.pick(
-    #     obs=obs,
-    #     goal_pos=obs["cubeA_pos"],
-    #     wrist_ori=0.5*np.pi,
-    # )
-    # obs, rewad, done, info = p.place(
-    #     obs=obs,
-    #     goal_pos=(0,0,0.9),
-    #     wrist_ori=-0.5*np.pi,
-    # )
+
+    # action = np.concatenate([np.array([0., 1.]), cubeB_pos, np.array([0., 1])])
+    # action[4] = action[4] + 0.03
+    # obs, reward, done, info = env.step(action)
+
+    # pdb.set_trace()
+
 
 
     # env = suite.make(

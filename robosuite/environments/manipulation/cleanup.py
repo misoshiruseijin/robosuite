@@ -13,20 +13,9 @@ from robosuite.utils.placement_samplers import UniformRandomSampler
 from robosuite.utils import RandomizationError
 from robosuite.utils.observables import Observable, sensor
 from robosuite.utils.transform_utils import quat2yaw
-
+from robosuite.utils.primitive_skills import PrimitiveSkill
 
 import pdb
-
-# DEFAULT_CLEANUP_CONFIG = {
-#     'use_pnp_rew': True,
-#     'use_push_rew': True,
-#     'rew_type': 'sum',
-#     'num_pnp_objs': 1,
-#     'num_push_objs': 1,
-#     'shaped_push_rew': False,
-#     'push_scale_fac': 5.0,
-# }
-
 
 class Cleanup(SingleArmEnv):
     """
@@ -145,7 +134,7 @@ class Cleanup(SingleArmEnv):
         gripper_types="default",
         initialization_noise="default",
         table_full_size=(0.8, 0.8, 0.05),
-        table_friction=(1., 5e-3, 1e-4),
+        table_friction=(1.0, 5e-3, 1e-4),
         table_offset=(0, 0, 0.8),
         use_camera_obs=True,
         use_object_obs=True,
@@ -159,7 +148,7 @@ class Cleanup(SingleArmEnv):
         render_visual_mesh=True,
         render_gpu_device_id=-1,
         control_freq=20,
-        horizon=1000,
+        horizon=4000,
         ignore_done=False,
         hard_reset=True,
         camera_names="agentview",
@@ -167,6 +156,8 @@ class Cleanup(SingleArmEnv):
         camera_widths=256,
         camera_depths=False,
         task_config=None,
+        use_skills=False,
+        normalized_params=True
     ):
         # settings for table top
         self.table_full_size = table_full_size
@@ -195,6 +186,22 @@ class Cleanup(SingleArmEnv):
         self.workspace_x = (self.table_offset[0] - self.table_full_size[0]/2, self.table_offset[0] + self.table_full_size[0]/2)
         self.workspace_y = (self.table_offset[1] - self.table_full_size[1]/2, self.table_offset[1] + self.table_full_size[1]/2)
         self.workspace_z = (self.table_offset[2] + 0.03, self.table_offset[0] + 0.53)
+        self.yaw_bounds = (-0.5*np.pi, 0.5*np.pi)
+
+        # primitive skill mode
+        self.use_skills = use_skills  
+        self.skill = PrimitiveSkill(
+            skill_indices={
+                0 : "pick",
+                1 : "place",
+                2 : "push",
+            }
+        )
+        self.num_skills = self.skill.n_skills
+        self.normalized_params = normalized_params
+
+        # whether reward has been given - completion reward is only given once
+        self.reward_given = False
 
         super().__init__(
             robots=robots,
@@ -221,16 +228,37 @@ class Cleanup(SingleArmEnv):
             # skill_config=skill_config,
         )
 
+        self.cur_obs = self.reset()
+
     def reward(self, action):
         
         # full completion reward only
-        reward = 0        
+        reward = 0.0       
 
-        if self._check_success():
-            reward = 10
+        if self._check_success() and not self.reward_given:
+            reward = 10.0
+            if not self.use_skills:
+                self.reward_given = True
+                print("~~~~~~~~~~~~~~ TASK COMPLETE ~~~~~~~~~~~~~~")            
 
         if self.reward_scale is not None:
             reward = self.reward_scale * reward / 10
+
+        return reward
+
+    def _reward(self, action=None):
+        
+        reward = 0.0
+        
+        # check if task is complete
+        if self._check_success() and not self.reward_given:
+            reward = 10.0
+            self.reward_given = True
+            print("~~~~~~~~~~~~~~ TASK COMPLETE ~~~~~~~~~~~~~~")
+
+        # Scale reward if requested
+        if self.reward_scale is not None:
+            reward *= self.reward_scale / 10
 
         return reward
 
@@ -568,8 +596,30 @@ class Cleanup(SingleArmEnv):
     
     def step(self, action):
 
-        ###### TODO - when using skills ######
-        
+        # if using primitive skills
+        if self.use_skills:
+            done, skill_done, skill_failed = False, False, False
+            obs = self.cur_obs
+
+            if self.normalized_params:
+                action = self._scale_params(action)
+
+            while not done and not skill_done:
+                action_ll, skill_done, skill_failed = self.skill.get_action(action, obs)
+                # print("done, skill done, fail", done, skill_done, skill_failed)
+                # print("action_ll", action_ll)
+                obs, reward, done, info = super().step(action_ll)
+                if self.has_renderer:
+                    self.render()
+                self.gripper_state = action_ll[-1]
+            self.cur_obs = obs
+            
+            reward = self._reward()
+            if skill_failed:
+                print("failed to execute primitive")
+                reward = 0.0
+            return self.cur_obs, reward, done, info 
+
         ###### when using low level actions ######
         # if input action dimension is 5, input is assumed to be [x, y, z, yaw, gripper]
         if action.shape[0] == 5:
@@ -591,32 +641,6 @@ class Cleanup(SingleArmEnv):
         
         return super().step(action)
 
-    ###### Intermediate Rewards #########
-    # def _check_success_pnp(self):
-    #     for i in range(self.task_config['num_pnp_objs']):
-    #         _, _, _, _, b = self.pnp_staged_rewards(obj_id=i)
-    #         if b < 1:
-    #             return False
-    #     return True
-
-    # def _check_success_push(self):
-    #     for i in range(self.task_config['num_push_objs']):
-    #         _, _, d = self.push_staged_rewards(obj_id=i)
-    #         if d > 0.10:
-    #             return False
-    #     return True
-
-    # def _check_success(self):
-    #     if self.task_config['use_pnp_rew']:
-    #         if not self._check_success_pnp():
-    #             return False
-
-    #     if self.task_config['use_push_rew']:
-    #         if not self._check_success_push():
-    #             return False
-
-    #     return True
-
     def _check_action_in_bounds(self, action):
 
         sf = 2 # safety factor to prevent robot from moving out of bounds
@@ -634,6 +658,23 @@ class Cleanup(SingleArmEnv):
             return True
         return False
 
+    def _check_terminated(self):
+        """
+        Check if the task has completed one way or another. The following conditions lead to termination:
+
+            - Task completion
+
+        Returns:
+            bool: True if episode is terminated
+        """
+
+        terminated = False
+
+        # Prematurely terminate if task is success
+        if self._check_success():
+            terminated = True
+
+        return terminated
     def _get_info_pnp(self, obj_id=0):
         pnp_obj_pos = self.sim.data.body_xpos[self.pnp_obj_body_ids[obj_id]]
         pnp_obj = self.pnp_objs[obj_id]
@@ -658,6 +699,7 @@ class Cleanup(SingleArmEnv):
         return reached, grasped, hovering, in_bin
 
     def _get_info_push(self, obj_id=0):
+        
         push_obj_pos = self.sim.data.body_xpos[self.push_obj_body_ids[obj_id]]
 
         target_pos_xy = self.table_offset[:2] + np.array([-0.15, 0.15])
@@ -666,3 +708,49 @@ class Cleanup(SingleArmEnv):
         pushed = (d_push <= 0.10)
 
         return pushed
+
+    def _post_action(self, action):
+        """
+        In addition to super method, add additional info if requested
+
+        Args:
+            action (np.array): Action to execute within the environment
+
+        Returns:
+            3-tuple:
+
+                - (float) reward from the environment
+                - (bool) whether the current episode is completed or not
+                - (dict) info about current env step
+        """
+        reward, _, info = super()._post_action(action)
+
+        # allow episode to finish early if allowed
+        self.done = self.done or self._check_terminated()
+
+        return reward, self.done, info
+
+    def reset(self):
+        print("Resetting....")
+        return super().reset()
+
+    def _scale_params(self, action):
+        """
+        Scales normalized parameters ([-1, 1]) to appropriate raw values
+        """
+        params = action[self.num_skills:]
+
+        params[0] = params[0] * 0.5 * (self.workspace_x[1] - self.workspace_x[0]) - np.mean(self.workspace_x)
+        params[1] = params[1] * 0.5 * (self.workspace_y[1] - self.workspace_y[0]) - np.mean(self.workspace_y)
+        params[2] = params[2] * 0.5 * (self.workspace_z[1] - self.workspace_z[0]) - np.mean(self.workspace_z)
+        
+        if action[2] > 0: # action is push
+            params[3] = params[3] * 0.5 * (self.workspace_x[1] - self.workspace_x[0]) - np.mean(self.workspace_x)
+            params[4] = params[4] * 0.5 * (self.workspace_y[1] - self.workspace_y[0]) - np.mean(self.workspace_y)
+            params[5] = params[5] * 0.5 * (self.workspace_z[1] - self.workspace_z[0]) - np.mean(self.workspace_z)
+            params[6] = params[6] * 0.5 * (self.yaw_bounds[1] - self.yaw_bounds[0]) - np.mean(self.yaw_bounds)
+
+        else: # action is pick or place
+            params[3] = params[3] * 0.5 * (self.yaw_bounds[1] - self.yaw_bounds[0]) - np.mean(self.yaw_bounds)
+
+        return np.concatenate([action[:self.num_skills], params])

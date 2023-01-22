@@ -10,6 +10,7 @@ from robosuite.utils.mjcf_utils import CustomMaterial
 from robosuite.utils.observables import Observable, sensor
 from robosuite.utils.placement_samplers import UniformRandomSampler
 from robosuite.utils.transform_utils import convert_quat, quat2yaw
+from robosuite.utils.primitive_skills import PrimitiveSkill
 
 
 class StackCustom(SingleArmEnv):
@@ -191,6 +192,20 @@ class StackCustom(SingleArmEnv):
         # gripper state
         self.gripper_state = -1 
 
+        # primitive skill mode
+        self.use_skills = use_skills  
+        self.skill = PrimitiveSkill(
+            skill_indices={
+                0 : "pick",
+                1 : "place",
+            }
+        )
+        self.num_skills = self.skill.n_skills
+        self.normalized_params = normalized_params
+
+        # whether reward has been given - completion reward is only given once
+        self.reward_given = False
+
         super().__init__(
             robots=robots,
             env_configuration=env_configuration,
@@ -218,32 +233,20 @@ class StackCustom(SingleArmEnv):
             renderer_config=renderer_config,
         )
 
+        self.cur_obs = self.reset()
+
     def reward(self, action):
         """
         Reward function for the task.
 
         Sparse un-normalized reward:
 
-            - a discrete reward of 2.0 is provided if the red block is stacked on the green block
-
-        Un-normalized components if using reward shaping:
-
-            - Reaching: in [0, 0.25], to encourage the arm to reach the cube
-            - Grasping: in {0, 0.25}, non-zero if arm is grasping the cube
-            - Lifting: in {0, 1}, non-zero if arm has lifted the cube
-            - Aligning: in [0, 0.5], encourages aligning one cube over the other
-            - Stacking: in {0, 2}, non-zero if cube is stacked on other cube
-
-        The reward is max over the following:
-
-            - Reaching + Grasping
-            - Lifting + Aligning
-            - Stacking
+            - a discrete reward of 10.0 is provided if the red block is stacked on the green block
 
         The sparse reward only consists of the stacking component.
 
         Note that the final reward is normalized and scaled by
-        reward_scale / 2.0 as well so that the max score is equal to reward_scale
+        reward_scale / 10.0 as well so that the max score is equal to reward_scale
 
         Args:
             action (np array): [NOT USED]
@@ -251,59 +254,50 @@ class StackCustom(SingleArmEnv):
         Returns:
             float: reward value
         """
-        r_reach, r_lift, r_stack = self.staged_rewards()
-        if self.reward_shaping:
-            reward = max(r_reach, r_lift, r_stack)
-        else:
-            reward = 2.0 if r_stack > 0 else 0.0
+        reward = 0.0
+
+        if self._check_success() and not self.reward_given:
+            reward = 10.0
+            if not self.use_skills:
+                self.reward_given = True
+                print("~~~~~~~~~~~~~~ TASK COMPLETE ~~~~~~~~~~~~~~")            
 
         if self.reward_scale is not None:
-            reward *= self.reward_scale / 2.0
+            reward *= self.reward_scale / 10.0
 
         return reward
 
-    def staged_rewards(self):
+    def _reward(self, action=None): 
         """
-        Helper function to calculate staged rewards based on current physical states.
+        Reward function for the task. Used when using primitive skills
+
+        Sparse un-normalized reward:
+
+            - a discrete reward of 10.0 is provided if entire task is complete
+
+        Note that the final reward is normalized and scaled by
+        reward_scale / 10 as well so that the max score is equal to reward_scale
+
+        Args:
+            action (np array): [NOT USED]
 
         Returns:
-            3-tuple:
-
-                - (float): reward for reaching and grasping
-                - (float): reward for lifting and aligning
-                - (float): reward for stacking
+            float: reward value
         """
-        # reaching is successful when the gripper site is close to the center of the cube
-        cubeA_pos = self.sim.data.body_xpos[self.cubeA_body_id]
-        cubeB_pos = self.sim.data.body_xpos[self.cubeB_body_id]
-        gripper_site_pos = self.sim.data.site_xpos[self.robots[0].eef_site_id]
-        dist = np.linalg.norm(gripper_site_pos - cubeA_pos)
-        r_reach = (1 - np.tanh(10.0 * dist)) * 0.25
+        reward = 0.0
+        
+        # check if task is complete
+        if self._check_success() and not self.reward_given:
+            reward = 10.0
+            self.reward_given = True
+            print("~~~~~~~~~~~~~~ TASK COMPLETE ~~~~~~~~~~~~~~")
 
-        # grasping reward
-        grasping_cubeA = self._check_grasp(gripper=self.robots[0].gripper, object_geoms=self.cubeA)
-        if grasping_cubeA:
-            r_reach += 0.25
+        # Scale reward if requested
+        if self.reward_scale is not None:
+            reward *= self.reward_scale / 10
 
-        # lifting is successful when the cube is above the table top by a margin
-        cubeA_height = cubeA_pos[2]
-        table_height = self.table_offset[2]
-        cubeA_lifted = cubeA_height > table_height + 0.04
-        r_lift = 1.0 if cubeA_lifted else 0.0
-
-        # Aligning is successful when cubeA is right above cubeB
-        if cubeA_lifted:
-            horiz_dist = np.linalg.norm(np.array(cubeA_pos[:2]) - np.array(cubeB_pos[:2]))
-            r_lift += 0.5 * (1 - np.tanh(horiz_dist))
-
-        # stacking is successful when the block is lifted and the gripper is not holding the object
-        r_stack = 0
-        cubeA_touching_cubeB = self.check_contact(self.cubeA, self.cubeB)
-        if not grasping_cubeA and r_lift > 0 and cubeA_touching_cubeB:
-            r_stack = 2.0
-
-        return r_reach, r_lift, r_stack
-
+        return reward
+        
     def _load_model(self):
         """
         Loads an xml model, puts it in self.model
@@ -528,9 +522,17 @@ class StackCustom(SingleArmEnv):
         Returns:
             bool: True if blocks are correctly stacked
         """
-        _, _, r_stack = self.staged_rewards()
-        return r_stack > 0
-   
+        A_touching_B = self.check_contact(self.cubeA, self.cubeB)
+        grasping_A = self._check_grasp(gripper=self.robots[0].gripper, object_geoms=self.cubeA)
+        cubeA_pos = np.array(self.sim.data.body_xpos[self.cubeA_body_id])
+        cubeB_pos = np.array(self.sim.data.body_xpos[self.cubeB_body_id])
+        A_above_B = cubeA_pos[2] > cubeB_pos[2]
+
+        if A_above_B and A_touching_B and not grasping_A:
+            return True
+
+        return False
+
     def _check_terminated(self):
         """
         Check if the task has completed one way or another. The following conditions lead to termination:
@@ -575,8 +577,28 @@ class StackCustom(SingleArmEnv):
     
     def step(self, action):
 
-        ## TODO - case when using skills 
+        # if using primitive skills
+        if self.use_skills:
+            done, skill_done, skill_failed = False, False, False
+            obs = self.cur_obs
 
+            if self.normalized_params: # scale parameters if input params are normalized values
+                action[self.num_skills:] = self._scale_params(action[self.num_skills:])
+            
+            while not done and not skill_done:
+                action_ll, skill_done, skill_failed = self.skill.get_action(action, obs)
+                # print("done, skill done, fail", done, skill_done, skill_failed)
+                obs, reward, done, info = super().step(action_ll)
+                if self.has_renderer:
+                    self.render()
+                self.gripper_state = action_ll[-1]
+            self.cur_obs = obs
+            
+            reward = self._reward()
+            if skill_failed:
+                print("failed to execute primitive")
+                reward = 0.0
+            return self.cur_obs, reward, done, info 
 
         ### when using low level actions
         # if input action dimension is 5, input is assumed to be [x, y, z, yaw, gripper]
@@ -596,7 +618,11 @@ class StackCustom(SingleArmEnv):
         self.gripper_state = action[-1] # update gripper state
 
         return super().step(action)
-        
+
+    def reset(self):
+        print("Resetting....")
+        return super().reset()
+
     def _post_action(self, action):
         """
         In addition to super method, add additional info if requested
@@ -611,9 +637,20 @@ class StackCustom(SingleArmEnv):
                 - (bool) whether the current episode is completed or not
                 - (dict) info about current env step
         """
-        reward, done, info = super()._post_action(action)
+        reward, _, info = super()._post_action(action)
 
         # allow episode to finish early if allowed
-        done = done or self._check_terminated()
+        self.done = self.done or self._check_terminated()
 
-        return reward, done, info
+        return reward, self.done, info
+
+    def _scale_params(self, params): # TODO
+        """
+        Scales normalized parameter ([-1, 1]) to appropriate raw values
+        """
+        # print("param", params)
+        params[0] = params[0] * 0.5 * (self.workspace_x[1] - self.workspace_x[0]) - np.mean(self.workspace_x)
+        params[1] = params[1] * 0.5 * (self.workspace_y[1] - self.workspace_y[0]) - np.mean(self.workspace_y)
+        params[2] = params[2] * 0.5 * (self.workspace_z[1] - self.workspace_z[0]) - np.mean(self.workspace_z)
+        params[3] = params[3] * 0.5 * (self.yaw_bounds[1] - self.yaw_bounds[0]) - np.mean(self.yaw_bounds)
+        return params
