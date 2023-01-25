@@ -603,12 +603,15 @@ class Cleanup(SingleArmEnv):
 
             if self.normalized_params:
                 action = self._scale_params(action)
+            
+            num_timesteps = 0
 
             while not done and not skill_done:
                 action_ll, skill_done, skill_failed = self.skill.get_action(action, obs)
                 # print("done, skill done, fail", done, skill_done, skill_failed)
                 # print("action_ll", action_ll)
                 obs, reward, done, info = super().step(action_ll)
+                num_timesteps += 1
                 if self.has_renderer:
                     self.render()
                 self.gripper_state = action_ll[-1]
@@ -618,6 +621,9 @@ class Cleanup(SingleArmEnv):
             if skill_failed:
                 print("failed to execute primitive")
                 reward = 0.0
+
+            info = {"num_timesteps": num_timesteps}
+
             return self.cur_obs, reward, done, info 
 
         ###### when using low level actions ######

@@ -597,9 +597,12 @@ class POCReaching(SingleArmEnv):
             
             self.prev_gripper_state = self.gripper_state
 
+            num_timesteps = 0
+
             while not done and not skill_done:
                 action_ll, skill_done = self.skill.get_action(action, obs)
                 obs, reward, done, info = super().step(action_ll)
+                num_timesteps += 1
                 if self.has_renderer:
                     self.render()
                 self.gripper_state = action_ll[-1]
@@ -607,6 +610,8 @@ class POCReaching(SingleArmEnv):
 
             if skill_done:
                 self._update_intermediate_goals()
+
+            info = {"num_timesteps": num_timesteps}
             
             reward = self._reward()
             return self.cur_obs, reward, done, info

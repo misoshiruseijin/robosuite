@@ -585,10 +585,13 @@ class StackCustom(SingleArmEnv):
             if self.normalized_params: # scale parameters if input params are normalized values
                 action[self.num_skills:] = self._scale_params(action[self.num_skills:])
             
+            num_timesteps = 0
+
             while not done and not skill_done:
                 action_ll, skill_done, skill_failed = self.skill.get_action(action, obs)
                 # print("done, skill done, fail", done, skill_done, skill_failed)
                 obs, reward, done, info = super().step(action_ll)
+                num_timesteps += 1
                 if self.has_renderer:
                     self.render()
                 self.gripper_state = action_ll[-1]
@@ -598,6 +601,9 @@ class StackCustom(SingleArmEnv):
             if skill_failed:
                 print("failed to execute primitive")
                 reward = 0.0
+            
+            info = {"num_timesteps": num_timesteps}
+
             return self.cur_obs, reward, done, info 
 
         ### when using low level actions

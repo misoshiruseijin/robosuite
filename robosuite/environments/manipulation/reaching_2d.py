@@ -485,6 +485,7 @@ class Reaching2D(SingleArmEnv):
             skill_done = False
             obs = self.cur_obs
             total_reward = 0
+            num_timesteps = 0
 
             if self.normalized_params: # scale parameters if input params are normalized values
                 action[self.num_skills:] = self._scale_params(action[self.num_skills:])
@@ -493,9 +494,12 @@ class Reaching2D(SingleArmEnv):
                 action_ll, skill_done = self.skill.get_action(action, obs)
                 obs, reward, done, info = super().step(action_ll)
                 total_reward += reward
+                num_timesteps += 1
                 if self.has_renderer:
                     self.render()
             self.cur_obs = obs
+
+            info = {"num_timesteps": num_timesteps}
 
             return self.cur_obs, total_reward, done, info
 
