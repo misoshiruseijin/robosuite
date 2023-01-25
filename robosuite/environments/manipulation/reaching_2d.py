@@ -253,6 +253,7 @@ class Reaching2D(SingleArmEnv):
             renderer_config=renderer_config,
         )
 
+        self.cur_obs = self.reset()
 
     def reward(self, action=None):
         """
