@@ -561,8 +561,10 @@ class Cleanup(SingleArmEnv):
                     return convert_quat(np.array(self.sim.data.body_xquat[self.pnp_obj_body_id]), to="xyzw")
 
                 @sensor(modality=modality)
-                def pnp_obj_yaw(obs_cache):
-                    return quat2yaw(convert_quat(np.array(self.sim.data.body_xquat[self.pnp_obj_body_id]), to="xyzw"))
+                def pnp_obj_pos_yaw(obs_cache):
+                    pos = np.array(self.sim.data.body_xpos[self.pnp_obj_body_id])
+                    quat = convert_quat(np.array(self.sim.data.body_xquat[self.pnp_obj_body_id]), to="xyzw")
+                    return np.append(pos, quat2yaw(quat))
 
                 @sensor(modality=modality)
                 def push_obj_pos(obs_cache):
@@ -571,15 +573,17 @@ class Cleanup(SingleArmEnv):
                 @sensor(modality=modality)
                 def push_obj_quat(obs_cache):
                     return convert_quat(np.array(self.sim.data.body_xquat[self.push_obj_body_id]), to="xyzw")
-      
+
                 @sensor(modality=modality)
-                def push_obj_yaw(obs_cache):
-                    return quat2yaw(convert_quat(np.array(self.sim.data.body_xquat[self.push_obj_body_id]), to="xyzw"))
+                def push_obj_pos_yaw(obs_cache):
+                    pos = np.array(self.sim.data.body_xpos[self.push_obj_body_id])
+                    quat = convert_quat(np.array(self.sim.data.body_xquat[self.push_obj_body_id]), to="xyzw")
+                    return np.append(pos, quat2yaw(quat))
 
                 sensors = [
                     eef_xyz, eef_yaw, gripper_state, 
-                    pnp_obj_pos, pnp_obj_quat, pnp_obj_yaw,
-                    push_obj_pos, push_obj_quat, push_obj_yaw
+                    pnp_obj_pos, pnp_obj_quat, pnp_obj_pos_yaw,
+                    push_obj_pos, push_obj_quat, push_obj_pos_yaw,
                 ]
 
                 names = [s.__name__ for s in sensors]

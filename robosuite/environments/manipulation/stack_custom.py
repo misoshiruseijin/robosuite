@@ -501,8 +501,8 @@ class StackCustom(SingleArmEnv):
                 eef_xyz, eef_yaw, gripper_state,
                 cubeA_pos, cubeA_quat, cubeA_pos_yaw,
                 cubeB_pos, cubeB_quat, cubeB_pos_yaw,
-                gripper_to_cubeA, gripper_to_cubeB, cubeA_to_cubeB
-                ]
+                gripper_to_cubeA, gripper_to_cubeB, cubeA_to_cubeB,
+            ]
             names = [s.__name__ for s in sensors]
 
             # Create observables
