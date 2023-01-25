@@ -484,7 +484,7 @@ class Reaching2D(SingleArmEnv):
         if self.use_skills:
             skill_done = False
             obs = self.cur_obs
-            total_reward = 0
+            # total_reward = 0
             num_timesteps = 0
 
             if self.normalized_params: # scale parameters if input params are normalized values
@@ -493,15 +493,20 @@ class Reaching2D(SingleArmEnv):
             while not skill_done:
                 action_ll, skill_done = self.skill.get_action(action, obs)
                 obs, reward, done, info = super().step(action_ll)
-                total_reward += reward
+                # total_reward += reward
                 num_timesteps += 1
                 if self.has_renderer:
                     self.render()
             self.cur_obs = obs
 
+            reward = self.reward()
+            if skill_failed:
+                print("failed to execute primitive")
+                reward = 0.0
+
             info = {"num_timesteps": num_timesteps}
 
-            return self.cur_obs, total_reward, done, info
+            return self.cur_obs, reward, done, info
 
         # if using low level inputs        
         else:
