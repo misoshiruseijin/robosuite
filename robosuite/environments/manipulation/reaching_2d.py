@@ -523,7 +523,7 @@ class Reaching2D(SingleArmEnv):
             if self.normalized_params: # scale parameters if input params are normalized values
                 action[self.num_skills:] = self._scale_params(action[self.num_skills:])
             
-            while not skill_done:
+            while not done and not skill_done:
                 action_ll, skill_done = self.skill.get_action(action, obs)
                 obs, reward, done, info = super().step(action_ll)
                 # total_reward += reward
