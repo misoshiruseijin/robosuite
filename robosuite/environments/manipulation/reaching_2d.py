@@ -515,7 +515,7 @@ class Reaching2D(SingleArmEnv):
 
         # if using primitive skills
         if self.use_skills:
-            skill_done = False
+            done, skill_done = False, False
             obs = self.cur_obs
             # total_reward = 0
             num_timesteps = 0
