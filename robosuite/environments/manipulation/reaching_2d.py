@@ -261,10 +261,10 @@ class Reaching2D(SingleArmEnv):
 
         Sparse un-normalized reward:
 
-            - a discrete reward of 2.25 is provided if the gripper ends up in the target region
+            - a discrete reward of 10.0 is provided if the gripper ends up in the target region
 
         Note that the final reward is normalized and scaled by
-        reward_scale / 2.25 as well so that the max score is equal to reward_scale
+        reward_scale / 10.0 as well so that the max score is equal to reward_scale
 
         Args:
             action (np array): [NOT USED]
@@ -276,13 +276,45 @@ class Reaching2D(SingleArmEnv):
 
         # sparse completion reward
         if self._check_success() and not self.reward_given:
-            reward = 10
+            reward = 10.0
+            if not self.use_skills:
+                self.reward_given = True
+                print("~~~~~~~~in target~~~~~~~~~~~~~~")
+        
+        # Scale reward if requested
+        if self.reward_scale is not None:
+            reward *= self.reward_scale / 10.0
+
+        return reward
+
+    def _reward(self, action=None):
+        """
+        Reward function for the task.
+
+        Sparse un-normalized reward:
+
+            - a discrete reward of 10.0 is provided if the gripper ends up in the target region
+
+        Note that the final reward is normalized and scaled by
+        reward_scale / 10.0 as well so that the max score is equal to reward_scale
+
+        Args:
+            action (np array): [NOT USED]
+
+        Returns:
+            float: reward value
+        """
+        reward = 0.0
+
+        # sparse completion reward
+        if self._check_success() and not self.reward_given:
+            reward = 10.0
             self.reward_given = True
             print("~~~~~~~~in target~~~~~~~~~~~~~~")
         
         # Scale reward if requested
         if self.reward_scale is not None:
-            reward *= self.reward_scale / 10
+            reward *= self.reward_scale / 10.0
 
         return reward
 
@@ -500,13 +532,9 @@ class Reaching2D(SingleArmEnv):
                     self.render()
             self.cur_obs = obs
 
-            reward = self.reward()
-            if skill_failed:
-                print("failed to execute primitive")
-                reward = 0.0
-
             info = {"num_timesteps": num_timesteps}
 
+            reward = self._reward()            
             return self.cur_obs, reward, done, info
 
         # if using low level inputs        
