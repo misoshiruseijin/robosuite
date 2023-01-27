@@ -616,7 +616,7 @@ class Reaching2D(SingleArmEnv):
             thresh = 0.005
             while np.any(np.abs(self._eef_xpos[:2] - self.initial_eef_pos) > thresh):
                 action = 4 * (self.initial_eef_pos - self._eef_xpos[:2]) / np.linalg.norm(self.initial_eef_pos - self._eef_xpos[:2])
-                action = np.concatenate((action, np.array([0, 0, 0, -1])))
+                action = np.concatenate((action, np.array([0, 0, 0, 0, -1])))
                 observations, reward, done, info = self.step_no_count(action)
                 # print("error to initial pos ", initial_pos - self._eef_xpos)
         
