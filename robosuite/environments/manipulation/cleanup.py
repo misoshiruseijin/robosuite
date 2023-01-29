@@ -620,13 +620,18 @@ class Cleanup(SingleArmEnv):
                     self.render()
                 self.gripper_state = action_ll[-1]
             self.cur_obs = obs
-            
-            reward = self._reward()
-            if skill_failed:
-                print("failed to execute primitive")
-                reward = 0.0
 
             info = {"num_timesteps": num_timesteps}
+
+            reward = self._reward()
+            if reward > 0 and skill_failed:
+                print("Reward earned on accident... Setting reward = 0")
+                reward = 0.0
+            
+            info = {"num_timesteps": num_timesteps}
+            
+            if self._check_success(): # check if termination condition (success) is met
+                done = True
 
             return self.cur_obs, reward, done, info 
 
@@ -664,7 +669,6 @@ class Cleanup(SingleArmEnv):
         returns True if pnp_obj is in bin and push_obj is in target region
         """
         if self.in_bin(self.sim.data.body_xpos[self.pnp_obj_body_id]) and self.in_push_target(self.sim.data.body_xpos[self.push_obj_body_id]):
-            print("SUCCESS")
             return True
         return False
 
@@ -681,10 +685,11 @@ class Cleanup(SingleArmEnv):
         terminated = False
 
         # Prematurely terminate if task is success
-        if self._check_success():
+        if self._check_success() and not self.use_skills:
             terminated = True
 
         return terminated
+
     def _get_info_pnp(self, obj_id=0):
         pnp_obj_pos = self.sim.data.body_xpos[self.pnp_obj_body_ids[obj_id]]
         pnp_obj = self.pnp_objs[obj_id]
@@ -750,17 +755,18 @@ class Cleanup(SingleArmEnv):
         """
         params = action[self.num_skills:]
 
-        params[0] = params[0] * 0.5 * (self.workspace_x[1] - self.workspace_x[0]) - np.mean(self.workspace_x)
-        params[1] = params[1] * 0.5 * (self.workspace_y[1] - self.workspace_y[0]) - np.mean(self.workspace_y)
-        params[2] = params[2] * 0.5 * (self.workspace_z[1] - self.workspace_z[0]) - np.mean(self.workspace_z)
+        params[0] = ( ((params[0] + 1) / 2 ) * (self.workspace_x[1] - self.workspace_x[0]) ) + self.workspace_x[0]
+        params[1] = ( ((params[1] + 1) / 2 ) * (self.workspace_y[1] - self.workspace_y[0]) ) + self.workspace_y[0]
+        params[2] = ( ((params[2] + 1) / 2 ) * (self.workspace_z[1] - self.workspace_z[0]) ) + self.workspace_z[0]
         
         if action[2] > 0: # action is push
-            params[3] = params[3] * 0.5 * (self.workspace_x[1] - self.workspace_x[0]) - np.mean(self.workspace_x)
-            params[4] = params[4] * 0.5 * (self.workspace_y[1] - self.workspace_y[0]) - np.mean(self.workspace_y)
-            params[5] = params[5] * 0.5 * (self.workspace_z[1] - self.workspace_z[0]) - np.mean(self.workspace_z)
-            params[6] = params[6] * 0.5 * (self.yaw_bounds[1] - self.yaw_bounds[0]) - np.mean(self.yaw_bounds)
+            params[3] = ( ((params[3] + 1) / 2 ) * (self.workspace_x[1] - self.workspace_x[0]) ) + self.workspace_x[0]
+            params[4] = ( ((params[4] + 1) / 2 ) * (self.workspace_y[1] - self.workspace_y[0]) ) + self.workspace_y[0]
+            params[5] = ( ((params[5] + 1) / 2 ) * (self.workspace_z[1] - self.workspace_z[0]) ) + self.workspace_z[0]
+            params[6] = ( ((params[6] + 1) / 2 ) * (self.yaw_bounds[1] - self.yaw_bounds[0]) ) + self.yaw_bounds[0]
 
         else: # action is pick or place
-            params[3] = params[3] * 0.5 * (self.yaw_bounds[1] - self.yaw_bounds[0]) - np.mean(self.yaw_bounds)
+            params[3] = ( ((params[3] + 1) / 2 ) * (self.yaw_bounds[1] - self.yaw_bounds[0]) ) + self.yaw_bounds[0]
 
         return np.concatenate([action[:self.num_skills], params])
+

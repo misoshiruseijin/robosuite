@@ -369,7 +369,7 @@ class POCReaching(SingleArmEnv):
             print("-----RELEASED AT TARGET A-----")
 
         elif self.reached_targetA and self.released_at_A and not self.reached_targetB:
-            if self._check_in_region(self.targetB_position, self.target_half_size, self._eef_xpos):
+            if self._eef_in_targetB():
                 # final goal (move to targetB) complete
                 self.reached_targetB = True
                 print("-----REACHED TARGET B-----")
@@ -552,7 +552,7 @@ class POCReaching(SingleArmEnv):
         terminated = False
 
         # Prematurely terminate if task is success
-        if self._check_success():
+        if self._check_success() and not self.use_skills:
             terminated = True
 
         return terminated
@@ -608,12 +608,20 @@ class POCReaching(SingleArmEnv):
                 self.gripper_state = action_ll[-1]
             self.cur_obs = obs
 
+            if done:
+                print(f"=====horizon reached {self.timestep}=====")
+                
             if skill_done:
                 self._update_intermediate_goals()
 
             info = {"num_timesteps": num_timesteps}
             
             reward = self._reward()
+            if reward > 0 and not skill_done:
+                reward = 0.0
+                print("Reward earned by accident... setting reward = 0")
+            if self._check_success(): # check if termination condition (success) is met
+                done = True
             return self.cur_obs, reward, done, info
         
         # if using low level action commands
@@ -741,13 +749,13 @@ class POCReaching(SingleArmEnv):
 
         return reward, self.done, info
 
-    def _scale_params(self, params): # TODO
+    def _scale_params(self, params): # TODO - update after deciding which primitive skills to use
         """
         Scales normalized parameter ([-1, 1]) to appropriate raw values
         """
-        print("param", params)
-        params[0] = params[0] * 0.5 * (self.workspace_x[1] - self.workspace_x[0]) - np.mean(self.workspace_x)
-        params[1] = params[1] * 0.5 * (self.workspace_y[1] - self.workspace_y[0]) - np.mean(self.workspace_y)
-        params[2] = params[2] * 0.5 * (self.workspace_z[1] - self.workspace_z[0]) - np.mean(self.workspace_z)
-        params[3] = params[3] * 0.5 * (self.yaw_bounds[1] - self.yaw_bounds[0]) - np.mean(self.yaw_bounds)
+        params[0] = ( ((params[0] + 1) / 2 ) * (self.workspace_x[1] - self.workspace_x[0]) ) + self.workspace_x[0]
+        params[1] = ( ((params[1] + 1) / 2 ) * (self.workspace_y[1] - self.workspace_y[0]) ) + self.workspace_y[0]
+        params[2] = ( ((params[2] + 1) / 2 ) * (self.workspace_z[1] - self.workspace_z[0]) ) + self.workspace_z[0]
+        params[3] = ( ((params[3] + 1) / 2 ) * (self.yaw_bounds[1] - self.yaw_bounds[0]) ) + self.yaw_bounds[0]
+
         return params

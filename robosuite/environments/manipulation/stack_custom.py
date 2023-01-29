@@ -546,7 +546,7 @@ class StackCustom(SingleArmEnv):
         terminated = False
 
         # Prematurely terminate if task is success
-        if self._check_success():
+        if self._check_success() and not self.use_skills:
             terminated = True
 
         return terminated
@@ -598,12 +598,14 @@ class StackCustom(SingleArmEnv):
             self.cur_obs = obs
             
             reward = self._reward()
-            if skill_failed:
-                print("failed to execute primitive")
+            if reward > 0 and skill_failed:
+                print("Reward earned on accident... Setting reward = 0")
                 reward = 0.0
             
             info = {"num_timesteps": num_timesteps}
-
+            
+            if self._check_success(): # check if termination condition (success) is met
+                done = True
             return self.cur_obs, reward, done, info 
 
         ### when using low level actions
@@ -650,13 +652,13 @@ class StackCustom(SingleArmEnv):
 
         return reward, self.done, info
 
-    def _scale_params(self, params): # TODO
+    def _scale_params(self, params): # TODO - update after deciding which primitive skills to use
         """
         Scales normalized parameter ([-1, 1]) to appropriate raw values
         """
-        # print("param", params)
-        params[0] = params[0] * 0.5 * (self.workspace_x[1] - self.workspace_x[0]) - np.mean(self.workspace_x)
-        params[1] = params[1] * 0.5 * (self.workspace_y[1] - self.workspace_y[0]) - np.mean(self.workspace_y)
-        params[2] = params[2] * 0.5 * (self.workspace_z[1] - self.workspace_z[0]) - np.mean(self.workspace_z)
-        params[3] = params[3] * 0.5 * (self.yaw_bounds[1] - self.yaw_bounds[0]) - np.mean(self.yaw_bounds)
+        params[0] = ( ((params[0] + 1) / 2 ) * (self.workspace_x[1] - self.workspace_x[0]) ) + self.workspace_x[0]
+        params[1] = ( ((params[1] + 1) / 2 ) * (self.workspace_y[1] - self.workspace_y[0]) ) + self.workspace_y[0]
+        params[2] = ( ((params[2] + 1) / 2 ) * (self.workspace_z[1] - self.workspace_z[0]) ) + self.workspace_z[0]
+        params[3] = ( ((params[3] + 1) / 2 ) * (self.yaw_bounds[1] - self.yaw_bounds[0]) ) + self.yaw_bounds[0]
+
         return params

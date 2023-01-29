@@ -148,7 +148,7 @@ class Reaching2D(SingleArmEnv):
         env_configuration="default",
         controller_configs=None,
         gripper_types="default",
-        initialization_noise=None,
+        initialization_noise="default",
         table_full_size=(0.65, 0.8, 0.15),
         table_friction=(100, 100, 100),
         use_camera_obs=True,
@@ -172,8 +172,8 @@ class Reaching2D(SingleArmEnv):
         renderer="mujoco",
         renderer_config=None,
         target_half_size=(0.05, 0.05, 0.001), # target width, height, thickness
-        target_position=(0.0, 0.0), # target position (height above the table)
-        random_init=True,
+        target_position=(0.1, 0.15), # target position (height above the table)
+        random_init=False,
         random_target=False,
         use_skills=False,
         normalized_params=True,
@@ -213,8 +213,8 @@ class Reaching2D(SingleArmEnv):
         self.use_skills = use_skills  
         self.skill = PrimitiveSkill(
             skill_indices={
-                0 : "move_to_xy",
-                1 : "gripper_release",
+                0 : "move_to",
+                # 1 : "gripper_release",
             }
         )
         self.num_skills = self.skill.n_skills
@@ -435,7 +435,7 @@ class Reaching2D(SingleArmEnv):
 
         self.reset_ready = True
 
-        print("TARGET PLACED AT: ", self.target_position)
+        # print("TARGET PLACED AT: ", self.target_position)
         # print("END reset internal")
 
     def visualize(self, vis_settings):
@@ -484,7 +484,7 @@ class Reaching2D(SingleArmEnv):
         terminated = False
 
         # Prematurely terminate if task is success
-        if self._check_success():
+        if self._check_success() and not self.use_skills:
             terminated = True
 
         return terminated
@@ -519,10 +519,16 @@ class Reaching2D(SingleArmEnv):
             obs = self.cur_obs
             # total_reward = 0
             num_timesteps = 0
-
             if self.normalized_params: # scale parameters if input params are normalized values
                 action[self.num_skills:] = self._scale_params(action[self.num_skills:])
             
+            if self._check_in_region(
+                region_center = self.target_position,
+                region_bounds = self.target_half_size,
+                coord = action[1:3],
+            ):
+                print(f"\n!!!!!!!!!!!!!!!!!!Good params {action} at step {self.timestep}!!!!!!!!!!!!!!!!!!!!!!!\n")
+
             while not done and not skill_done:
                 action_ll, skill_done = self.skill.get_action(action, obs)
                 obs, reward, done, info = super().step(action_ll)
@@ -530,11 +536,20 @@ class Reaching2D(SingleArmEnv):
                 num_timesteps += 1
                 if self.has_renderer:
                     self.render()
-            self.cur_obs = obs
+            if done:
+                print(f"=====horizon reached {self.timestep}=====")
+                print(f"final position {self._eef_xpos}")
 
+            self.cur_obs = obs
+            # print("eef_pos, yaw", obs["eef_xyz"], obs["eef_yaw"])
             info = {"num_timesteps": num_timesteps}
 
-            reward = self._reward()            
+            reward = self._reward()
+            if reward > 0 and not skill_done:
+                reward = 0.0
+                print("Reached target by accident... reward = 0")
+            if self._check_success(): # check if termination condition (success) is met
+                done = True
             return self.cur_obs, reward, done, info
 
         # if using low level inputs        
@@ -621,7 +636,7 @@ class Reaching2D(SingleArmEnv):
                 # print("error to initial pos ", initial_pos - self._eef_xpos)
         
         self.reset_ready = False
-        print(f"EEF position {self.initial_eef_pos} sampled based on target {self.target_position}")
+        # print(f"EEF position {self.initial_eef_pos} sampled based on target {self.target_position}")
         # print("End reset")
         return observations
 
@@ -650,8 +665,9 @@ class Reaching2D(SingleArmEnv):
         """
         Scales normalized parameter ([-1, 1]) to appropriate raw values
         """
-        params[0] = params[0] * 0.5 * (self.workspace_x[1] - self.workspace_x[0]) - np.mean(self.workspace_x)
-        params[1] = params[1] * 0.5 * (self.workspace_y[1] - self.workspace_y[0]) - np.mean(self.workspace_y)
-        params[2] = params[2] * 0.5 * (self.workspace_z[1] - self.workspace_z[0]) - np.mean(self.workspace_z)
-        params[3] = params[3] * 0.5 * (self.yaw_bounds[1] - self.yaw_bounds[0]) - np.mean(self.yaw_bounds)
+        params[0] = ( ((params[0] + 1) / 2 ) * (self.workspace_x[1] - self.workspace_x[0]) ) + self.workspace_x[0]
+        params[1] = ( ((params[1] + 1) / 2 ) * (self.workspace_y[1] - self.workspace_y[0]) ) + self.workspace_y[0]
+        params[2] = ( ((params[2] + 1) / 2 ) * (self.workspace_z[1] - self.workspace_z[0]) ) + self.workspace_z[0]
+        params[3] = ( ((params[3] + 1) / 2 ) * (self.yaw_bounds[1] - self.yaw_bounds[0]) ) + self.yaw_bounds[0]
+
         return params

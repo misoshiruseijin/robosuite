@@ -258,42 +258,39 @@ if __name__ == "__main__":
     #     thresh=0.001
     # )
 
-    env = suite.make(
-        env_name="Cleanup",
-        robots="Panda",
-        controller_configs=load_controller_config(default_controller="OSC_POSE"),
-        reward_scale=1.0,
-        has_renderer=True,
-        use_camera_obs=False,
-        has_offscreen_renderer=False,
-        ignore_done=False,
-        use_skills=True,
-        normalized_params=False,
-    )
-    obs = env.reset()
-    pnp_pos = obs["pnp_obj_pos"]
-    push_pos = obs["push_obj_pos"]
+    # env = suite.make(
+    #     env_name="Cleanup",
+    #     robots="Panda",
+    #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
+    #     reward_scale=1.0,
+    #     has_renderer=True,
+    #     use_camera_obs=False,
+    #     has_offscreen_renderer=False,
+    #     ignore_done=False,
+    #     use_skills=True,
+    #     normalized_params=False,
+    # )
+    # obs = env.reset()
+    # pnp_pos = obs["pnp_obj_pos"]
+    # push_pos = obs["push_obj_pos"]
 
-    # push
-    push_pos = obs["push_obj_pos"]
-    if push_pos[1] < 0.1:
-        action = np.array([0, 0, 1, push_pos[0], push_pos[1]-0.1, push_pos[2]+0.005, 0.15, push_pos[1], push_pos[2]+0.005, 0, 1])
-        obs, reward, done, info = env.step(action)
-        pdb.set_trace()
-        push_pos = obs["push_obj_pos"]
-    action = np.array([0, 0, 1, push_pos[0]+0.1, push_pos[1], push_pos[2]+0.005, -0.12, 0.15, push_pos[2]+0.005, 0, 1])
-    obs, reward, done, info = env.step(action)
-    pdb.set_trace()
+    # # push
+    # push_pos = obs["push_obj_pos"]
+    # if push_pos[1] < 0.1:
+    #     action = np.array([0, 0, 1, push_pos[0], push_pos[1]-0.1, push_pos[2]+0.005, 0.15, push_pos[1], push_pos[2]+0.005, 0, 1])
+    #     obs, reward, done, info = env.step(action)
+    #     pdb.set_trace()
+    #     push_pos = obs["push_obj_pos"]
+    # action = np.array([0, 0, 1, push_pos[0]+0.1, push_pos[1], push_pos[2]+0.005, -0.12, 0.15, push_pos[2]+0.005, 0, 1])
+    # obs, reward, done, info = env.step(action)
+    # pdb.set_trace()
 
-# push_pos = obs["push_obj_pos"]
-# action = np.array([0, 0, 1, push_pos[0]+0.1, push_pos[1], push_pos[2], -0.1, 0.15, push_pos[2], 0, 1])
-
-    # pnp
-    action = np.array([1, 0, 0, pnp_pos[0], pnp_pos[1], pnp_pos[2], 0.])
-    obs, reward, done, info = env.step(action)
-    action = np.array([0, 1, 0, -0.1, -0.1, pnp_pos[2]+0.07, 0])
-    obs, reward, done, info = env.step(action)
-    pdb.set_trace()
+    # # pnp
+    # action = np.array([1, 0, 0, pnp_pos[0], pnp_pos[1], pnp_pos[2], 0.])
+    # obs, reward, done, info = env.step(action)
+    # action = np.array([0, 1, 0, -0.1, -0.1, pnp_pos[2]+0.07, 0])
+    # obs, reward, done, info = env.step(action)
+    # pdb.set_trace()
 
 
     # env = suite.make(
@@ -325,30 +322,37 @@ if __name__ == "__main__":
     # pdb.set_trace()
 
 
-
     # env = suite.make(
     #     env_name="Reaching2D",
     #     robots="Panda",
     #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
-    #     gripper_types="default",
-    #     initialization_noise=None,
-    #     table_full_size=(0.65, 0.8, 0.15),
-    #     table_friction=(100, 100, 100),
-    #     use_camera_obs=False,
-    #     use_object_obs=True,
-    #     reward_scale=1.0,
-    #     has_renderer=True,
-    #     has_offscreen_renderer=False,
-    #     render_camera="frontview",
-    #     ignore_done=True,
-    #     hard_reset=True,
-    #     camera_names="frontview",
-    #     target_half_size=(0.05, 0.05, 0.001), # target width, height, thickness
-    #     target_position=(0.0, 0.0), # target position (height above the table)
-    #     random_init=True,
-    #     random_target=False,
+    #     reward_scale=1.0, # change this to any value
+    #     use_skills=True,
+    #     normalized_params=True
     # )
 
+    env = suite.make(
+        env_name="Reaching2D",
+        robots="Panda",
+        controller_configs=load_controller_config(default_controller="OSC_POSE"),
+        use_camera_obs=False,
+        use_object_obs=True,
+        reward_scale=1.0,
+        has_renderer=True,
+        has_offscreen_renderer=False,
+        render_camera="frontview",
+        ignore_done=False,
+        random_init=False,
+        random_target=False,
+        use_skills=True,
+        normalized_params=False
+    )
+
+    obs = env.reset()
+    env.render()
+    action = np.array([1, obs["target_pos"][0], obs["target_pos"][1], obs["eef_xyz"][2], 0, -1])
+    obs, reward, done, info = env.step(action)
+    pdb.set_trace()
     # spacemouse_control(env)
 
     # env = suite.make(
