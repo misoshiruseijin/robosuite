@@ -119,7 +119,7 @@ class PrimitiveSkill():
         action = np.array(params)
         return action, True
         
-    def _move_to(self, obs, params, robot_id=0, speed=0.3, thresh=0.001, yaw_thresh=0.005, return_max_steps=False):
+    def _move_to(self, obs, params, robot_id=0, speed=0.3, thresh=0.005, yaw_thresh=0.05, return_max_steps=False):
         
         """
         Moves end effector to goal position and orientation.
@@ -145,7 +145,7 @@ class PrimitiveSkill():
 
         max_steps = 200
         slow_speed = 0.15
-        ori_speed = 0.05
+        ori_speed = 0.1
         slow_dist = 0.02 # slow down when the end effector is slow_dist away from goal
 
         skill_done = False
@@ -167,6 +167,7 @@ class PrimitiveSkill():
         if (pos_reached and ori_reached) or self.steps > max_steps:
             if self.steps > max_steps:
                 print("Max steps for primitive reached: ", max_steps)
+                print(f"Goal was {params}\nReached {eef_pos}, {cur_ori}")
                 max_steps_reached = True
             skill_done = True
             action = np.zeros(7)
@@ -177,7 +178,7 @@ class PrimitiveSkill():
             # if close to goal, reduce speed
             if np.abs(np.linalg.norm(pos_error)) < slow_dist:
                 speed = slow_speed
-            if abs(ori_error) < 0.1:
+            if abs(ori_error) < 0.05:
                 ori_speed = 0.025
             pos_action = speed * (pos_error / np.linalg.norm(pos_error)) # unit vector in direction of goal * speed
             ori_action = np.array([0, 0, np.sign(ori_error) * ori_speed])

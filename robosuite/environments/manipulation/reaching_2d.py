@@ -505,10 +505,14 @@ class Reaching2D(SingleArmEnv):
 
     def _check_action_in_bounds(self, action):
 
-        sf = 2 # safety factor to prevent robot from moving out of bounds
+        sf = 3 # safety factor to prevent robot from moving out of bounds
         x_in_bounds = self.workspace_x[0] < self._eef_xpos[0] + sf * action[0] / self.control_freq < self.workspace_x[1]
         y_in_bounds = self.workspace_y[0] < self._eef_xpos[1] + sf * action[1] / self.control_freq < self.workspace_y[1]
         z_in_bounds = self.workspace_z[0] < self._eef_xpos[2] + sf * action[2] / self.control_freq < self.workspace_z[1]
+        
+        if not (x_in_bounds and y_in_bounds and z_in_bounds):
+            print(f"Action {action} out of bounds at pos {self._eef_xpos}")
+            print(x_in_bounds, y_in_bounds, z_in_bounds)
         return x_in_bounds and y_in_bounds and z_in_bounds
 
     def step(self, action):
@@ -550,6 +554,7 @@ class Reaching2D(SingleArmEnv):
                 print("Reached target by accident... reward = 0")
             if self._check_success(): # check if termination condition (success) is met
                 done = True
+            print("Reward = ", reward)
             return self.cur_obs, reward, done, info
 
         # if using low level inputs        
@@ -563,7 +568,7 @@ class Reaching2D(SingleArmEnv):
             # if end effector position is off the table, ignore the action
             if not action_in_bounds:
                 action[:-1] = 0
-                print("Action out of bounds")
+                # print(f"Action {action} out of bounds at pos {self._eef_xpos}")
             
             self.gripper_state = action[-1]
             

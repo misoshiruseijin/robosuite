@@ -342,17 +342,18 @@ if __name__ == "__main__":
         has_offscreen_renderer=False,
         render_camera="frontview",
         ignore_done=False,
-        random_init=False,
+        random_init=True,
         random_target=False,
         use_skills=True,
         normalized_params=False
     )
 
-    obs = env.reset()
-    env.render()
-    action = np.array([1, obs["target_pos"][0], obs["target_pos"][1], obs["eef_xyz"][2], 0, -1])
-    obs, reward, done, info = env.step(action)
-    pdb.set_trace()
+    while True:
+        obs = env.reset()
+        env.render()
+        action = np.array([1, obs["target_pos"][0], obs["target_pos"][1], obs["eef_xyz"][2], 0, -1])
+        obs, reward, done, info = env.step(action)
+    # pdb.set_trace()
     # spacemouse_control(env)
 
     # env = suite.make(
