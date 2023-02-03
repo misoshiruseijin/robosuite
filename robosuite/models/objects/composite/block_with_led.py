@@ -95,43 +95,13 @@ class BlockWithLEDObject(CompositeObject):
             density=self.density,
         )
 
-        # LED1
-        name = "led1"
-        self.led1 = [name]
-        add_to_dict(
-            dic=obj_args,
-            geom_types="sphere",
-            geom_locations=(self.body_half_size[0], 0, 0),
-            geom_quats=(0, 0, 0, 1),
-            geom_sizes=np.array([self.led_radius]),
-            geom_names=name,
-            geom_rgbas=self.led_rgba,
-            geom_frictions=self.frictions,
-            density=self.density,
-        )
-
-        # LED2
-        name = "led2"
-        self.led2 = [name]
-        add_to_dict(
-            dic=obj_args,
-            geom_types="sphere",
-            geom_locations=(-self.body_half_size[0], 0, 0),
-            geom_quats=(0, 0, 0, 1),
-            geom_sizes=np.array([self.led_radius]),
-            geom_names=name,
-            geom_rgbas=self.led_rgba,
-            geom_frictions=self.frictions,
-            density=self.density,
-        )
-
-        # # LED3
-        # name = "led3"
-        # self.led3 = [name]
+        # # LED1
+        # name = "led1"
+        # self.led1 = [name]
         # add_to_dict(
         #     dic=obj_args,
         #     geom_types="sphere",
-        #     geom_locations=(0, self.body_half_size[0], 0),
+        #     geom_locations=(self.body_half_size[0], 0, 0),
         #     geom_quats=(0, 0, 0, 1),
         #     geom_sizes=np.array([self.led_radius]),
         #     geom_names=name,
@@ -140,13 +110,13 @@ class BlockWithLEDObject(CompositeObject):
         #     density=self.density,
         # )
 
-        # # LED4
-        # name = "led4"
-        # self.led4 = [name]
+        # # LED2
+        # name = "led2"
+        # self.led2 = [name]
         # add_to_dict(
         #     dic=obj_args,
         #     geom_types="sphere",
-        #     geom_locations=(0, -self.body_half_size[0], 0),
+        #     geom_locations=(-self.body_half_size[0], 0, 0),
         #     geom_quats=(0, 0, 0, 1),
         #     geom_sizes=np.array([self.led_radius]),
         #     geom_names=name,
@@ -154,8 +124,6 @@ class BlockWithLEDObject(CompositeObject):
         #     geom_frictions=self.frictions,
         #     density=self.density,
         # )
-        # import pdb
-        # pdb.set_trace()
 
         # Add body site
         stage_site = self.get_site_attrib_template()
@@ -169,6 +137,37 @@ class BlockWithLEDObject(CompositeObject):
         site_attrs.append(stage_site)
         # Add to important sites
         self._important_sites["center"] = self.naming_prefix + center_name
+
+        # Add LED sites
+        led_site1 = self.get_site_attrib_template()
+        led1_name = "led1"
+        led_site1.update(
+            {
+                "name" : led1_name,
+                "pos" : str(self.body_half_size[0]) + " 0.0 0.0",
+                "size" : str(self.led_radius),
+                "type" : "sphere",
+                "rgba" : " ".join(map(str, self.led_rgba)),
+                "group" : "1",
+            }
+        )
+        site_attrs.append(led_site1)
+        self._important_sites[led1_name] = self.naming_prefix + led1_name
+
+        led_site2 = self.get_site_attrib_template()
+        led2_name = "led2"
+        led_site2.update(
+            {
+                "name" : led2_name,
+                "pos" : str(-self.body_half_size[0]) + " 0.0 0.0",
+                "size" : str(self.led_radius),
+                "type" : "sphere",
+                "rgba" : " ".join(map(str, self.led_rgba)),
+                "group" : "1",
+            }
+        )
+        site_attrs.append(led_site2)
+        self._important_sites[led2_name] = self.naming_prefix + led2_name
 
         # Add back in base args and site args
         obj_args.update(base_args)

@@ -28,9 +28,9 @@ def main():
         env_name="Reaching2D",
         robots="Panda",
         controller_configs=load_controller_config(default_controller="OSC_POSE"),
-        use_skills=False,
+        use_skills=True,
         normalized_params=True,
-        random_init=True,
+        random_init=False,
         target_position=(0.1, 0.3),
         reward_scale=10.0,
     )

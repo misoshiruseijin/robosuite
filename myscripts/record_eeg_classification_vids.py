@@ -1350,6 +1350,7 @@ def manual_record_spacemouse(env, device, video_path="video.mp4", camera_names=[
     return action_hist, eef_pos_hist, reward_hist
 
 ################### Flashing Cube Pick and Place #########################
+###OLD###
 def record_cube_flash(video_path="video.mp4", camera_names="frontview2", cube_rgba=(0,0,0,1), led_color="white", change_color_every_steps=1, fps=20):
     # initialize environment with offscreen renderer
     env = make(
@@ -1468,30 +1469,30 @@ def flash_cube(env, freq=2):
             env._switch_led_on_off()
             prev_time = cur_time
 
-def record_cube_flash(video_path="video.mp4", camera_names="frontview2", cube_rgba=(0,0,0,1), led_color="white", flash_freq=2):
-    
-    writer = imageio.get_writer(video_path, fps=30)
+def record_cube_flash(cube_rgba=(0,0,0,1), led_color="white", flash_freq=6):
     
     env = make(
         env_name="LiftFlash",
         robots="Panda",
         controller_configs=load_controller_config(default_controller="OSC_POSE"),
-        use_camera_obs=True,
-        # use_camera_obs=False,
-        # has_renderer=True,
-        has_renderer=False,
-        has_offscreen_renderer=True,
-        # has_offscreen_renderer=False,
+        use_camera_obs=False,
+        has_renderer=True,
+        has_offscreen_renderer=False,
         ignore_done=True,
         render_camera="frontview2",
         camera_names="frontview2",
+        cube_rgba=cube_rgba,
+        led_color=led_color,
     )
 
     obs = env.reset()
-    p = PrimitiveSkill()
+    env.render()
+    print("------Manually start recording the render window-------")
+    pdb.set_trace()
 
-    flash_thread = threading.Thread(target=flash_cube, args=(env, flash_freq))
-    flash_thread.start()
+    prev_time = time.time()
+    interval = 0.5 / flash_freq # 2 Hz
+    p = PrimitiveSkill()
 
     # do pick and place
     skill_done = False
@@ -1499,20 +1500,24 @@ def record_cube_flash(video_path="video.mp4", camera_names="frontview2", cube_rg
     goal = np.append(initial_cube_pos, 0)
     print("pick")
     while not skill_done:
-        action, skill_done = p._pick(obs=obs, params=goal)
+        cur_time = time.time()
+        if cur_time - prev_time >= interval:
+            env._switch_led_on_off()
+            prev_time = cur_time
+        action, skill_done, failed = p._pick(obs=obs, params=goal)
         obs, reward, done, info = env.step(action)
-        frame = obs[camera_names + "_image"]
-        writer.append_data(frame)
-
+        env.render()
+    
     print("place")
     skill_done = False
     while not skill_done:
-        action, skill_done = p.place(obs=obs, params=goal)
+        cur_time = time.time()
+        if cur_time - prev_time >= interval:
+            env._switch_led_on_off()
+            prev_time = cur_time
+        action, skill_done, failed = p._place(obs=obs, params=goal)
         obs, reward, done, info = env.step(action)
-        frame = obs[camera_names + "_image"]
-        writer.append_data(frame)  
-
-    writer.close()
+        env.render()
 
 if __name__ == "__main__":
 
@@ -1526,11 +1531,7 @@ if __name__ == "__main__":
 
 
     # ############## Flashing Cube ###############
-    # save_dir = "videos/flashing_cube"
-    # os.makedirs(save_dir, exist_ok=True)
-    
-    record_cube_flash()
-
+    # record_cube_flash()
 
 
     ############ Ball Rolling ###############

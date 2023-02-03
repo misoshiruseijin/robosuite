@@ -120,21 +120,42 @@ if __name__ == "__main__":
 
     from robosuite.utils.primitive_skills import _wrap_to_pi, _quat_to_yaw
 
-    # env = suite.make(
-    #     env_name="LiftFlash",
-    #     robots="Panda",
-    #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
-    #     use_camera_obs=False,
-    #     has_renderer=True,
-    #     has_offscreen_renderer=False,
-    #     ignore_done=True,
-    #     render_camera="frontview2",
-    #     camera_names="frontview2",
-    # )
-    # obs = env.reset()
-    # env.render()
+    env = suite.make(
+        env_name="LiftFlash",
+        robots="Panda",
+        controller_configs=load_controller_config(default_controller="OSC_POSE"),
+        use_camera_obs=False,
+        has_renderer=True,
+        has_offscreen_renderer=False,
+        ignore_done=True,
+        render_camera="frontview2",
+        camera_names="frontview2",
+    )
+    obs = env.reset()
+    env.render()
+    vis = False
+    while True:
+        vis = not vis
+        env.cube.set_sites_visibility(sim=env.sim, visible=vis)
+        env.render()
+        pdb.set_trace()
     # prev_time = time.time()
     # interval = 0.5 / 2 # 2 Hz
+    # p = PrimitiveSkill()
+    # # do pick and place
+    # skill_done = False
+    # initial_cube_pos = obs["cube_pos"]
+    # goal = np.append(initial_cube_pos, 0)
+    # print("pick")
+    # while not skill_done:
+    #     cur_time = time.time()
+    #     if cur_time - prev_time >= interval:
+    #         env._switch_led_on_off()
+    #         prev_time = cur_time
+    #     action, skill_done, failed = p._pick(obs=obs, params=goal)
+    #     obs, reward, done, info = env.step(action)
+    #     env.render()
+
     # pdb.set_trace()
     # while True:
     #     cur_time = time.time()
@@ -331,30 +352,30 @@ if __name__ == "__main__":
     #     normalized_params=True
     # )
 
-    env = suite.make(
-        env_name="Reaching2D",
-        robots="Panda",
-        controller_configs=load_controller_config(default_controller="OSC_POSE"),
-        use_camera_obs=False,
-        use_object_obs=True,
-        reward_scale=1.0,
-        has_renderer=True,
-        has_offscreen_renderer=False,
-        render_camera="frontview",
-        ignore_done=False,
-        random_init=True,
-        random_target=False,
-        use_skills=True,
-        normalized_params=False
-    )
+    # env = suite.make(
+    #     env_name="Reaching2D",
+    #     robots="Panda",
+    #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
+    #     use_camera_obs=False,
+    #     use_object_obs=True,
+    #     reward_scale=1.0,
+    #     has_renderer=True,
+    #     has_offscreen_renderer=False,
+    #     render_camera="frontview",
+    #     ignore_done=False,
+    #     random_init=False,
+    #     random_target=False,
+    #     use_skills=True,
+    #     normalized_params=True
+    # )
 
-    while True:
-        obs = env.reset()
-        env.render()
-        action = np.array([1, obs["target_pos"][0], obs["target_pos"][1], obs["eef_xyz"][2], 0, -1])
-        obs, reward, done, info = env.step(action)
-    # pdb.set_trace()
-    # spacemouse_control(env)
+    # while True:
+    #     obs = env.reset()
+    #     print(obs["eef_xyz"], obs["eef_yaw"], obs["gripper_state"])
+        # env.render()
+        # action = np.array([1, obs["target_pos"][0], obs["target_pos"][1], obs["eef_xyz"][2], 0, -1])
+        # obs, reward, done, info = env.step(action)
+
 
     # env = suite.make(
     #     env_name="DrawerEnv",
@@ -367,14 +388,11 @@ if __name__ == "__main__":
     #     control_freq=20,
     #     ignore_done=True,
     # )
-    # prim = PrimitiveSkill(env)
     # obs = env.reset()
     # env.render()
     # pdb.set_trace()
-    # prim.open_drawer(obs, env.obj_body_id["drawer"], pull_dist=0.1)
-    # pdb.set_trace()
-    # prim.close_drawer(obs, env.obj_body_id["drawer"], pull_dist=0.05)
-    # pdb.set_trace()
+    # while True:
+    #     env.render()
 
     # env = suite.make(
     #     env_name="LeftRight",

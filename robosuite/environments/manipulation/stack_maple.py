@@ -1,20 +1,20 @@
 from collections import OrderedDict
-
 import numpy as np
 
-from robosuite.environments.manipulation.single_arm_env import SingleArmEnv
-from robosuite.models.arenas import TableArena
-from robosuite.models.objects import BoxObject, BlockObject, BlockWithLEDObject, TargetMarker3dObject
-from robosuite.models.tasks import ManipulationTask
-from robosuite.utils.mjcf_utils import CustomMaterial
-from robosuite.utils.observables import Observable, sensor
-from robosuite.utils.placement_samplers import UniformRandomSampler
 from robosuite.utils.transform_utils import convert_quat
-import pdb
+from robosuite.utils.mjcf_utils import CustomMaterial
 
-class LiftFlash(SingleArmEnv):
+from robosuite.environments.manipulation.single_arm_env_maple import SingleArmEnvMAPLE
+
+from robosuite.models.arenas import TableArena
+from robosuite.models.objects import BoxObject
+from robosuite.models.tasks import ManipulationTask
+from robosuite.utils.placement_samplers import UniformRandomSampler
+
+
+class StackMAPLE(SingleArmEnvMAPLE):
     """
-    This class corresponds to the lifting task for a single robot arm.
+    This class corresponds to the stacking task for a single robot arm.
 
     Args:
         robots (str or list of str): Specification for specific robot arm(s) to be instantiated within this env
@@ -117,18 +117,6 @@ class LiftFlash(SingleArmEnv):
             bool if same depth setting is to be used for all cameras or else it should be a list of the same length as
             "camera names" param.
 
-        camera_segmentations (None or str or list of str or list of list of str): Camera segmentation(s) to use
-            for each camera. Valid options are:
-
-                `None`: no segmentation sensor used
-                `'instance'`: segmentation at the class-instance level
-                `'class'`: segmentation at the class level
-                `'element'`: segmentation at the per-geom level
-
-            If not None, multiple types of segmentations can be specified. A [list of str / str or None] specifies
-            [multiple / a single] segmentation(s) to use for all cameras. A list of list of str specifies per-camera
-            segmentation setting(s) to use.
-
     Raises:
         AssertionError: [Invalid number of robots specified]
     """
@@ -139,9 +127,10 @@ class LiftFlash(SingleArmEnv):
         env_configuration="default",
         controller_configs=None,
         gripper_types="default",
-        initialization_noise=None,
+        initialization_noise="default",
         table_full_size=(0.8, 0.8, 0.05),
-        table_friction=(1.0, 5e-3, 1e-4),
+        table_friction=(1., 5e-3, 1e-4),
+        table_offset=(0, 0, 0.8),
         use_camera_obs=True,
         use_object_obs=True,
         reward_scale=1.0,
@@ -149,7 +138,7 @@ class LiftFlash(SingleArmEnv):
         placement_initializer=None,
         has_renderer=False,
         has_offscreen_renderer=True,
-        render_camera="frontview2",
+        render_camera="frontview",
         render_collision_mesh=False,
         render_visual_mesh=True,
         render_gpu_device_id=-1,
@@ -161,18 +150,13 @@ class LiftFlash(SingleArmEnv):
         camera_heights=256,
         camera_widths=256,
         camera_depths=False,
-        camera_segmentations=None,  # {None, instance, class, element}
-        renderer="mujoco",
-        renderer_config=None,
-        cube_rgba=(0, 0, 0, 1), # color of cube - black by default
-        led_color="white", # color of LED
-        # change_color_every_steps=1, # flash cube color every n steps
-        flash_freq=6, # LED flashing frequency in Hz
+        full_stacking_bonus=2.0,
+        skill_config=None,
     ):
         # settings for table top
         self.table_full_size = table_full_size
         self.table_friction = table_friction
-        self.table_offset = np.array((0, 0, 0.8))
+        self.table_offset = np.array(table_offset)
 
         # reward configuration
         self.reward_scale = reward_scale
@@ -184,24 +168,7 @@ class LiftFlash(SingleArmEnv):
         # object placement initializer
         self.placement_initializer = placement_initializer
 
-        # cube color and flashing frequency
-        rgbas = {
-            "red" : (1, 0, 0, 0.5),
-            "blue" : (0, 0, 1, 0.5),
-            "green" : (0, 1, 0, 0.5),
-            "white" : (1, 1, 1, 0.5),
-            "gray" : (0.5, 0.5, 0.5, 0.5),
-        }
-        # self.change_color_every_steps = change_color_every_steps
-        self.flash_interval = 0.5 / flash_freq
-        self.led_rgba = rgbas[led_color]
-        self.colors = [self.led_rgba, (0, 0, 0, 0)]
-        self.color_idx = 0
-
-        self.steps = 0
-
-        self.cube_half_size = (0.03, 0.03, 0.03)
-        self.cube_rgba = cube_rgba
+        self.full_stacking_bonus = full_stacking_bonus
 
         super().__init__(
             robots=robots,
@@ -225,29 +192,35 @@ class LiftFlash(SingleArmEnv):
             camera_heights=camera_heights,
             camera_widths=camera_widths,
             camera_depths=camera_depths,
-            camera_segmentations=camera_segmentations,
-            renderer=renderer,
-            renderer_config=renderer_config,
+            skill_config=skill_config,
         )
 
-    def reward(self, action=None):
+    def reward(self, action):
         """
         Reward function for the task.
 
         Sparse un-normalized reward:
 
-            - a discrete reward of 2.25 is provided if the cube is lifted
+            - a discrete reward of 3.0 is provided if the red block is stacked on the green block
 
-        Un-normalized summed components if using reward shaping:
+        Un-normalized components if using reward shaping:
 
-            - Reaching: in [0, 1], to encourage the arm to reach the cube
+            - Reaching: in [0, 0.25], to encourage the arm to reach the cube
             - Grasping: in {0, 0.25}, non-zero if arm is grasping the cube
             - Lifting: in {0, 1}, non-zero if arm has lifted the cube
+            - Aligning: in [0, 0.5], encourages aligning one cube over the other
+            - Stacking: in {0, 2.5, 3}, non-zero if cube is stacked on other cube
 
-        The sparse reward only consists of the lifting component.
+        The reward is max over the following:
+
+            - Reaching + Grasping
+            - Lifting + Aligning
+            - Stacking
+
+        The sparse reward only consists of the stacking component.
 
         Note that the final reward is normalized and scaled by
-        reward_scale / 2.25 as well so that the max score is equal to reward_scale
+        reward_scale / 3.0 as well so that the max score is equal to reward_scale
 
         Args:
             action (np array): [NOT USED]
@@ -255,31 +228,100 @@ class LiftFlash(SingleArmEnv):
         Returns:
             float: reward value
         """
-        reward = 0.0
+        r_reach, r_lift, r_stack = self.staged_rewards()
+        if self.reward_shaping:
+            reward = max(r_reach, r_lift, r_stack)
+        else:
+            reward = 3.0 if r_stack == 3.0 else 0.0
 
-        # sparse completion reward
-        if self._check_success():
-            reward = 2.25
-
-        # use a shaping reward
-        elif self.reward_shaping:
-
-            # reaching reward
-            cube_pos = self.sim.data.body_xpos[self.cube_body_id]
-            gripper_site_pos = self.sim.data.site_xpos[self.robots[0].eef_site_id]
-            dist = np.linalg.norm(gripper_site_pos - cube_pos)
-            reaching_reward = 1 - np.tanh(10.0 * dist)
-            reward += reaching_reward
-
-            # grasping reward
-            if self._check_grasp(gripper=self.robots[0].gripper, object_geoms=self.cube):
-                reward += 0.25
-
-        # Scale reward if requested
         if self.reward_scale is not None:
-            reward *= self.reward_scale / 2.25
+            reward *= self.reward_scale / 3.0
 
         return reward
+
+    def staged_rewards(
+            self,
+            cube_src_pos=None,
+            cube_target_pos=None,
+            cube_src=None,
+            cube_target=None,
+    ):
+        """
+        Helper function to calculate staged rewards based on current physical states.
+
+        Returns:
+            3-tuple:
+
+                - (float): reward for reaching and grasping
+                - (float): reward for lifting and aligning
+                - (float): reward for stacking
+        """
+        if cube_src_pos is None:
+            cube_src_pos = self.sim.data.body_xpos[self.cubeA_body_id]
+            cube_target_pos = self.sim.data.body_xpos[self.cubeB_body_id]
+            cube_src = self.cubeA
+            cube_target = self.cubeB
+
+        gripper_site_pos = self.sim.data.site_xpos[self.robots[0].eef_site_id]
+        dist = np.linalg.norm(gripper_site_pos - cube_src_pos)
+        r_reach = (1 - np.tanh(10.0 * dist)) * 0.25
+
+        # grasping reward
+        grasping_cube_src = self._check_grasp(gripper=self.robots[0].gripper, object_geoms=cube_src)
+        if grasping_cube_src:
+            r_reach += 0.25
+
+        # lifting is successful when the cube is above the table top by a margin
+        cube_src_height = cube_src_pos[2]
+        table_height = self.table_offset[2]
+        cube_src_lifted = cube_src_height > table_height + 0.04
+        r_lift = 1.0 if cube_src_lifted else 0.0
+
+        # Aligning is successful when cubeA is right above cubeB
+        if cube_src_lifted:
+            horiz_dist = np.linalg.norm(
+                np.array(cube_src_pos[:2]) - np.array(cube_target_pos[:2])
+            )
+            r_lift += 0.5 * (1 - np.tanh(horiz_dist))
+
+        # stacking is successful when the block is lifted and the gripper is not holding the object
+        r_stack = 0
+        cubes_touching = self.check_contact(cube_src, cube_target)
+        if r_lift > 0 and cubes_touching:
+            r_stack = 2.5
+            if not grasping_cube_src:
+                r_stack += self.full_stacking_bonus
+
+        return r_reach, r_lift, r_stack
+
+    def _get_env_info(self, action):
+        info = super()._get_env_info(action)
+        r_reach, r_lift, r_stack = self.staged_rewards()
+        cubes_stacked = (r_lift > 0) and self.check_contact(self.cubeA, self.cubeB)
+        info.update({
+            'r_reach_grasp': r_reach / 0.50,
+            'r_lift_align': r_lift / 1.50,
+            'r_stack': r_stack / 3.0,
+            'cubes_stacked': cubes_stacked,
+            'success': self._check_success(),
+        })
+        return info
+
+    def _get_skill_info(self):
+        cubeA_pos = self.sim.data.body_xpos[self.cubeA_body_id].copy()
+        cubeB_pos = self.sim.data.body_xpos[self.cubeB_body_id].copy()
+
+        pos_info = {}
+
+        pos_info['grasp'] = [cubeA_pos] # grasp target positions
+        pos_info['push'] = [] # push target positions
+        pos_info['reach'] = [cubeB_pos] # reach target positions
+
+        info = {}
+        for k in pos_info:
+            info[k + '_pos'] = pos_info[k]
+
+        return info
 
     def _load_model(self):
         """
@@ -302,52 +344,53 @@ class LiftFlash(SingleArmEnv):
         mujoco_arena.set_origin([0, 0, 0])
 
         # initialize objects of interest
-        # tex_attrib = {
-        #     "type": "cube",
-        # }
-        # mat_attrib = {
-        #     "texrepeat": "1 1",
-        #     "specular": "1.0",
-        #     "shininess": "0.1",
-        #     "reflectance" : "1.0"
-        # }
-        # redwood = CustomMaterial(
-        #     texture="Glass",
-        #     tex_name="glass",
-        #     mat_name="glass_mat",
-        #     tex_attrib=tex_attrib,
-        #     mat_attrib=mat_attrib,
-        # )
-        # self.cube = BoxObject(
-        #     name="cube",
-        #     size=self.cube_half_size,  # [0.015, 0.015, 0.015],
-        #     rgba=[1, 0, 0, 1],
-        #     material=redwood
-        # )
-
-        # self.cube = BlockObject(
-        #     name="cube",
-        #     body_half_size=self.cube_half_size,
-        # )
-
-        self.cube = BlockWithLEDObject(
-            name="cube",
-            body_half_size=self.cube_half_size,
-            led_radius=0.015,
-            block_rgba=self.cube_rgba,
-            led_rgba=self.led_rgba,
+        tex_attrib = {
+            "type": "cube",
+        }
+        mat_attrib = {
+            "texrepeat": "1 1",
+            "specular": "0.4",
+            "shininess": "0.1",
+        }
+        redwood = CustomMaterial(
+            texture="WoodRed",
+            tex_name="redwood",
+            mat_name="redwood_mat",
+            tex_attrib=tex_attrib,
+            mat_attrib=mat_attrib,
         )
-        
+        greenwood = CustomMaterial(
+            texture="WoodGreen",
+            tex_name="greenwood",
+            mat_name="greenwood_mat",
+            tex_attrib=tex_attrib,
+            mat_attrib=mat_attrib,
+        )
+        self.cubeA = BoxObject(
+            name="cubeA",
+            size_min=[0.02, 0.02, 0.02],
+            size_max=[0.02, 0.02, 0.02],
+            rgba=[1, 0, 0, 1],
+            material=redwood,
+        )
+        self.cubeB = BoxObject(
+            name="cubeB",
+            size_min=[0.025, 0.025, 0.025],
+            size_max=[0.025, 0.025, 0.025],
+            rgba=[0, 1, 0, 1],
+            material=greenwood,
+        )
+        cubes = [self.cubeA, self.cubeB]
         # Create placement initializer
         if self.placement_initializer is not None:
             self.placement_initializer.reset()
-            self.placement_initializer.add_objects(self.cube)
+            self.placement_initializer.add_objects(cubes)
         else:
             self.placement_initializer = UniformRandomSampler(
                 name="ObjectSampler",
-                mujoco_objects=self.cube,
-                x_range=[-0.03, 0.03],
-                y_range=[-0.03, 0.03],
+                mujoco_objects=cubes,
+                x_range=[-0.08, 0.08],
+                y_range=[-0.08, 0.08],
                 rotation=None,
                 ensure_object_boundary_in_range=False,
                 ensure_valid_placement=True,
@@ -359,72 +402,20 @@ class LiftFlash(SingleArmEnv):
         self.model = ManipulationTask(
             mujoco_arena=mujoco_arena,
             mujoco_robots=[robot.robot_model for robot in self.robots],
-            mujoco_objects=self.cube,
+            mujoco_objects=cubes,
         )
 
-    def _setup_references(self):
+    def _get_reference(self):
         """
         Sets up references to important components. A reference is typically an
         index or a list of indices that point to the corresponding elements
         in a flatten array, which is how MuJoCo stores physical simulation data.
         """
-        super()._setup_references()
+        super()._get_reference()
 
         # Additional object references from this env
-        self.cube_body_id = self.sim.model.body_name2id(self.cube.root_body)
-        # self.cube_geom_vis_ids = []
-        self.led_geom_vis_ids = []
-        # for vis in self.cube.visual_geoms:
-        #     self.cube_geom_vis_ids.append(self.sim.model.geom_name2id(vis))
-
-        for vis in self.cube.visual_geoms:
-            if "led" in vis:
-                self.led_geom_vis_ids.append(self.sim.model.geom_name2id(vis))
-
-    def _setup_observables(self):
-        """
-        Sets up observables to be used for this environment. Creates object-based observables if enabled
-
-        Returns:
-            OrderedDict: Dictionary mapping observable names to its corresponding Observable object
-        """
-        observables = super()._setup_observables()
-
-        # low-level object information
-        if self.use_object_obs:
-            # Get robot prefix and define observables modality
-            pf = self.robots[0].robot_model.naming_prefix
-            modality = "object"
-
-            # cube-related observables
-            @sensor(modality=modality)
-            def cube_pos(obs_cache):
-                return np.array(self.sim.data.body_xpos[self.cube_body_id])
-
-            @sensor(modality=modality)
-            def cube_quat(obs_cache):
-                return convert_quat(np.array(self.sim.data.body_xquat[self.cube_body_id]), to="xyzw")
-
-            @sensor(modality=modality)
-            def gripper_to_cube_pos(obs_cache):
-                return (
-                    obs_cache[f"{pf}eef_pos"] - obs_cache["cube_pos"]
-                    if f"{pf}eef_pos" in obs_cache and "cube_pos" in obs_cache
-                    else np.zeros(3)
-                )
-
-            sensors = [cube_pos, cube_quat, gripper_to_cube_pos]
-            names = [s.__name__ for s in sensors]
-
-            # Create observables
-            for name, s in zip(names, sensors):
-                observables[name] = Observable(
-                    name=name,
-                    sensor=s,
-                    sampling_rate=self.control_freq,
-                )
-
-        return observables
+        self.cubeA_body_id = self.sim.model.body_name2id(self.cubeA.root_body)
+        self.cubeB_body_id = self.sim.model.body_name2id(self.cubeB.root_body)
 
     def _reset_internal(self):
         """
@@ -432,24 +423,86 @@ class LiftFlash(SingleArmEnv):
         """
         super()._reset_internal()
 
-        self.sim.data.set_joint_qpos(self.cube.joints[0], np.array([0, 0, self.table_offset[2]+self.cube_half_size[2], 0, 0, 0, 1]))
+        # Reset all object positions using initializer sampler if we're not directly loading from an xml
+        if not self.deterministic_reset:
 
-        # # Reset all object positions using initializer sampler if we're not directly loading from an xml
-        # if not self.deterministic_reset:
+            # Sample from the placement initializer for all objects
+            object_placements = self.placement_initializer.sample()
 
-        #     # Sample from the placement initializer for all objects
-        #     object_placements = self.placement_initializer.sample()
+            # Loop through all objects and reset their positions
+            for obj_pos, obj_quat, obj in object_placements.values():
+                self.sim.data.set_joint_qpos(obj.joints[0], np.concatenate([np.array(obj_pos), np.array(obj_quat)]))
 
-        #     # Loop through all objects and reset their positions
-        #     for obj_pos, obj_quat, obj in object_placements.values():
-        #         self.sim.data.set_joint_qpos(obj.joints[0], np.concatenate([np.array(obj_pos), np.array(obj_quat)]))
+    def _get_observation(self):
+        """
+        Returns an OrderedDict containing observations [(name_string, np.array), ...].
 
-    def _switch_led_on_off(self):
+        Important keys:
 
-        self.color_idx = not self.color_idx
-            
-        for id in self.led_geom_vis_ids:
-            self.sim.model.geom_rgba[id] = self.colors[self.color_idx]
+            `'robot-state'`: contains robot-centric information.
+
+            `'object-state'`: requires @self.use_object_obs to be True. Contains object-centric information.
+
+            `'image'`: requires @self.use_camera_obs to be True. Contains a rendered frame from the simulation.
+
+            `'depth'`: requires @self.use_camera_obs and @self.camera_depth to be True.
+            Contains a rendered depth map from the simulation
+
+        Returns:
+            OrderedDict: Observations from the environment
+        """
+        di = super()._get_observation()
+
+        # low-level object information
+        if self.use_object_obs:
+            # Get robot prefix
+            pr = self.robots[0].robot_model.naming_prefix
+
+            # position and rotation of the first cube
+            cubeA_pos = np.array(self.sim.data.body_xpos[self.cubeA_body_id])
+            cubeA_quat = convert_quat(
+                np.array(self.sim.data.body_xquat[self.cubeA_body_id]), to="xyzw"
+            )
+            di["cubeA_pos"] = cubeA_pos
+            di["cubeA_quat"] = cubeA_quat
+
+            # position and rotation of the second cube
+            cubeB_pos = np.array(self.sim.data.body_xpos[self.cubeB_body_id])
+            cubeB_quat = convert_quat(
+                np.array(self.sim.data.body_xquat[self.cubeB_body_id]), to="xyzw"
+            )
+            di["cubeB_pos"] = cubeB_pos
+            di["cubeB_quat"] = cubeB_quat
+
+            # relative positions between gripper and cubes
+            gripper_site_pos = np.array(self.sim.data.site_xpos[self.robots[0].eef_site_id])
+            di[pr + "gripper_to_cubeA"] = gripper_site_pos - cubeA_pos
+            di[pr + "gripper_to_cubeB"] = gripper_site_pos - cubeB_pos
+            di["cubeA_to_cubeB"] = cubeA_pos - cubeB_pos
+
+            di["object-state"] = np.concatenate(
+                [
+                    cubeA_pos,
+                    cubeA_quat,
+                    cubeB_pos,
+                    cubeB_quat,
+                    di[pr + "gripper_to_cubeA"],
+                    di[pr + "gripper_to_cubeB"],
+                    di["cubeA_to_cubeB"],
+                ]
+            )
+
+        return di
+
+    def _check_success(self):
+        """
+        Check if blocks are stacked correctly.
+
+        Returns:
+            bool: True if blocks are correctly stacked
+        """
+        _, _, r_stack = self.staged_rewards()
+        return r_stack > 2.5 + 1e-3
 
     def visualize(self, vis_settings):
         """
@@ -465,34 +518,4 @@ class LiftFlash(SingleArmEnv):
 
         # Color the gripper visualization site according to its distance to the cube
         if vis_settings["grippers"]:
-            self._visualize_gripper_to_target(gripper=self.robots[0].gripper, target=self.cube)
-
-    def _check_success(self):
-        """
-        Check if cube has been lifted.
-
-        Returns:
-            bool: True if cube has been lifted
-        """
-        cube_height = self.sim.data.body_xpos[self.cube_body_id][2]
-        table_height = self.model.mujoco_arena.table_offset[2]
-
-        # cube is higher than the table top above a margin
-        return cube_height > table_height + 0.04
-
-    # def step(self, action):
-    #     # pdb.set_trace()
-    #     # get cube id from self.sim.model._geom_name2id
-    #     # self.sim.model.geom_rgba[cube id] = [0., 1., 0., 1.]
-    #     # add counter to control frequency
-    #     self.steps += 1
-    #     # pdb.set_trace()
-    #     # if self.steps % self.change_color_every_steps == 0:
-    #     #     self._switch_led_on_off()
-            
-    #     return super().step(action)
-
-    def reset(self):
-        observations = super().reset()
-        self.steps = 0
-        return observations
+            self._visualize_gripper_to_target(gripper=self.robots[0].gripper, target=self.cubeA)

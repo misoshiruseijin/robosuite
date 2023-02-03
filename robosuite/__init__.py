@@ -28,6 +28,7 @@ from robosuite.environments.manipulation.drop2 import Drop2
 from robosuite.environments.manipulation.stack_custom import StackCustom
 from robosuite.environments.manipulation.cleanup import Cleanup
 from robosuite.environments.manipulation.POC_reaching import POCReaching
+from robosuite.environments.manipulation.stack_maple import StackMAPLE
 
 from robosuite.environments import ALL_ENVIRONMENTS
 from robosuite.controllers import ALL_CONTROLLERS, load_controller_config
