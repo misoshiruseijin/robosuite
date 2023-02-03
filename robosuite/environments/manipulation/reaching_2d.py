@@ -253,8 +253,6 @@ class Reaching2D(SingleArmEnv):
             renderer_config=renderer_config,
         )
 
-        self.cur_obs = self.reset()
-
     def reward(self, action=None):
         """
         Reward function for the task.
@@ -423,7 +421,6 @@ class Reaching2D(SingleArmEnv):
             return observables
 
     def _reset_internal(self):
-        # print("START reset internal")
         """
         Resets simulation internal configurations.
         """
@@ -434,9 +431,6 @@ class Reaching2D(SingleArmEnv):
         self.sim.data.set_joint_qpos(self.target.joints[0], target_xpos)
 
         self.reset_ready = True
-
-        # print("TARGET PLACED AT: ", self.target_position)
-        # print("END reset internal")
 
     def visualize(self, vis_settings):
         """
@@ -526,13 +520,6 @@ class Reaching2D(SingleArmEnv):
             if self.normalized_params: # scale parameters if input params are normalized values
                 action[self.num_skills:] = self._scale_params(action[self.num_skills:])
             
-            if self._check_in_region(
-                region_center = self.target_position,
-                region_bounds = self.target_half_size,
-                coord = action[1:3],
-            ):
-                print(f"\n!!!!!!!!!!!!!!!!!!Good params {action} at step {self.timestep}!!!!!!!!!!!!!!!!!!!!!!!\n")
-
             while not done and not skill_done:
                 action_ll, skill_done = self.skill.get_action(action, obs)
                 obs, reward, done, info = super().step(action_ll)
@@ -554,7 +541,7 @@ class Reaching2D(SingleArmEnv):
                 print("Reached target by accident... reward = 0")
             if self._check_success(): # check if termination condition (success) is met
                 done = True
-            print("Reward = ", reward)
+
             return self.cur_obs, reward, done, info
 
         # if using low level inputs        
@@ -640,9 +627,9 @@ class Reaching2D(SingleArmEnv):
                 observations, reward, done, info = self.step_no_count(action)
                 # print("error to initial pos ", initial_pos - self._eef_xpos)
         
+        self.cur_obs = observations
         self.reset_ready = False
-        # print(f"EEF position {self.initial_eef_pos} sampled based on target {self.target_position}")
-        # print("End reset")
+
         return observations
 
     def _post_action(self, action):
