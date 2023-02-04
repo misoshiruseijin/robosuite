@@ -1527,7 +1527,7 @@ def record_cube_flash_old2(cube_rgba=(0,0,0,1), led_color="white", flash_freq=6)
     print("total_time", time.time()-start_time)
     print("n on/off ", switch_cnt)
 
-def record_cube_flash(cube_rgba=(0,0,0,1), led_color="red", flash_freq=6):
+def record_cube_flash(cube_rgba=(0,0,0,1), led_color="blue"):
     
     env = make(
         env_name="LiftFlash",
@@ -1547,10 +1547,7 @@ def record_cube_flash(cube_rgba=(0,0,0,1), led_color="red", flash_freq=6):
     # env.render()
 
     start_time = time.time()
-    prev_time = start_time
-    interval = 0.5 / flash_freq # 2 Hz
     p = PrimitiveSkill()
-    switch_cnt = 0
     n_steps = 0
 
     # do pick and place
@@ -1558,34 +1555,74 @@ def record_cube_flash(cube_rgba=(0,0,0,1), led_color="red", flash_freq=6):
     initial_cube_pos = obs["cube_pos"]
     goal = np.append(initial_cube_pos, 0)
 
-    # video writer
-    # writer = imageio.get_writer(video_path, fps=)
-
     print("pick")
     start_time = time.time()
     prev_time = start_time
     while not skill_done:
-        # if n_steps % 2 == 0:
-            # env._switch_led_on_off()
         action, skill_done, failed = p._pick(obs=obs, params=goal)
         obs, reward, done, info = env.step(action)
-        # env.render()
+        frame = obs["frontview2" + "_image"]
+        imageio.imwrite(f"img/frame{n_steps}.png", frame)
         n_steps += 1
     
     print("place")
     skill_done = False
     while not skill_done:
-        # if n_steps % 2 == 0:
-            # env._switch_led_on_off()
         action, skill_done, failed = p._place(obs=obs, params=goal)
         obs, reward, done, info = env.step(action)
-        # env.render()
+        frame = obs["frontview2" + "_image"]
+        imageio.imwrite(f"img/frame{n_steps}.png", frame)
         n_steps += 1
     
     end_time = time.time()
     print("total_time", end_time - start_time)
     print(n_steps, env.timestep)
     print("Steps/sec ", n_steps / (end_time - start_time))
+
+def images_to_video(img_dir="img", flash_freq=8, fps=None, upsample=1):
+    import cv2
+    import os
+
+    img_list = os.listdir(img_dir)
+    img_list.sort(key=lambda x: int(x.split(".")[0][5:]))
+    img_size = (512, 512)
+
+    # upsample
+    img_list = [x for img in img_list for x in [img]*upsample]
+    print("num frames ", len(img_list))
+
+    if fps == None:
+        fps = round(64 / (flash_freq)) * flash_freq
+    # fps = round(30 / (2*flash_freq)) * 2*flash_freq
+    print("flash frequency ", flash_freq)
+    print("fps set to ", fps)
+
+    # Define the codec and create a VideoWriter object
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(f'flash{flash_freq}Hz.mp4', fourcc, fps, img_size)
+
+    blue_low = (78, 100, 0)
+    blue_high = (135, 255, 255)
+    # Loop through the images and add each to the video
+    for i, img_name in enumerate(img_list):
+        img_path = os.path.join(img_dir, img_name)
+        img = cv2.imread(img_path)
+        img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        mask = cv2.inRange(img_hsv, blue_low, blue_high)
+        out_img = img.copy()
+
+        if i % (fps / flash_freq) == 0:
+            out_img[np.where(mask>0)] = 255
+
+        else: 
+            out_img[np.where(mask>0)] = 0
+
+        img = cv2.resize(out_img, img_size)
+        out.write(img)
+
+    # Release the VideoWriter object
+    out.release()
+
 
 if __name__ == "__main__":
 
@@ -1599,8 +1636,11 @@ if __name__ == "__main__":
 
 
     # ############## Flashing Cube ###############
-    record_cube_flash(flash_freq=6)
-
+    # record_cube_flash()
+    freq = [8, 12, 16, 20, 24, 28, 32, 36]
+    for f in freq:
+        images_to_video(flash_freq=f, upsample=2)
+    # images_to_video(flash_freq=16, fps=None, upsample=2)
 
     ############ Ball Rolling ###############
     # n_videos = 20

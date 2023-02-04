@@ -225,10 +225,7 @@ class Cleanup(SingleArmEnv):
             camera_heights=camera_heights,
             camera_widths=camera_widths,
             camera_depths=camera_depths,
-            # skill_config=skill_config,
         )
-
-        self.cur_obs = self.reset()
 
     def reward(self, action):
         
@@ -747,7 +744,10 @@ class Cleanup(SingleArmEnv):
 
     def reset(self):
         print("Resetting....")
-        return super().reset()
+        observation = super().reset()
+        self.cur_obs = observation
+
+        return observation
 
     def _scale_params(self, action):
         """

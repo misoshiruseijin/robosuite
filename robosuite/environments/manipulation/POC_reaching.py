@@ -274,7 +274,6 @@ class POCReaching(SingleArmEnv):
             renderer_config=renderer_config,
         )
 
-        self.cur_obs = self.reset()         
 
     def reward(self, action=None): 
         """
@@ -726,6 +725,7 @@ class POCReaching(SingleArmEnv):
         self.reset_ready = False
         # print(f"EEF position {self.initial_eef_pos} sampled based on target {self.target_position}")
         # print("End reset")
+        self.cur_obs = observations
         return observations
 
     def _post_action(self, action):

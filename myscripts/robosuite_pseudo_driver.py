@@ -135,8 +135,6 @@ if __name__ == "__main__":
     env.render()
     vis = False
     while True:
-        vis = not vis
-        env.cube.set_sites_visibility(sim=env.sim, visible=vis)
         env.render()
         pdb.set_trace()
     # prev_time = time.time()

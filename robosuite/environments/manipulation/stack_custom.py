@@ -233,8 +233,6 @@ class StackCustom(SingleArmEnv):
             renderer_config=renderer_config,
         )
 
-        self.cur_obs = self.reset()
-
     def reward(self, action):
         """
         Reward function for the task.
@@ -629,7 +627,9 @@ class StackCustom(SingleArmEnv):
 
     def reset(self):
         print("Resetting....")
-        return super().reset()
+        observation = super().reset()
+        self.cur_obs = observation
+        return observation
 
     def _post_action(self, action):
         """

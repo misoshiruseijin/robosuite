@@ -158,8 +158,8 @@ class LiftFlash(SingleArmEnv):
         ignore_done=False,
         hard_reset=True,
         camera_names="agentview",
-        camera_heights=256,
-        camera_widths=256,
+        camera_heights=512,
+        camera_widths=512,
         camera_depths=False,
         camera_segmentations=None,  # {None, instance, class, element}
         renderer="mujoco",
@@ -186,11 +186,11 @@ class LiftFlash(SingleArmEnv):
 
         # cube color and flashing frequency
         rgbas = {
-            "red" : (1, 0, 0, 0.5),
-            "blue" : (0, 0, 1, 0.5),
-            "green" : (0, 1, 0, 0.5),
-            "white" : (1, 1, 1, 0.5),
-            "gray" : (0.5, 0.5, 0.5, 0.5),
+            "red" : (1, 0, 0, 1),
+            "blue" : (0, 0, 1, 1),
+            "green" : (0, 1, 0, 1),
+            "white" : (1, 1, 1, 1),
+            "gray" : (0.5, 0.5, 0.5, 1),
         }
         # self.change_color_every_steps = change_color_every_steps
         self.flash_interval = 0.5 / flash_freq
