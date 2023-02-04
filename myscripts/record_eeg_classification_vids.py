@@ -1351,7 +1351,7 @@ def manual_record_spacemouse(env, device, video_path="video.mp4", camera_names=[
 
 ################### Flashing Cube Pick and Place #########################
 ###OLD###
-def record_cube_flash(video_path="video.mp4", camera_names="frontview2", cube_rgba=(0,0,0,1), led_color="white", change_color_every_steps=1, fps=20):
+def record_cube_flash_old(video_path="video.mp4", camera_names="frontview2", cube_rgba=(0,0,0,1), led_color="white", change_color_every_steps=1, fps=20):
     # initialize environment with offscreen renderer
     env = make(
         env_name="LiftFlash",
@@ -1469,7 +1469,7 @@ def flash_cube(env, freq=2):
             env._switch_led_on_off()
             prev_time = cur_time
 
-def record_cube_flash(cube_rgba=(0,0,0,1), led_color="white", flash_freq=6):
+def record_cube_flash_old2(cube_rgba=(0,0,0,1), led_color="white", flash_freq=6):
     
     env = make(
         env_name="LiftFlash",
@@ -1489,20 +1489,25 @@ def record_cube_flash(cube_rgba=(0,0,0,1), led_color="white", flash_freq=6):
     env.render()
     print("------Manually start recording the render window-------")
     pdb.set_trace()
-
-    prev_time = time.time()
+    start_time = time.time()
+    prev_time = start_time
     interval = 0.5 / flash_freq # 2 Hz
     p = PrimitiveSkill()
+    switch_cnt = 0
 
     # do pick and place
     skill_done = False
     initial_cube_pos = obs["cube_pos"]
     goal = np.append(initial_cube_pos, 0)
     print("pick")
+
+    start_time = time.time()
+    prev_time = start_time
     while not skill_done:
         cur_time = time.time()
         if cur_time - prev_time >= interval:
             env._switch_led_on_off()
+            switch_cnt += 1
             prev_time = cur_time
         action, skill_done, failed = p._pick(obs=obs, params=goal)
         obs, reward, done, info = env.step(action)
@@ -1514,10 +1519,73 @@ def record_cube_flash(cube_rgba=(0,0,0,1), led_color="white", flash_freq=6):
         cur_time = time.time()
         if cur_time - prev_time >= interval:
             env._switch_led_on_off()
+            switch_cnt += 1
             prev_time = cur_time
         action, skill_done, failed = p._place(obs=obs, params=goal)
         obs, reward, done, info = env.step(action)
         env.render()
+    print("total_time", time.time()-start_time)
+    print("n on/off ", switch_cnt)
+
+def record_cube_flash(cube_rgba=(0,0,0,1), led_color="red", flash_freq=6):
+    
+    env = make(
+        env_name="LiftFlash",
+        robots="Panda",
+        controller_configs=load_controller_config(default_controller="OSC_POSE"),
+        use_camera_obs=True,
+        has_renderer=False,
+        has_offscreen_renderer=True,
+        ignore_done=True,
+        render_camera="frontview2",
+        camera_names="frontview2",
+        cube_rgba=cube_rgba,
+        led_color=led_color,
+    )
+
+    obs = env.reset()
+    # env.render()
+
+    start_time = time.time()
+    prev_time = start_time
+    interval = 0.5 / flash_freq # 2 Hz
+    p = PrimitiveSkill()
+    switch_cnt = 0
+    n_steps = 0
+
+    # do pick and place
+    skill_done = False
+    initial_cube_pos = obs["cube_pos"]
+    goal = np.append(initial_cube_pos, 0)
+
+    # video writer
+    # writer = imageio.get_writer(video_path, fps=)
+
+    print("pick")
+    start_time = time.time()
+    prev_time = start_time
+    while not skill_done:
+        # if n_steps % 2 == 0:
+            # env._switch_led_on_off()
+        action, skill_done, failed = p._pick(obs=obs, params=goal)
+        obs, reward, done, info = env.step(action)
+        # env.render()
+        n_steps += 1
+    
+    print("place")
+    skill_done = False
+    while not skill_done:
+        # if n_steps % 2 == 0:
+            # env._switch_led_on_off()
+        action, skill_done, failed = p._place(obs=obs, params=goal)
+        obs, reward, done, info = env.step(action)
+        # env.render()
+        n_steps += 1
+    
+    end_time = time.time()
+    print("total_time", end_time - start_time)
+    print(n_steps, env.timestep)
+    print("Steps/sec ", n_steps / (end_time - start_time))
 
 if __name__ == "__main__":
 
@@ -1531,7 +1599,7 @@ if __name__ == "__main__":
 
 
     # ############## Flashing Cube ###############
-    # record_cube_flash()
+    record_cube_flash(flash_freq=6)
 
 
     ############ Ball Rolling ###############
