@@ -6,6 +6,7 @@ Suggested wrist angle range [-0.5pi, 0.5pi]
 NOTE Currently, only move_to_pos works with option return_all_states = True
 """
 import numpy as np
+from robosuite.utils.transform_utils import *
 
 import pdb
 
@@ -119,7 +120,7 @@ class PrimitiveSkill():
         action = np.array(params)
         return action, True
         
-    def _move_to(self, obs, params, robot_id=0, speed=0.3, thresh=0.005, yaw_thresh=0.05, return_max_steps=False):
+    def _move_to(self, obs, params, robot_id=0, speed=0.3, thresh=0.005, yaw_thresh=0.05, return_max_steps=False, slow_speed=0.15):
         
         """
         Moves end effector to goal position and orientation.
@@ -143,8 +144,8 @@ class PrimitiveSkill():
         # goal_yaw = None
         gripper_action = 1 if params[4] > 0 else -1
 
-        max_steps = 200
-        slow_speed = 0.15
+        max_steps = 250
+        # slow_speed = 0.15
         ori_speed = 0.1
         slow_dist = 0.02 # slow down when the end effector is slow_dist away from goal
 
@@ -158,8 +159,9 @@ class PrimitiveSkill():
             goal_ori = _wrap_to_pi(goal_yaw)
         else:
             goal_ori = self.home_wrist_ori
-        cur_ori = _quat_to_yaw(obs[f"robot{robot_id}_eef_quat"])
-        ori_error = goal_ori - cur_ori
+        cur_ori = _quat2euler(obs[f"robot{robot_id}_eef_quat"])
+        cur_yaw = cur_ori[-1]
+        ori_error = goal_ori - cur_yaw
         pos_reached = np.all(np.abs(pos_error) < thresh)
         ori_reached = np.abs(ori_error) < yaw_thresh
 
@@ -167,7 +169,7 @@ class PrimitiveSkill():
         if (pos_reached and ori_reached) or self.steps > max_steps:
             if self.steps > max_steps:
                 print("Max steps for primitive reached: ", max_steps)
-                print(f"Goal was {params}\nReached {eef_pos}, {cur_ori}")
+                print(f"Goal was {params}\nReached {eef_pos}, {cur_yaw}")
                 max_steps_reached = True
             skill_done = True
             action = np.zeros(7)
@@ -190,6 +192,7 @@ class PrimitiveSkill():
 
         return action, skill_done
 
+    # NOTE - _move_to_xy function is outdated. Use _move_to instead
     def _move_to_xy(self, obs, params, robot_id=0, speed=0.3, thresh=0.001, yaw_thresh=0.005):
 
         """
@@ -301,7 +304,7 @@ class PrimitiveSkill():
         self.grip_steps = 0
         return action, True
 
-    def _pick(self, obs, params, robot_id=0, speed=0.3, thresh=0.001, yaw_thresh=0.005):       
+    def _pick(self, obs, params, robot_id=0, speed=0.3, thresh=0.005, yaw_thresh=0.05):       
         """
         Picks up an object at a target position and returns to home position.
         Args:
@@ -378,7 +381,7 @@ class PrimitiveSkill():
 
             return action, False, failed
 
-    def _place(self, obs, params, robot_id=0, speed=0.3, thresh=0.001, yaw_thresh=0.005):       
+    def _place(self, obs, params, robot_id=0, speed=0.3, thresh=0.005, yaw_thresh=0.05):       
         """
         Places an object at a target position and returns to home position.
         Args:
@@ -453,7 +456,7 @@ class PrimitiveSkill():
                 return action, True, failed
             return action, False, failed
 
-    def _push(self, obs, params, robot_id=0, speed=0.3, thresh=0.001, yaw_thresh=0.05):
+    def _push(self, obs, params, robot_id=0, speed=0.3, thresh=0.005, yaw_thresh=0.05):
         """
         Moves end effector to above push starting position, moves down to start position, moves to goal position, up, then back to the home position,
         Positions are defined in world coordinates
@@ -471,7 +474,6 @@ class PrimitiveSkill():
         Returns:
             obs, reward, done, info from environment's step function (or lists of these if self.return_all_states is True)
         """
-
         start_pos = params[:3]
         end_pos = params[3:6]
         goal_yaw = params[6]
@@ -480,6 +482,7 @@ class PrimitiveSkill():
         above_start_pos = (start_pos[0], start_pos[1], self.waypoint_height)
         above_end_pos = (end_pos[0], end_pos[1], self.waypoint_height)
 
+        cur_quat = obs[f"robot{robot_id}_eef_quat"]
 
         if self.prev_success:
             self.phase += 1
@@ -489,6 +492,7 @@ class PrimitiveSkill():
         if self.phase == 0:
             params = np.concatenate([above_start_pos, np.array([goal_yaw, gripper_action])])
             action, self.prev_success, self.skill_failed = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, return_max_steps=True)
+            action[3:5] = _roll_pitch_correction(cur_quat)
             if self.skill_failed:
                 self.phase = 4
                 self.steps = 0
@@ -499,6 +503,8 @@ class PrimitiveSkill():
         if self.phase == 1:
             params = np.concatenate([start_pos, np.array([goal_yaw, gripper_action])])
             action, self.prev_success, self.skill_failed = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, return_max_steps=True)
+            action[3:5] = _roll_pitch_correction(cur_quat)
+            
             if self.skill_failed:
                 self.phase = 4
                 self.steps = 0
@@ -508,7 +514,9 @@ class PrimitiveSkill():
         # phase 2: move to goal pos
         if self.phase == 2:
             params = np.concatenate([end_pos, np.array([goal_yaw, gripper_action])])
-            action, self.prev_success, self.skill_failed = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, return_max_steps=True)
+            action, self.prev_success, self.skill_failed = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=0.03, yaw_thresh=yaw_thresh, return_max_steps=True, slow_speed=0.3)
+            action[3:5] = _roll_pitch_correction(cur_quat)
+            
             if self.skill_failed:
                 self.phase = 4
                 self.steps = 0
@@ -519,6 +527,8 @@ class PrimitiveSkill():
         if self.phase == 3:
             params = np.concatenate([above_end_pos, np.array([goal_yaw, gripper_action])])
             action, self.prev_success, self.skill_failed = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, return_max_steps=True)
+            action[3:5] = _roll_pitch_correction(cur_quat)
+            
             if self.skill_failed:
                 self.phase = 4
                 self.steps = 0
@@ -531,6 +541,7 @@ class PrimitiveSkill():
             failed = self.skill_failed
             params = np.concatenate([self.home_pos, np.array([goal_yaw, -1])])
             action, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh)
+            action[3:5] = _roll_pitch_correction(cur_quat)
             
             if self.prev_success:
                 self.steps = 0
@@ -552,6 +563,12 @@ def _wrap_to_pi(angles):
         result = result + pi2
     return result
 
+def _wrap_to_2pi(angle):
+    """
+    normalize angle in rad to range [0, 2pi]
+    """
+    return angle % (2 * np.pi)
+
 def _quat_to_yaw(quat):
     """
     Given quaternion, returns yaw [rad]
@@ -563,6 +580,20 @@ def _quat_to_yaw(quat):
     quat = quat / np.linalg.norm(quat)
     return np.arctan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
 
+def _roll_pitch_correction(quat):
+    """
+    Given current (roll, pitch) and desired (roll, pitch), returns roll and pitch actions to maintain desired angles
+    """
+    rp_des = np.array([np.pi, 0]) # desired roll and pitch to maintain
+    rp = _quat2euler(quat)[:-1]
+    action = 1.5 * (rp_des - rp)
+    # print("rp ", rp)
+    # print(action)
+    return action
+
+def _quat2euler(quat):
+    rpy = mat2euler(quat2mat(quat))
+    return np.array([_wrap_to_2pi(rpy[0]), _wrap_to_pi(rpy[1]), _wrap_to_pi(rpy[2])])
 
 class PrimitiveSkill_Old():
     # NOTE: this class is outdated

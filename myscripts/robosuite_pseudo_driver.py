@@ -120,67 +120,23 @@ if __name__ == "__main__":
 
     from robosuite.utils.primitive_skills import _wrap_to_pi, _quat_to_yaw
 
-    env = suite.make(
-        env_name="LiftFlash",
-        robots="Panda",
-        controller_configs=load_controller_config(default_controller="OSC_POSE"),
-        use_camera_obs=False,
-        has_renderer=True,
-        has_offscreen_renderer=False,
-        ignore_done=True,
-        render_camera="frontview2",
-        camera_names="frontview2",
-    )
-    obs = env.reset()
-    env.render()
-    vis = False
-    while True:
-        env.render()
-        pdb.set_trace()
-    # prev_time = time.time()
-    # interval = 0.5 / 2 # 2 Hz
-    # p = PrimitiveSkill()
-    # # do pick and place
-    # skill_done = False
-    # initial_cube_pos = obs["cube_pos"]
-    # goal = np.append(initial_cube_pos, 0)
-    # print("pick")
-    # while not skill_done:
-    #     cur_time = time.time()
-    #     if cur_time - prev_time >= interval:
-    #         env._switch_led_on_off()
-    #         prev_time = cur_time
-    #     action, skill_done, failed = p._pick(obs=obs, params=goal)
-    #     obs, reward, done, info = env.step(action)
-    #     env.render()
-
-    # pdb.set_trace()
+    # env = suite.make(
+    #     env_name="LiftFlash",
+    #     robots="Panda",
+    #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
+    #     use_camera_obs=False,
+    #     has_renderer=True,
+    #     has_offscreen_renderer=False,
+    #     ignore_done=True,
+    #     render_camera="frontview2",
+    #     camera_names="frontview2",
+    # )
+    # obs = env.reset()
+    # env.render()
+    # vis = False
     # while True:
-    #     cur_time = time.time()
-    #     print(cur_time - prev_time)
-    #     if cur_time - prev_time >= interval:
-    #         env._switch_led_on_off()
-    #         prev_time = cur_time
     #     env.render()
-
-    # p = PrimitiveSkill()
-    # skill_done = False
-    # one_hot = np.array([1, 0, 0, 0, 0, 0])
-    # while not skill_done:
-    #     action, skill_done = p.get_action(obs=obs, action=np.concatenate([one_hot, np.array([0, -0.1, 0.9, 0.1, -1])]))
-    #     obs, reward, done, info = env.step(action)
-    #     env.render()
-
-    # p.pick(
-    #     obs=obs,
-    #     goal_pos=obs["cube_pos"],
-    #     speed=0.8
-    # )
-    # p.place(
-    #     obs=obs,
-    #     goal_pos=(0, 0, env.table_offset[2]+0.035),
-    #     speed=0.8
-    # )
+    #     pdb.set_trace()
 
     # env = suite.make(
     #     env_name="POCReaching",
@@ -201,13 +157,6 @@ if __name__ == "__main__":
     #     normalized_params=False,
     # )
     # obs = env.reset()
-    # pdb.set_trace()
-    # spacemouse_control(env, obs_to_print=["subgoal_states"])
-
-    # while True:
-    #     action = np.array([1, 1, 1, 0, 1])
-    #     env.step(action)
-    #     env.render()
 
     # while True:
     #     obs = env.reset()
@@ -246,70 +195,41 @@ if __name__ == "__main__":
     #     print("reward", reward)
     #     pdb.set_trace()
 
-    # action = np.array([1., 0., -1., -1., 1., 1.])
-    # env.step(action)
 
-    # spacemouse_control(env, obs_to_print=["eef_xy_gripper", "eef_yaw"])
-
-    # obs = env.reset()
-    # env.render()
-    # targetA_pos = obs["targetA_pos"]
-    # targetB_pos = obs["targetB_pos"]
-
-    # # move to target A
-    # one_hot = np.array([1, 0])
-    # param = np.array([targetA_pos[0], targetA_pos[1], 0, 1])
-    # obs, reward, done, info = env.step(np.concatenate([one_hot, param]))
-    # # gripper release
-    # obs, reward, done, info = env.step(np.array([0, 1]))
-    # # move to target B
-    # one_hot = np.array([1, 0])
-    # param = np.array([targetB_pos[0], targetB_pos[1], 0, -1])
-    # obs, reward, done, info = env.step(np.concatenate([one_hot, param]))
-    # action = np.concatenate([one_hot,  param])
-    
-    # p = PrimitiveSkill(env)
-    # obs, reward, done, info = p.move_to_pos_xy(
-    #     obs=obs,
-    #     goal_pos=(0, 0.2),
-    #     gripper_closed=True,
-    #     wrist_ori=0.2,
-    #     thresh=0.001
-    # )
-
-    # env = suite.make(
-    #     env_name="Cleanup",
-    #     robots="Panda",
-    #     controller_configs=load_controller_config(default_controller="OSC_POSE"),
-    #     reward_scale=1.0,
-    #     has_renderer=True,
-    #     use_camera_obs=False,
-    #     has_offscreen_renderer=False,
-    #     ignore_done=False,
-    #     use_skills=True,
-    #     normalized_params=False,
-    # )
-    # obs = env.reset()
-    # pnp_pos = obs["pnp_obj_pos"]
-    # push_pos = obs["push_obj_pos"]
-
-    # # push
-    # push_pos = obs["push_obj_pos"]
-    # if push_pos[1] < 0.1:
-    #     action = np.array([0, 0, 1, push_pos[0], push_pos[1]-0.1, push_pos[2]+0.005, 0.15, push_pos[1], push_pos[2]+0.005, 0, 1])
-    #     obs, reward, done, info = env.step(action)
-    #     pdb.set_trace()
-    #     push_pos = obs["push_obj_pos"]
-    # action = np.array([0, 0, 1, push_pos[0]+0.1, push_pos[1], push_pos[2]+0.005, -0.12, 0.15, push_pos[2]+0.005, 0, 1])
-    # obs, reward, done, info = env.step(action)
-    # pdb.set_trace()
-
-    # # pnp
-    # action = np.array([1, 0, 0, pnp_pos[0], pnp_pos[1], pnp_pos[2], 0.])
-    # obs, reward, done, info = env.step(action)
-    # action = np.array([0, 1, 0, -0.1, -0.1, pnp_pos[2]+0.07, 0])
-    # obs, reward, done, info = env.step(action)
-    # pdb.set_trace()
+    env = suite.make(
+        env_name="Cleanup",
+        robots="Panda",
+        controller_configs=load_controller_config(default_controller="OSC_POSE"),
+        reward_scale=1.0,
+        initialization_noise=None,
+        has_renderer=True,
+        use_camera_obs=False,
+        has_offscreen_renderer=False,
+        ignore_done=False,
+        use_skills=True,
+        normalized_params=False,
+    )
+    obs = env.reset()
+    pnp_pos = obs["pnp_obj_pos"]
+    push_pos = obs["push_obj_pos"]
+    # pnp
+    action = np.array([1, 0, 0, pnp_pos[0], pnp_pos[1], pnp_pos[2], 0.])
+    obs, reward, done, info = env.step(action)
+    action = np.array([0, 1, 0, -0.1, -0.1, pnp_pos[2]+0.07, 0])
+    obs, reward, done, info = env.step(action)
+    # push
+    push_pos = obs["push_obj_pos"]
+    start_push_pos = np.array([push_pos[0], push_pos[1]-0.1, push_pos[2]+0.001])
+    end_push_pos = np.array([push_pos[0], 0.13, push_pos[2]+0.001])
+    if push_pos[1] < 0.1:
+        action = np.concatenate([np.array([0, 0, 1]), start_push_pos, end_push_pos, np.array([0, 1])])
+        # action = np.array([0, 0, 1, push_pos[0], push_pos[1]-0.1, push_pos[2]+0.005, 0.15, push_pos[1], push_pos[2]+0.005, 0, 1])
+        obs, reward, done, info = env.step(action)
+        push_pos = obs["push_obj_pos"]
+    action = np.array([0, 0, 1, push_pos[0]+0.1, push_pos[1], push_pos[2]+0.005, -0.12, 0.13, push_pos[2]+0.005, 0, 1])
+    obs, reward, done, info = env.step(action)
+    print("reward ", reward)
+    pdb.set_trace()
 
 
     # env = suite.make(

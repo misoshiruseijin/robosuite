@@ -133,7 +133,7 @@ class Cleanup(SingleArmEnv):
         controller_configs=None,
         gripper_types="default",
         initialization_noise="default",
-        table_full_size=(0.8, 0.8, 0.05),
+        table_full_size=(0.5, 0.8, 0.05),
         table_friction=(1.0, 5e-3, 1e-4),
         table_offset=(0, 0, 0.8),
         use_camera_obs=True,
@@ -432,7 +432,7 @@ class Cleanup(SingleArmEnv):
         )
 
         # initialize objects
-        pnp_size = np.array([0.04, 0.022, 0.033]) * 0.75
+        pnp_size = np.array([0.04, 0.022, 0.04]) * 0.75
         self.pnp_obj = BoxObject(
             name="obj_pnp",
             size=pnp_size,
@@ -440,12 +440,13 @@ class Cleanup(SingleArmEnv):
             material=pnpmaterial,
         )
 
-        push_size = np.array([0.0350, 0.0425, 0.0125]) * 1.20
+        push_size = np.array([0.0350, 0.0425, 0.02]) * 1.20
         self.push_obj = BoxObject(
             name="obj_push",
             size=push_size,
             rgba=[0,1,0,1],
-            material=pushmaterial
+            material=pushmaterial,
+            density=20,
         )
 
         objs = [self.pnp_obj, self.push_obj]
