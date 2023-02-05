@@ -214,7 +214,7 @@ class Reaching2D(SingleArmEnv):
         self.skill = PrimitiveSkill(
             skill_indices={
                 0 : "move_to",
-                # 1 : "gripper_release",
+                1 : "gripper_release",
             }
         )
         self.num_skills = self.skill.n_skills
