@@ -213,8 +213,13 @@ class Reaching2D(SingleArmEnv):
         self.skill = PrimitiveSkill(
             skill_indices={
                 0 : "move_to",
+<<<<<<< HEAD
                 # 1 : "gripper_release",
             },
+=======
+                1 : "gripper_release",
+            }
+>>>>>>> 63fff119926fae25bc3405d00f10d5907ed21bc4
         )
         self.num_skills = self.skill.n_skills
         self.normalized_params = normalized_params
