@@ -12,6 +12,7 @@ from robosuite.utils.placement_samplers import UniformRandomSampler
 from robosuite.utils.transform_utils import convert_quat, quat2yaw
 from robosuite.utils.primitive_skills import PrimitiveSkill
 
+import pdb
 
 class StackCustom(SingleArmEnv):
     """
