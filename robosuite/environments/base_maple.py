@@ -11,11 +11,11 @@ from robosuite.renderers.base import load_renderer_config
 from robosuite.utils import OpenCVRenderer, SimulationError, XMLError
 from robosuite.utils.binding_utils import MjRenderContextOffscreen, MjSim
 
-REGISTERED_ENVS = {}
+REGISTERED_ENVS_MAPLE = {}
 
 
 def register_env(target_class):
-    REGISTERED_ENVS[target_class.__name__] = target_class
+    REGISTERED_ENVS_MAPLE[target_class.__name__] = target_class
 
 
 def make(env_name, *args, **kwargs):
@@ -31,13 +31,13 @@ def make(env_name, *args, **kwargs):
     Raises:
         Exception: [Invalid environment name]
     """
-    if env_name not in REGISTERED_ENVS:
+    if env_name not in REGISTERED_ENVS_MAPLE:
         raise Exception(
             "Environment {} not found. Make sure it is a registered environment among: {}".format(
-                env_name, ", ".join(REGISTERED_ENVS)
+                env_name, ", ".join(REGISTERED_ENVS_MAPLE)
             )
         )
-    return REGISTERED_ENVS[env_name](*args, **kwargs)
+    return REGISTERED_ENVS_MAPLE[env_name](*args, **kwargs)
 
 
 class EnvMeta(type):

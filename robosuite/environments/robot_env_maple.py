@@ -4,7 +4,7 @@ import random
 import robosuite.utils.macros as macros
 from robosuite.utils.mjcf_utils import IMAGE_CONVENTION_MAPPING
 
-from robosuite.environments.base_maple import MujocoEnv
+from robosuite.environments.base import MujocoEnv
 from robosuite.robots import ROBOT_CLASS_MAPPING
 from robosuite.controllers import reset_controllers
 

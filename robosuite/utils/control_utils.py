@@ -165,16 +165,16 @@ def set_goal_orientation(delta, current_orientation, orientation_limit=None, set
     Raises:
         ValueError: [Invalid orientation_limit shape]
     """
-    # directly set orientation
-    if set_ori is not None:
-        goal_orientation = set_ori
+    # # directly set orientation
+    # if set_ori is not None:
+    #     goal_orientation = set_ori
 
     # otherwise use delta to set goal orientation
-    else:
-        # convert axis-angle value to rotation matrix
-        quat_error = trans.axisangle2quat(delta)
-        rotation_mat_error = trans.quat2mat(quat_error)
-        goal_orientation = np.dot(rotation_mat_error, current_orientation)
+    # else:
+    # convert axis-angle value to rotation matrix
+    quat_error = trans.axisangle2quat(delta)
+    rotation_mat_error = trans.quat2mat(quat_error)
+    goal_orientation = np.dot(rotation_mat_error, current_orientation)
 
     # check for orientation limits
     if np.array(orientation_limit).any():

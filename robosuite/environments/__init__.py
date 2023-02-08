@@ -1,3 +1,5 @@
 from .base import REGISTERED_ENVS, MujocoEnv
+# from .base_maple import REGISTERED_ENVS_MAPLE, MujocoEnv
 
 ALL_ENVIRONMENTS = REGISTERED_ENVS.keys()
+# ALL_ENVIRONMENTS = REGISTERED_ENVS_MAPLE.keys()

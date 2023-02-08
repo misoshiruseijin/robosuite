@@ -8,9 +8,8 @@ from robosuite.models.objects import BoxObject
 
 from robosuite.models.tasks import ManipulationTask
 from robosuite.utils.observables import Observable, sensor
-from robosuite.utils.transform_utils import convert_quat, quat2yaw
+from robosuite.utils.transform_utils import *
 
-from robosuite.controllers import load_controller_config
 from robosuite.utils.primitive_skills import PrimitiveSkill
 
 import pdb
@@ -209,13 +208,13 @@ class Reaching2D(SingleArmEnv):
 
         self.reset_ready = False # hack to fix target initialized in wrong position issue
 
-        # primitive skill mode - TODO: which skills should be used for MAPLE?
+        # primitive skill mode 
         self.use_skills = use_skills  
         self.skill = PrimitiveSkill(
             skill_indices={
                 0 : "move_to",
                 # 1 : "gripper_release",
-            }
+            },
         )
         self.num_skills = self.skill.n_skills
         self.normalized_params = normalized_params
@@ -398,6 +397,10 @@ class Reaching2D(SingleArmEnv):
                         if f"{pf}eef_quat" in obs_cache
                         else 0
                     )
+                @sensor(modality=modality)
+                def eef_ori_mat(obs_cache):
+                    # return None
+                    return self.sim.data.site_xmat[self.sim.model.site_name2id("gripper0_grip_site")]
 
                 @sensor(modality=modality)
                 def gripper_state(obs_cache):
@@ -407,7 +410,7 @@ class Reaching2D(SingleArmEnv):
                 def target_pos(obs_cache):
                     return self.target_position
 
-                sensors = [target_pos, eef_xyz, eef_yaw, gripper_state]
+                sensors = [target_pos, eef_xyz, eef_yaw, gripper_state, eef_ori_mat]
                 names = [s.__name__ for s in sensors]
 
                 # Create observables
@@ -523,7 +526,6 @@ class Reaching2D(SingleArmEnv):
             while not done and not skill_done:
                 action_ll, skill_done = self.skill.get_action(action, obs)
                 obs, reward, done, info = super().step(action_ll)
-                # total_reward += reward
                 num_timesteps += 1
                 if self.has_renderer:
                     self.render()
@@ -550,11 +552,11 @@ class Reaching2D(SingleArmEnv):
             if action.shape[0] == 5:
                 action = np.concatenate([action[:3], np.zeros(2), action[3:]])
 
-            action_in_bounds = self._check_action_in_bounds(action)
+            # action_in_bounds = self._check_action_in_bounds(action)
 
             # if end effector position is off the table, ignore the action
-            if not action_in_bounds:
-                action[:-1] = 0
+            # if not action_in_bounds:
+            #     action[:-1] = 0
                 # print(f"Action {action} out of bounds at pos {self._eef_xpos}")
             
             self.gripper_state = action[-1]
