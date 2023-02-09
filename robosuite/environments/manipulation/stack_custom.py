@@ -168,6 +168,7 @@ class StackCustom(SingleArmEnv):
         renderer_config=None,
         use_skills=False,
         normalized_params=True,
+        use_aff_rewards=True,
     ):
         # settings for table top
         self.table_full_size = table_full_size
@@ -201,6 +202,9 @@ class StackCustom(SingleArmEnv):
                 1 : "place",
             }
         )
+        self.keypoints = self.skill.get_keypoints_dict()
+        self.use_aff_rewards = use_aff_rewards
+
         self.num_skills = self.skill.n_skills
         self.normalized_params = normalized_params
 
@@ -574,11 +578,29 @@ class StackCustom(SingleArmEnv):
         z_in_bounds = self.workspace_z[0] < self._eef_xpos[2] + sf * action[2] / self.control_freq < self.workspace_z[1]
         return x_in_bounds and y_in_bounds and z_in_bounds
     
+    def _update_keypoints(self):
+        grasping_A = self._check_grasp(gripper=self.robots[0].gripper, object_geoms=self.cubeA)
+        cubeA_pos = np.array(self.sim.data.body_xpos[self.cubeA_body_id])
+        cubeB_pos = np.array(self.sim.data.body_xpos[self.cubeB_body_id])
+        place_pos = np.array([cubeB_pos[0], cubeB_pos[1], cubeB_pos[2] + 0.05])
+        # if holding cube A, pick A is not relevant, and place on B becomes relevant
+        if grasping_A:
+            self.keypoints["pick"] = []
+            self.keypoints["place"] = [place_pos]
+        
+        # if not holding cube A, pick A is relevant, place is irrelevant
+        else:
+            self.keypoints["pick"] = [cubeA_pos]
+            self.keypoints["place"] = []
+
+
     def step(self, action):
 
+        self._update_keypoints()
+        
         # if using primitive skills
         if self.use_skills:
-            done, skill_done, skill_failed = False, False, False
+            done, skill_done, skill_success = False, False, False
             obs = self.cur_obs
 
             if self.normalized_params: # scale parameters if input params are normalized values
@@ -587,8 +609,7 @@ class StackCustom(SingleArmEnv):
             num_timesteps = 0
 
             while not done and not skill_done:
-                action_ll, skill_done, skill_failed = self.skill.get_action(action, obs)
-                # print("done, skill done, fail", done, skill_done, skill_failed)
+                action_ll, skill_done, skill_success = self.skill.get_action(action, obs)
                 obs, reward, done, info = super().step(action_ll)
                 num_timesteps += 1
                 if self.has_renderer:
@@ -596,8 +617,16 @@ class StackCustom(SingleArmEnv):
                 self.gripper_state = action_ll[-1]
             self.cur_obs = obs
             
+            # process rewards
             reward = self._reward()
-            if reward > 0 and skill_failed:
+            if self.use_aff_rewards:
+                aff_penalty_factor = 1.0
+                aff_reward = self.skill.compute_affordance_reward(action, self.keypoints)
+                assert 0.0 <= aff_reward <= 1.0
+                aff_penalty = 1.0 - aff_reward
+                reward = reward - aff_penalty_factor * aff_penalty
+                
+            if reward > 0 and not skill_success:
                 print("Reward earned on accident... Setting reward = 0")
                 reward = 0.0
             
@@ -605,16 +634,13 @@ class StackCustom(SingleArmEnv):
             
             if self._check_success(): # check if termination condition (success) is met
                 done = True
+
             return self.cur_obs, reward, done, info 
 
         ### when using low level actions
         # if input action dimension is 5, input is assumed to be [x, y, z, yaw, gripper]
         if action.shape[0] == 5:
-            action = np.concatenate([action[:3], np.zeros(2), action[3:]])
-
-        # ignore roll and pitch inputs
-        action[3] = 0
-        action[4] = 0        
+            action = np.concatenate([action[:3], np.zeros(2), action[3:]])    
         
         # if end effector position is off the table, ignore the action
         action_in_bounds = self._check_action_in_bounds(action)

@@ -16,6 +16,7 @@ class PrimitiveSkill():
         skill_indices=None,
         home_pos=(0, 0, 1.011),
         waypoint_height=1.011,
+        aff_pos_thresh=None,
     ):
 
         """
@@ -27,6 +28,8 @@ class PrimitiveSkill():
                 if not specified, position of the end effector when the PrimitiveSkill class is initialized is used
             home_wrist_ori (float): wrist orientation at home position in radians
             waypoint_height (float): height of waypoint used in skills such as pick, place
+            aff_pos_thresh (float): position threshold used in affordance score calculation
+                encourage skills to choose reach position that is within this threshold of keypoints
         """
         self.home_pos = home_pos
         self.home_ori = np.array([2.2214415, 2.2214415, 0]) # axis angle wrt global coordiantes (input to osc_pose controller with global aciton input)
@@ -56,9 +59,9 @@ class PrimitiveSkill():
             "move_to" : 20,
             "gripper_release" : 4,
             "gripper_close" : 4,
-            "pick" : 40,
-            "place" : 40,
-            "push" : 60,
+            "pick" : 50,
+            "place" : 50,
+            "push" : 100,
         }
 
         self.name_to_num_params = {
@@ -98,6 +101,17 @@ class PrimitiveSkill():
         self.workspace_bounds_z = (0.83, 1.3)
         self.yaw_bounds = (-0.5*np.pi, 0.5*np.pi)
 
+        if aff_pos_thresh is not None:
+            self.aff_pos_thresh = aff_pos_thresh
+        else:
+            self.aff_pos_thresh = {
+                "move_to" : 0.05,
+                "pick" : 0.03,
+                "place" : 0.03,
+                "push" : 0.1,
+            }
+        self.aff_tanh_scaling = 1.0
+
 
     def get_action(self, action, obs):
         """
@@ -117,11 +131,45 @@ class PrimitiveSkill():
         params = action[self.n_skills:]
         return skill(obs, params)
 
+    def get_keypoints_dict(self):
+        
+        keypoints = {key : None for key in self.skill_indices.values()}
+        return keypoints
+
+    def compute_affordance_reward(self, action, keypoint_dict):
+        """
+        Computes afforance reward given action and keypoints
+
+        Args:
+            action (array): action
+            keypoint_dict (dict) : maps skill name to keypoints. keypoints can be None or list of coordinates
+                "None" indicates that the skill is relevant at any position (choosing this skill is never penalized regardless of position parameters)
+                Empty list indicates that the skill is not relevant at any position (choosing this skill is always penalized regardless of position parameters)
+
+        Returns:
+            affordance_reward (float) : affordance reward for choosing given action
+        """
+        skill_idx = np.argmax(action[:self.n_skills])
+        skill_name = self.skill_indices[skill_idx]
+        keypoints = keypoint_dict[skill_name] # keypoints for chosen skill
+        reach_pos = action[self.n_skills:self.n_skills + 3] # component of params corresponding to reach position
+        if keypoints is None:
+            return 1.0
+
+        if len(keypoints) == 0:
+            return 0.0
+
+        aff_centers = np.stack(keypoints)
+        dist = np.clip(np.abs(aff_centers - reach_pos) - self.aff_pos_thresh[skill_name], 0, None)
+        min_dist = np.min(np.sum(dist, axis=1))
+        aff_reward = 1.0 - np.tanh(self.aff_tanh_scaling * min_dist)
+        return aff_reward
+
     def _atomic(self, obs, params, robot_id=0):
         action = np.array(params)
         return action, True
 
-    def _move_to(self, obs, params, robot_id=0, thresh=0.005, yaw_thresh=0.1, count_steps=True):
+    def _move_to(self, obs, params, robot_id=0, thresh=0.005, yaw_thresh=0.15, count_steps=True):
         
         """
         Moves end effector to goal position and orientation.
@@ -155,8 +203,8 @@ class PrimitiveSkill():
         eef_quat = obs[f"robot{robot_id}_eef_quat"]
         pos_error = goal_pos - eef_pos
         yaw_error = goal_yaw - cur_yaw
-        print("pos error", pos_error)
-        print("yaw error", yaw_error)
+        # print("pos error", pos_error)
+        # print("yaw error", yaw_error)
 
         pos_reached = np.all(np.abs(pos_error) < thresh)
         yaw_reached = np.abs(yaw_error) < yaw_thresh
@@ -202,10 +250,10 @@ class PrimitiveSkill():
 
         if self.grip_steps < max_steps:
             self.grip_steps += 1
-            return action, False
+            return action, False, False
         
         self.grip_steps = 0
-        return action, True
+        return action, True, True
 
     def _gripper_close(self, obs, params=(), robot_id=0):
         """
@@ -225,12 +273,12 @@ class PrimitiveSkill():
 
         if self.grip_steps < max_steps:
             self.grip_steps += 1
-            return action, False
+            return action, False, False
         
         self.grip_steps = 0
-        return action, True
+        return action, True, True
 
-    def _pick(self, obs, params, robot_id=0, thresh=0.005, yaw_thresh=0.1):       
+    def _pick(self, obs, params, robot_id=0, thresh=0.005, yaw_thresh=0.15):       
         """
         Picks up an object at a target position and returns to home position.
         Args:
@@ -254,6 +302,7 @@ class PrimitiveSkill():
         above_pos = (goal_pos[0], goal_pos[1], self.waypoint_height)
 
         skill_failed = False
+        success = False
 
         if self.prev_success:
             self.phase += 1
@@ -262,6 +311,7 @@ class PrimitiveSkill():
         if self.steps > max_steps:
             self.phase = 4
             skill_failed = True
+            print("max steps for pick reached:", max_steps)
 
         # phase 0: move to above grip site
         if self.phase == 0:
@@ -275,7 +325,7 @@ class PrimitiveSkill():
 
         # phase 2: grip
         if self.phase == 2:
-            action, self.prev_success = self._gripper_close(obs=obs)
+            action, skill_done, self.prev_success = self._gripper_close(obs=obs)
 
         # phase 3: lift
         if self.phase == 3:
@@ -293,15 +343,16 @@ class PrimitiveSkill():
                 self.steps = 0
                 self.phase = 0
                 self.prev_success = False
-                return action, True, skill_failed
+                success = True
+                return action, True, success
             
-            return action, False, skill_failed
+            return action, False, success
         
         self.steps += 1
 
-        return action, False, skill_failed
+        return action, False, success
 
-    def _place(self, obs, params, robot_id=0, speed=0.3, thresh=0.005, yaw_thresh=0.05, max_steps=40):       
+    def _place(self, obs, params, robot_id=0, speed=0.3, thresh=0.005, yaw_thresh=0.15, max_steps=40):       
         """
         Places an object at a target position and returns to home position.
         Args:
@@ -326,6 +377,7 @@ class PrimitiveSkill():
         above_pos = (goal_pos[0], goal_pos[1], self.waypoint_height)
 
         skill_failed = False
+        success = False
 
         if self.prev_success:
             self.phase += 1
@@ -334,6 +386,7 @@ class PrimitiveSkill():
         if self.steps > max_steps:
             self.phase = 4
             skill_failed = True
+            print("max steps for place reached:", max_steps)
 
         # phase 0: move to above place site
         if self.phase == 0:
@@ -347,7 +400,7 @@ class PrimitiveSkill():
 
         # phase 2: release
         if self.phase == 2:
-            action, self.prev_success = self._gripper_release(obs=obs)
+            action, skill_done, self.prev_success = self._gripper_release(obs=obs)
             self.grip_steps += 1
 
         # phase 3: lift
@@ -364,15 +417,16 @@ class PrimitiveSkill():
                 self.steps = 0
                 self.phase = 0
                 self.prev_success = False
-                return action, True, skill_failed
+                success = True
+                return action, True, success
             
-            return action, False, skill_failed
-        
+            return action, False, success
+    
         self.steps += 1
 
-        return action, False, skill_failed
+        return action, False, success
 
-    def _push(self, obs, params, robot_id=0, speed=0.3, thresh=0.005, yaw_thresh=0.05, max_steps=60):
+    def _push(self, obs, params, robot_id=0, speed=0.3, thresh=0.005, yaw_thresh=0.15, max_steps=60):
         """
         Moves end effector to above push starting position, moves down to start position, moves to goal position, up, then back to the home position,
         Positions are defined in world coordinates
@@ -400,8 +454,7 @@ class PrimitiveSkill():
         above_end_pos = (end_pos[0], end_pos[1], self.waypoint_height)
 
         skill_failed = False
-
-        print("Steps", self.steps)
+        success = False
 
         if self.prev_success:
             self.phase += 1
@@ -410,6 +463,7 @@ class PrimitiveSkill():
         if self.steps > max_steps:
             self.phase = 4
             skill_failed = True
+            print("max steps for push reached:", max_steps)
 
         # phase 0: move to above start pos
         if self.phase == 0:
@@ -441,13 +495,14 @@ class PrimitiveSkill():
                 self.steps = 0
                 self.phase = 0
                 self.prev_success = False
-                return action, True, skill_failed
+                success = True
+                return action, True, success
             
-            return action, False, skill_failed
+            return action, False, success
         
         self.steps += 1
 
-        return action, False, skill_failed
+        return action, False, success
 
 class PrimitiveSkillDelta():
     def __init__(
@@ -1536,4 +1591,3 @@ class PrimitiveSkill_Old():
         self.move_to_external_call = False
 
         return obs, reward, done, info
-

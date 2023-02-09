@@ -176,6 +176,7 @@ class Reaching2D(SingleArmEnv):
         random_target=False,
         use_skills=False,
         normalized_params=True,
+        use_aff_rewards=True, # use affordance score
     ):
 
         # settings for table top
@@ -213,14 +214,13 @@ class Reaching2D(SingleArmEnv):
         self.skill = PrimitiveSkill(
             skill_indices={
                 0 : "move_to",
-<<<<<<< HEAD
-                # 1 : "gripper_release",
-            },
-=======
                 1 : "gripper_release",
             }
->>>>>>> 63fff119926fae25bc3405d00f10d5907ed21bc4
         )
+        self.keypoints = self.skill.get_keypoints_dict()
+        self.keypoints["move_to"] = [np.append(self.target_position, 1.0)]
+        self.use_aff_rewards = use_aff_rewards
+
         self.num_skills = self.skill.n_skills
         self.normalized_params = normalized_params
 
@@ -529,7 +529,7 @@ class Reaching2D(SingleArmEnv):
                 action[self.num_skills:] = self._scale_params(action[self.num_skills:])
             
             while not done and not skill_done:
-                action_ll, skill_done = self.skill.get_action(action, obs)
+                action_ll, skill_done, skill_success = self.skill.get_action(action, obs)
                 obs, reward, done, info = super().step(action_ll)
                 num_timesteps += 1
                 if self.has_renderer:
@@ -542,8 +542,16 @@ class Reaching2D(SingleArmEnv):
             # print("eef_pos, yaw", obs["eef_xyz"], obs["eef_yaw"])
             info = {"num_timesteps": num_timesteps}
 
+            # process rewards
             reward = self._reward()
-            if reward > 0 and not skill_done:
+            if self.use_aff_rewards:
+                aff_penalty_factor = 1.0
+                aff_reward = self.skill.compute_affordance_reward(action, self.keypoints)
+                assert 0.0 <= aff_reward <= 1.0
+                aff_penalty = 1.0 - aff_reward
+                reward = reward - aff_penalty_factor * aff_penalty
+
+            if reward > 0 and not skill_success:
                 reward = 0.0
                 print("Reached target by accident... reward = 0")
             if self._check_success(): # check if termination condition (success) is met
@@ -557,12 +565,12 @@ class Reaching2D(SingleArmEnv):
             if action.shape[0] == 5:
                 action = np.concatenate([action[:3], np.zeros(2), action[3:]])
 
-            # action_in_bounds = self._check_action_in_bounds(action)
+            action_in_bounds = self._check_action_in_bounds(action)
 
             # if end effector position is off the table, ignore the action
-            # if not action_in_bounds:
-            #     action[:-1] = 0
-                # print(f"Action {action} out of bounds at pos {self._eef_xpos}")
+            if not action_in_bounds:
+                action[:-1] = 0
+                print(f"Action {action} out of bounds at pos {self._eef_xpos}")
             
             self.gripper_state = action[-1]
             
