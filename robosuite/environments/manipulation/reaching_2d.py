@@ -160,7 +160,7 @@ class Reaching2D(SingleArmEnv):
         render_visual_mesh=True,
         render_gpu_device_id=-1,
         control_freq=20,
-        horizon=1000,
+        horizon=200,
         ignore_done=False,
         hard_reset=True,
         camera_names="frontview",
@@ -171,12 +171,12 @@ class Reaching2D(SingleArmEnv):
         renderer="mujoco",
         renderer_config=None,
         target_half_size=(0.05, 0.05, 0.001), # target width, height, thickness
-        target_position=(0.1, 0.15), # target position (height above the table)
+        target_position=(0.1, 0.3), # target position (height above the table)
         random_init=False,
         random_target=False,
         use_skills=False,
         normalized_params=True,
-        use_aff_rewards=True, # use affordance score
+        use_aff_rewards=False, # use affordance score
     ):
 
         # settings for table top

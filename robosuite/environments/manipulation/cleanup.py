@@ -148,7 +148,7 @@ class Cleanup(SingleArmEnv):
         render_visual_mesh=True,
         render_gpu_device_id=-1,
         control_freq=20,
-        horizon=4000,
+        horizon=600,
         ignore_done=False,
         hard_reset=True,
         camera_names="agentview",
@@ -158,7 +158,7 @@ class Cleanup(SingleArmEnv):
         task_config=None,
         use_skills=False,
         normalized_params=True,
-        use_aff_rewards=True,
+        use_aff_rewards=False,
     ):
         # settings for table top
         self.table_full_size = table_full_size
