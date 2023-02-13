@@ -10,7 +10,7 @@ from robosuite.utils.mjcf_utils import CustomMaterial
 from robosuite.utils.observables import Observable, sensor
 from robosuite.utils.placement_samplers import UniformRandomSampler
 from robosuite.utils.transform_utils import convert_quat
-from robosuite.utils.primitive_skills import PrimitiveSkill
+from robosuite.utils.primitive_skills import PrimitiveSkillDelta
 
 import pdb
 

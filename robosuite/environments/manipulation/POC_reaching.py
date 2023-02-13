@@ -8,10 +8,9 @@ from robosuite.models.objects import BoxObject
 
 from robosuite.models.tasks import ManipulationTask
 from robosuite.utils.observables import Observable, sensor
-from robosuite.utils.primitive_skills import PrimitiveSkill
+from robosuite.utils.primitive_skills import PrimitiveSkillDelta
 from robosuite.utils.transform_utils import quat2yaw
 
-from robosuite.controllers import load_controller_config
 import pdb
 import time
 

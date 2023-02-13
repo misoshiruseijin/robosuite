@@ -10,10 +10,10 @@ from robosuite.models.tasks import ManipulationTask
 from robosuite.utils.observables import Observable, sensor
 from robosuite.utils.transform_utils import *
 
-from robosuite.utils.primitive_skills import PrimitiveSkill
+from robosuite.utils.primitive_skills import PrimitiveSkillDelta, PrimitiveSkillGlobal
+from robosuite.controllers.controller_factory import load_controller_config
 
 import pdb
-import time
 
 class Reaching2D(SingleArmEnv):
     """
@@ -175,6 +175,7 @@ class Reaching2D(SingleArmEnv):
         random_init=False,
         random_target=False,
         use_skills=False,
+        use_delta=None, # if set, ignore controller_configs and use osc controller (if True, use delta control, if false use global control)
         normalized_params=True,
         use_aff_rewards=False, # use affordance score
     ):
@@ -208,15 +209,29 @@ class Reaching2D(SingleArmEnv):
         self.yaw_bounds = (-0.5*np.pi, 0.5*np.pi)
 
         self.reset_ready = False # hack to fix target initialized in wrong position issue
-
+        
+        # setup controller
+        if use_delta is not None:
+            controller_configs = load_controller_config(default_controller="OSC_POSE")
+            controller_configs["control_delta"] = use_delta
+        
         # primitive skill mode 
         self.use_skills = use_skills  
-        self.skill = PrimitiveSkill(
-            skill_indices={
-                0 : "move_to",
-                1 : "gripper_release",
-            }
-        )
+        if use_delta == True:
+            self.skill = PrimitiveSkillDelta(
+                skill_indices={
+                    0 : "move_to",
+                    1 : "gripper_release",
+                }
+            )
+        elif use_delta == False:
+            self.skill = PrimitiveSkillGlobal(
+                skill_indices={
+                    0 : "move_to",
+                    1 : "gripper_release",
+                }
+            )
+
         self.keypoints = self.skill.get_keypoints_dict()
         self.keypoints["move_to"] = [np.append(self.target_position, 1.0)]
         self.use_aff_rewards = use_aff_rewards

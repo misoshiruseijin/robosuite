@@ -13,7 +13,8 @@ from robosuite.utils.placement_samplers import UniformRandomSampler
 from robosuite.utils import RandomizationError
 from robosuite.utils.observables import Observable, sensor
 from robosuite.utils.transform_utils import quat2yaw
-from robosuite.utils.primitive_skills import PrimitiveSkill
+from robosuite.utils.primitive_skills import PrimitiveSkillDelta, PrimitiveSkillGlobal
+from robosuite.controllers.controller_factory import load_controller_config
 
 import pdb
 
@@ -157,6 +158,7 @@ class Cleanup(SingleArmEnv):
         camera_depths=False,
         task_config=None,
         use_skills=False,
+        use_delta=None, # if set, ignore controller_configs and use osc controller (if True, use delta control, if false use global controller)
         normalized_params=True,
         use_aff_rewards=False,
     ):
@@ -189,15 +191,30 @@ class Cleanup(SingleArmEnv):
         self.workspace_z = (self.table_offset[2] + 0.03, self.table_offset[0] + 0.53)
         self.yaw_bounds = (-0.5*np.pi, 0.5*np.pi)
 
-        # primitive skill mode
+        # setup controller
+        if use_delta is not None:
+            controller_configs = load_controller_config(default_controller="OSC_POSE")
+            controller_configs["control_delta"] = use_delta
+        
+        # primitive skill mode 
         self.use_skills = use_skills  
-        self.skill = PrimitiveSkill(
-            skill_indices={
-                0 : "pick",
-                1 : "place",
-                2 : "push",
-            }
-        )
+        if use_delta == True:
+            self.skill = PrimitiveSkillDelta(
+                skill_indices={
+                    0 : "pick",
+                    1 : "place",
+                    2 : "push"
+                }
+            )
+        elif use_delta == False:
+            self.skill = PrimitiveSkillGlobal(
+                skill_indices={
+                    0 : "pick",
+                    1 : "place",
+                    2 : "push",
+                }
+            )
+
         self.keypoints = self.skill.get_keypoints_dict()
         self.use_aff_rewards = use_aff_rewards
         self.num_skills = self.skill.n_skills

@@ -10,7 +10,7 @@ from robosuite.utils.transform_utils import *
 
 import pdb
 
-class PrimitiveSkill():
+class PrimitiveSkillGlobal():
     def __init__(
         self,
         skill_indices=None,
@@ -32,7 +32,6 @@ class PrimitiveSkill():
                 encourage skills to choose reach position that is within this threshold of keypoints
         """
         self.home_pos = home_pos
-        self.home_ori = np.array([2.2214415, 2.2214415, 0]) # axis angle wrt global coordiantes (input to osc_pose controller with global aciton input)
         self.waypoint_height = waypoint_height
 
         self.skill_names = [
@@ -111,7 +110,6 @@ class PrimitiveSkill():
                 "push" : 0.1,
             }
         self.aff_tanh_scaling = 1.0
-
 
     def get_action(self, action, obs):
         """
@@ -329,12 +327,12 @@ class PrimitiveSkill():
 
         # phase 3: lift
         if self.phase == 3:
-            self.grip_steps = 0
             params = np.concatenate([above_pos, np.array([goal_yaw, 1])])
             action, skill_done, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, thresh=thresh, yaw_thresh=yaw_thresh, count_steps=False)
 
         # phase 4: move to home
         if self.phase == 4:
+            self.steps = 0
             params = np.concatenate([self.home_pos, np.array([0, 1])])
             if skill_failed:
                 params[-1] = -1
@@ -401,16 +399,15 @@ class PrimitiveSkill():
         # phase 2: release
         if self.phase == 2:
             action, skill_done, self.prev_success = self._gripper_release(obs=obs)
-            self.grip_steps += 1
 
         # phase 3: lift
         if self.phase == 3:
-            self.grip_steps = 0
             params = np.concatenate([above_pos, np.array([goal_yaw, -1])])
             action, skill_done, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, thresh=thresh, yaw_thresh=yaw_thresh, count_steps=False)
 
         # phase 4: move to home
         if self.phase == 4:
+            self.steps = 0
             params = np.concatenate([self.home_pos, np.array([0, -1])])
             action, skill_done, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, thresh=thresh, yaw_thresh=yaw_thresh, count_steps=False)
             if self.prev_success:
@@ -489,6 +486,7 @@ class PrimitiveSkill():
 
         # phase 4: move to home
         if self.phase == 4:
+            self.steps = 0
             params = np.concatenate([self.home_pos, np.array([0, gripper_action])])
             action, skill_done, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, thresh=thresh, yaw_thresh=yaw_thresh, count_steps=False)
             if self.prev_success:
@@ -511,6 +509,7 @@ class PrimitiveSkillDelta():
         home_pos=(0, 0, 1.011),
         home_wrist_ori=0.0,
         waypoint_height=1.011,
+        aff_pos_thresh=None,
     ):
 
         """
@@ -529,7 +528,6 @@ class PrimitiveSkillDelta():
 
         self.skill_names = [
             "move_to",
-            "move_to_xy",
             "pick",
             "place",
             "push",
@@ -540,7 +538,6 @@ class PrimitiveSkillDelta():
 
         self.name_to_skill = {
             "move_to" : self._move_to,
-            "move_to_xy" : self._move_to_xy,
             "gripper_release" : self._gripper_release,
             "gripper_close" : self._gripper_close,
             "pick" : self._pick,
@@ -548,10 +545,18 @@ class PrimitiveSkillDelta():
             "push" : self._push,
             "atomic": self._atomic,
         }
-
+        
+        self.max_steps = {
+            "move_to" : 250,
+            "gripper_release" : 10,
+            "gripper_close" : 10,
+            "pick" : 250,
+            "place" : 250,
+            "push" : 250,
+        }
+        
         self.name_to_num_params = {
             "move_to" : 5,
-            "move_to_xy" : 4,
             "gripper_release" : 0,
             "gripper_close" : 0,
             "pick" : 4,
@@ -564,13 +569,12 @@ class PrimitiveSkillDelta():
         if not skill_indices:
             self.skill_indices = {
                 0 : "move_to",
-                1 : "move_to_xy",
-                2 : "pick",
-                3 : "place",
-                4 : "push",
-                5 : "gripper_release",
-                6 : "gripper_close",
-                7 : "atomic",
+                1 : "pick",
+                2 : "place",
+                3 : "push",
+                4 : "gripper_release",
+                5 : "gripper_close",
+                6 : "atomic",
             }
 
         for key in self.skill_indices.keys():
@@ -579,8 +583,6 @@ class PrimitiveSkillDelta():
         self.n_skills = len(self.skill_indices)
         self.max_num_params = max([self.name_to_num_params[skill_name] for skill_name in self.skill_indices.values()])
 
-        # self.move_to_external_call = False # controls whether step count is reset after move_to_pos call
-        # self.ignore_z = False # set to True when calling move_to_xy
         self.steps = 0 # number of steps spent on one primitive skill
         self.grip_steps = 0
         self.phase = 0 # keeps track of phase in multi-step skills
@@ -591,6 +593,17 @@ class PrimitiveSkillDelta():
         self.workspace_bounds_y = (-0.4, 0.4)
         self.workspace_bounds_z = (0.83, 1.3)
         self.yaw_bounds = (-0.5*np.pi, 0.5*np.pi)
+
+        if aff_pos_thresh is not None:
+            self.aff_pos_thresh = aff_pos_thresh
+        else:
+            self.aff_pos_thresh = {
+                "move_to" : 0.05,
+                "pick" : 0.03,
+                "place" : 0.03,
+                "push" : 0.1,
+            }
+        self.aff_tanh_scaling = 1.0
 
     def get_action(self, action, obs):
         """
@@ -610,11 +623,45 @@ class PrimitiveSkillDelta():
         params = action[self.n_skills:]
         return skill(obs, params)
 
+    def get_keypoints_dict(self):
+        
+        keypoints = {key : None for key in self.skill_indices.values()}
+        return keypoints
+    
+    def compute_affordance_reward(self, action, keypoint_dict):
+        """
+        Computes afforance reward given action and keypoints
+
+        Args:
+            action (array): action
+            keypoint_dict (dict) : maps skill name to keypoints. keypoints can be None or list of coordinates
+                "None" indicates that the skill is relevant at any position (choosing this skill is never penalized regardless of position parameters)
+                Empty list indicates that the skill is not relevant at any position (choosing this skill is always penalized regardless of position parameters)
+
+        Returns:
+            affordance_reward (float) : affordance reward for choosing given action
+        """
+        skill_idx = np.argmax(action[:self.n_skills])
+        skill_name = self.skill_indices[skill_idx]
+        keypoints = keypoint_dict[skill_name] # keypoints for chosen skill
+        reach_pos = action[self.n_skills:self.n_skills + 3] # component of params corresponding to reach position
+        if keypoints is None:
+            return 1.0
+
+        if len(keypoints) == 0:
+            return 0.0
+
+        aff_centers = np.stack(keypoints)
+        dist = np.clip(np.abs(aff_centers - reach_pos) - self.aff_pos_thresh[skill_name], 0, None)
+        min_dist = np.min(np.sum(dist, axis=1))
+        aff_reward = 1.0 - np.tanh(self.aff_tanh_scaling * min_dist)
+        return aff_reward
+
     def _atomic(self, obs, params, robot_id=0):
         action = np.array(params)
         return action, True
         
-    def _move_to(self, obs, params, robot_id=0, speed=0.3, thresh=0.005, yaw_thresh=0.05, return_max_steps=False, slow_speed=0.15):
+    def _move_to(self, obs, params, robot_id=0, speed=0.3, thresh=0.005, yaw_thresh=0.1, slow_speed=0.15, count_steps=False):
         
         """
         Moves end effector to goal position and orientation.
@@ -635,18 +682,18 @@ class PrimitiveSkillDelta():
         """
         goal_pos = params[:3]
         goal_yaw = params[3]
-        # goal_yaw = None
         gripper_action = 1 if params[4] > 0 else -1
 
-        max_steps = 250
-        # slow_speed = 0.15
-        ori_speed = 0.1
+        max_steps = self.max_steps["move_to"]
+
+        ori_speed = 0.2
         slow_dist = 0.02 # slow down when the end effector is slow_dist away from goal
 
         skill_done = False
-        max_steps_reached = False
+        success = False
 
         eef_pos = obs[f"robot{robot_id}_eef_pos"]
+        eef_quat = obs[f"robot{robot_id}_eef_quat"]
         pos_error = goal_pos - eef_pos
 
         if goal_yaw:
@@ -655,104 +702,37 @@ class PrimitiveSkillDelta():
             goal_ori = self.home_wrist_ori
         cur_ori = _quat2euler(obs[f"robot{robot_id}_eef_quat"])
         cur_yaw = cur_ori[-1]
-        ori_error = goal_ori - cur_yaw
+        yaw_error = goal_ori - cur_yaw
         pos_reached = np.all(np.abs(pos_error) < thresh)
-        ori_reached = np.abs(ori_error) < yaw_thresh
+        yaw_reached = np.abs(yaw_error) < yaw_thresh
 
-        # skill execution is done if goal state or max steps is reached
-        if (pos_reached and ori_reached) or self.steps > max_steps:
-            if self.steps > max_steps:
-                print("Max steps for primitive reached: ", max_steps)
-                print(f"Goal was {params}\nReached {eef_pos}, {cur_yaw}")
-                max_steps_reached = True
+        # if close to goal, reduce speed
+        if np.abs(np.linalg.norm(pos_error)) < slow_dist:
+            speed = slow_speed
+        if abs(yaw_error) < 0.75:
+            ori_speed = 0.05
+        pos_action = speed * (pos_error / np.linalg.norm(pos_error)) # unit vector in direction of goal * speed
+        ori_action = np.append(_roll_pitch_correction(eef_quat), np.sign(yaw_error) * ori_speed)
+        action = np.concatenate([pos_action, ori_action, np.array([gripper_action])])
+
+        # max steps reached - skill done with fail
+        if count_steps and (self.steps > max_steps):
+            print("Max steps for primitive reached: ", max_steps)
+            print(f"Goal was {params}\nReached {eef_pos}, {cur_yaw}")
+            success = False
             skill_done = True
-            action = np.zeros(7)
-            action[-1] = gripper_action
-            self.steps = 0
 
-        else:
-            # if close to goal, reduce speed
-            if np.abs(np.linalg.norm(pos_error)) < slow_dist:
-                speed = slow_speed
-            if abs(ori_error) < 0.05:
-                ori_speed = 0.025
-            pos_action = speed * (pos_error / np.linalg.norm(pos_error)) # unit vector in direction of goal * speed
-            ori_action = np.array([0, 0, np.sign(ori_error) * ori_speed])
-            action = np.concatenate([pos_action, ori_action, np.array([gripper_action])])
-            self.steps += 1
-
-        if return_max_steps:
-            return action, skill_done, max_steps_reached
-
-        return action, skill_done
-
-    # NOTE - _move_to_xy function is outdated. Use _move_to instead
-    def _move_to_xy(self, obs, params, robot_id=0, speed=0.3, thresh=0.001, yaw_thresh=0.005):
-
-        """
-        Moves end effector to goal position (2d) and orientation.
-        Args:
-            obs: observation dict from environment
-            params (tuple of floats): [goal_pos, goal_yaw, gripper_command]
-                goal_pos (2-tuple): goal end effector position (x, y, z) in world
-                gripper_command (float): gripper is closed if > 0, opened if <= 0                
-                goal_yaw (tuple): goal yaw angle for end effector
-            robot_id (int): specifies which robot's observations are used (if more than one robots exist in environment)
-            speed (float): controls magnitude of position commands. Values over ~0.75 is not recommended
-            thresh (float): how close end effector position must be to the goal for skill to be complete
-            yaw_thresh (float): how close end effector yaw angle must be to the goal value for skill to be complete
-            normalized input (bool): set to True if input parameters are normalized to [-1, 1]. set to False to use raw params
-        Returns:
-            action: 7d action commands for simulation environment - (position commands, orientation commands, gripper command)
-            skill_done: True if goal skill completed successfully or if max allowed steps is reached
-        """
-        goal_pos = params[:2]
-        goal_yaw = params[2]
-        # goal_yaw = self.home_wrist_ori
-        gripper_action = 1 if params[3] > 0 else -1
-
-        max_steps = 200
-        slow_speed = 0.15
-        ori_speed = 0.05
-        slow_dist = 0.02 # slow down when the end effector is slow_dist away from goal
-
-        skill_done = False
-
-        eef_pos = obs[f"robot{robot_id}_eef_pos"][:2]
-        pos_error = goal_pos - eef_pos
-
-        if goal_yaw:
-            goal_ori = _wrap_to_pi(goal_yaw)
-        else:
-            goal_ori = self.home_wrist_ori
-        cur_ori = _quat_to_yaw(obs[f"robot{robot_id}_eef_quat"])
-        ori_error = goal_ori - cur_ori
-        # print("ori cur, goal ", cur_ori, goal_ori)
-        # print("pos, ori", eef_pos, cur_ori)
-        pos_reached = np.all(np.abs(pos_error) < thresh)
-        ori_reached = np.abs(ori_error) < yaw_thresh
-
-        # skill execution is done if goal state or max steps is reached
-        if (pos_reached and ori_reached) or self.steps > max_steps:
-            if self.steps > max_steps:
-                print("Max steps for primitive reached: ", max_steps)
+        # goal is reached - skill done with success
+        if (pos_reached and yaw_reached):
+            success = True
             skill_done = True
-            action = np.zeros(7)
-            action[-1] = gripper_action
-            self.steps = 0
-
+            if count_steps:
+                self.steps = 0
         else:
-            # if close to goal, reduce speed
-            if np.abs(np.linalg.norm(pos_error)) < slow_dist:
-                speed = slow_speed
-            if abs(ori_error) < 0.1:
-                ori_speed = 0.025
-            pos_action = speed * (pos_error / np.linalg.norm(pos_error)) # unit vector in direction of goal * speed
-            ori_action = np.array([0, 0, np.sign(ori_error) * ori_speed])
-            action = np.concatenate([pos_action, np.zeros(1), ori_action, np.array([gripper_action])])
-            self.steps += 1
+            if count_steps:
+                self.steps += 1
 
-        return action, skill_done
+        return action, skill_done, success
 
     def _gripper_release(self, obs={}, params=(), robot_id=0):
         """
@@ -766,15 +746,15 @@ class PrimitiveSkillDelta():
             action: 7d action commands for simulation environment - (position commands, orientation commands, gripper command)
             skill_done: True if goal skill completed successfully or if max allowed steps is reached
         """
-        max_steps = 15
+        max_steps = self.max_steps["gripper_release"]
         action = np.array([0, 0, 0, 0, 0, 0, -1])
 
         if self.grip_steps < max_steps:
             self.grip_steps += 1
-            return action, False
+            return action, False, False
         
         self.grip_steps = 0
-        return action, True
+        return action, True, True
 
     def _gripper_close(self, obs={}, params=(), robot_id=0):
         """
@@ -788,15 +768,15 @@ class PrimitiveSkillDelta():
             action: 7d action commands for simulation environment - (position commands, orientation commands, gripper command)
             skill_done: True if goal skill completed successfully or if max allowed steps is reached
         """
-        max_steps = 15
+        max_steps = self.max_steps["gripper_close"]
         action = np.array([0, 0, 0, 0, 0, 0, 1])
 
         if self.grip_steps < max_steps:
             self.grip_steps += 1
-            return action, False
+            return action, False, False
         
         self.grip_steps = 0
-        return action, True
+        return action, True, True
 
     def _pick(self, obs, params, robot_id=0, speed=0.3, thresh=0.005, yaw_thresh=0.05):       
         """
@@ -817,63 +797,61 @@ class PrimitiveSkillDelta():
         """
         goal_pos = params[:3]
         goal_yaw = params[3]
+        max_steps = self.max_steps["pick"]
 
         above_pos = (goal_pos[0], goal_pos[1], self.waypoint_height)
+
+        skill_failed = False
+        success = False
 
         if self.prev_success:
             self.phase += 1
             self.prev_success = False
 
+        # if max steps reached go to rehoming phase
+        if self.steps > max_steps:
+            self.phase = 4
+            skill_failed = True
+            print("max steps for pick reached:", max_steps)
+
         # phase 0: move to above grip site
         if self.phase == 0:
             params = np.concatenate([above_pos, np.array([goal_yaw, -1])])
-            action, self.prev_success, self.skill_failed = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, return_max_steps=True)
-            if self.skill_failed:
-                self.phase = 4
-                self.steps = 0
-            else:
-                return action, False, self.skill_failed
+            action, skill_done, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, count_steps=False)
 
         # phase 1: move down to grip site
         if self.phase == 1:
             params = np.concatenate([goal_pos, np.array([goal_yaw, -1])])
-            action, self.prev_success, self.skill_failed = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, return_max_steps=True)
-            if self.skill_failed:
-                self.phase = 4
-                self.steps = 0
-            else:
-                return action, False, self.skill_failed
+            action, skill_done, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, count_steps=False)
 
         # phase 2: grip
         if self.phase == 2:
-            action, self.prev_success = self._gripper_close()
-            return action, False, self.skill_failed
+            action, skill_done, self.prev_success = self._gripper_close()
 
         # phase 3: lift
         if self.phase == 3:
             params = np.concatenate([above_pos, np.array([goal_yaw, 1])])
-            action, self.prev_success, self.skill_failed = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, return_max_steps=True)
-            if self.skill_failed:
-                self.phase = 4
-                self.steps = 0
-            else:
-                return action, False, self.skill_failed
+            action, skill_done, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, count_steps=False)
 
         # phase 4: move to home
         if self.phase == 4:
-            failed = self.skill_failed
-            params = np.concatenate([self.home_pos, np.array([goal_yaw, 1])])
-            if failed:
+            self.grip_steps = 0
+            params = np.concatenate([self.home_pos, np.array([0, 1])])
+            if skill_failed:
                 params[-1] = -1
-            action, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh)
+            action, skill_done, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, count_steps=False)
             if self.prev_success:
                 self.steps = 0
                 self.phase = 0
                 self.prev_success = False
-                self.skill_failed = False
-                return action, True, failed
+                success = True
+                return action, True, success
 
-            return action, False, failed
+            return action, False, success
+        
+        self.steps += 1
+
+        return action, False, success
 
     def _place(self, obs, params, robot_id=0, speed=0.3, thresh=0.005, yaw_thresh=0.05):       
         """
@@ -894,61 +872,60 @@ class PrimitiveSkillDelta():
         """
         goal_pos = params[:3]
         goal_yaw = params[3]
+        max_steps = self.max_steps["place"]
 
         above_pos = (goal_pos[0], goal_pos[1], self.waypoint_height)
+
+        skill_failed = False
+        success = False
 
         if self.prev_success:
             self.phase += 1
             self.prev_success = False
+        
+        if self.steps > max_steps:
+            self.phase = 4
+            skill_failed = True
+            print("max steps for place reached:", max_steps)
 
         # phase 0: move to above place site
         if self.phase == 0:
             params = np.concatenate([above_pos, np.array([goal_yaw, 1])])
-            action, self.prev_success, self.skill_failed = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, return_max_steps=True)
-            if self.skill_failed:
-                self.phase = 4
-                self.steps = 0
-            else:
-                return action, False, self.skill_failed
-        
+            action, skill_done, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, count_steps=False)
+
         # phase 1: move down to drop site
         if self.phase == 1:
             params = np.concatenate([goal_pos, np.array([goal_yaw, 1])])
-            action, self.prev_success, self.skill_failed = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, return_max_steps=True)
-            if self.skill_failed:
-                self.phase = 4
-                self.steps = 0
-            else:
-                return action, False, self.skill_failed
+            action, skill_done, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, count_steps=False)
 
         # phase 2: release
         if self.phase == 2:
-            action, self.prev_success = self._gripper_release()
-            return action, False, self.skill_failed
+            action, skill_done, self.prev_success = self._gripper_release()
 
         # phase 3: lift
         if self.phase == 3:
             params = np.concatenate([above_pos, np.array([goal_yaw, -1])])
-            action, self.prev_success, self.skill_failed = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, return_max_steps=True)
-            if self.skill_failed:
-                self.phase = 4
-                self.steps = 0
-            else:
-                return action, False, self.skill_failed
+            action, skill_done, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, count_steps=False)
 
         # phase 4: move to home
         if self.phase == 4:
+            self.grip_steps = 0
             self.steps = 0
             failed = self.skill_failed
-            params = np.concatenate([self.home_pos, np.array([goal_yaw, -1])])
-            action, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh)
+            params = np.concatenate([self.home_pos, np.array([0, -1])])
+            action, skill_done, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, count_steps=False)
             
             if self.prev_success:
                 self.steps = 0
                 self.phase = 0
                 self.prev_success = False
-                return action, True, failed
-            return action, False, failed
+                success = True
+                return action, True, success
+            return action, False, success
+
+        self.steps += 1
+        
+        return action, False, success
 
     def _push(self, obs, params, robot_id=0, speed=0.3, thresh=0.005, yaw_thresh=0.05):
         """
@@ -972,77 +949,60 @@ class PrimitiveSkillDelta():
         end_pos = params[3:6]
         goal_yaw = params[6]
         gripper_action = 1 if params[7] > 0 else -1
+        max_steps = self.max_steps["push"]
 
         above_start_pos = (start_pos[0], start_pos[1], self.waypoint_height)
         above_end_pos = (end_pos[0], end_pos[1], self.waypoint_height)
 
-        cur_quat = obs[f"robot{robot_id}_eef_quat"]
-
+        skill_failed = False
+        success = False
+        
         if self.prev_success:
             self.phase += 1
             self.prev_success = False
 
+        if self.steps > max_steps:
+            self.phase = 4
+            skill_failed = True
+            print("max steps for push reached:", max_steps)
+
         # phase 0: move to above start pos
         if self.phase == 0:
             params = np.concatenate([above_start_pos, np.array([goal_yaw, gripper_action])])
-            action, self.prev_success, self.skill_failed = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, return_max_steps=True)
-            action[3:5] = _roll_pitch_correction(cur_quat)
-            if self.skill_failed:
-                self.phase = 4
-                self.steps = 0
-            else:
-                return action, False, self.skill_failed
+            action, skill_done, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, count_steps=False)
         
         # phase 1: move down to start pos
         if self.phase == 1:
             params = np.concatenate([start_pos, np.array([goal_yaw, gripper_action])])
-            action, self.prev_success, self.skill_failed = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, return_max_steps=True)
-            action[3:5] = _roll_pitch_correction(cur_quat)
-            
-            if self.skill_failed:
-                self.phase = 4
-                self.steps = 0
-            else:
-                return action, False, self.skill_failed
+            action, skill_done, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, count_steps=False)
 
         # phase 2: move to goal pos
         if self.phase == 2:
             params = np.concatenate([end_pos, np.array([goal_yaw, gripper_action])])
-            action, self.prev_success, self.skill_failed = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=0.03, yaw_thresh=yaw_thresh, return_max_steps=True, slow_speed=0.3)
-            action[3:5] = _roll_pitch_correction(cur_quat)
-            
-            if self.skill_failed:
-                self.phase = 4
-                self.steps = 0
-            else:
-                return action, False, self.skill_failed
+            action, skill_done, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=0.03, yaw_thresh=yaw_thresh, count_steps=False, slow_speed=0.3)
 
         # phase 3: move to above end pos
         if self.phase == 3:
             params = np.concatenate([above_end_pos, np.array([goal_yaw, gripper_action])])
-            action, self.prev_success, self.skill_failed = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, return_max_steps=True)
-            action[3:5] = _roll_pitch_correction(cur_quat)
-            
-            if self.skill_failed:
-                self.phase = 4
-                self.steps = 0
-            else:
-                return action, False, self.skill_failed
+            action, skill_done, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, count_steps=False)
 
         # phase 4: move to home
         if self.phase == 4:
             self.steps = 0
-            failed = self.skill_failed
-            params = np.concatenate([self.home_pos, np.array([goal_yaw, -1])])
-            action, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh)
-            action[3:5] = _roll_pitch_correction(cur_quat)
+            params = np.concatenate([self.home_pos, np.array([0, -1])])
+            action, skill_done, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, count_steps=False)
             
             if self.prev_success:
                 self.steps = 0
                 self.phase = 0
                 self.prev_success = False
-                return action, True, failed
-            return action, False, failed
+                success = True
+                return action, True, success
+            return action, False, success
+
+        self.steps += 1
+        
+        return action, False, success
 
 
 def _wrap_to_pi(angles):
