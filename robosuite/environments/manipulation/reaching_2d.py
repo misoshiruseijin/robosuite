@@ -217,15 +217,15 @@ class Reaching2D(SingleArmEnv):
         
         # primitive skill mode 
         self.use_skills = use_skills  
-        if use_delta == True:
-            self.skill = PrimitiveSkillDelta(
+        if use_delta == False:
+            self.skill = PrimitiveSkillGlobal(
                 skill_indices={
                     0 : "move_to",
                     1 : "gripper_release",
                 }
             )
-        elif use_delta == False:
-            self.skill = PrimitiveSkillGlobal(
+        else:
+            self.skill = PrimitiveSkillDelta(
                 skill_indices={
                     0 : "move_to",
                     1 : "gripper_release",

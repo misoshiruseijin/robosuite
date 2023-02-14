@@ -198,20 +198,20 @@ class Cleanup(SingleArmEnv):
         
         # primitive skill mode 
         self.use_skills = use_skills  
-        if use_delta == True:
-            self.skill = PrimitiveSkillDelta(
-                skill_indices={
-                    0 : "pick",
-                    1 : "place",
-                    2 : "push"
-                }
-            )
-        elif use_delta == False:
+        if use_delta == False:
             self.skill = PrimitiveSkillGlobal(
                 skill_indices={
                     0 : "pick",
                     1 : "place",
                     2 : "push",
+                }
+            )
+        else:
+            self.skill = PrimitiveSkillDelta(
+                skill_indices={
+                    0 : "pick",
+                    1 : "place",
+                    2 : "push"
                 }
             )
 

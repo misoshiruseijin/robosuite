@@ -204,15 +204,15 @@ class StackCustom(SingleArmEnv):
         
         # primitive skill mode 
         self.use_skills = use_skills  
-        if use_delta == True:
-            self.skill = PrimitiveSkillDelta(
+        if use_delta == False:
+            self.skill = PrimitiveSkillGlobal(
                 skill_indices={
                     0 : "pick",
                     1 : "place",
                 }
             )
-        elif use_delta == False:
-            self.skill = PrimitiveSkillGlobal(
+        else:
+            self.skill = PrimitiveSkillDelta(
                 skill_indices={
                     0 : "pick",
                     1 : "place",
@@ -674,7 +674,7 @@ class StackCustom(SingleArmEnv):
         observation = super().reset()
         self.reward_given = False
         self.cur_obs = observation
-        
+
         return observation
 
     def _post_action(self, action):
