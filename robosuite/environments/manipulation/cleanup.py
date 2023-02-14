@@ -790,6 +790,7 @@ class Cleanup(SingleArmEnv):
     def reset(self):
         print("Resetting....")
         observation = super().reset()
+        self.reward_given = False
         self.cur_obs = observation
 
         return observation
