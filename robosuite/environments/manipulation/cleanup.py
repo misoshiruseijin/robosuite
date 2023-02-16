@@ -149,7 +149,7 @@ class Cleanup(SingleArmEnv):
         render_visual_mesh=True,
         render_gpu_device_id=-1,
         control_freq=20,
-        horizon=600,
+        horizon=2000,
         ignore_done=False,
         hard_reset=True,
         camera_names="agentview",
@@ -799,6 +799,7 @@ class Cleanup(SingleArmEnv):
         """
         Scales normalized parameters ([-1, 1]) to appropriate raw values
         """
+        action = np.copy(action)
         params = action[self.num_skills:]
 
         params[0] = ( ((params[0] + 1) / 2 ) * (self.workspace_x[1] - self.workspace_x[0]) ) + self.workspace_x[0]

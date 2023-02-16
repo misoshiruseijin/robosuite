@@ -687,9 +687,43 @@ class Reaching2D(SingleArmEnv):
         """
         Scales normalized parameter ([-1, 1]) to appropriate raw values
         """
-        params[0] = ( ((params[0] + 1) / 2 ) * (self.workspace_x[1] - self.workspace_x[0]) ) + self.workspace_x[0]
-        params[1] = ( ((params[1] + 1) / 2 ) * (self.workspace_y[1] - self.workspace_y[0]) ) + self.workspace_y[0]
-        params[2] = ( ((params[2] + 1) / 2 ) * (self.workspace_z[1] - self.workspace_z[0]) ) + self.workspace_z[0]
-        params[3] = ( ((params[3] + 1) / 2 ) * (self.yaw_bounds[1] - self.yaw_bounds[0]) ) + self.yaw_bounds[0]
+        scaled_params = np.copy(params)
+        scaled_params[0] = ( ((params[0] + 1) / 2 ) * (self.workspace_x[1] - self.workspace_x[0]) ) + self.workspace_x[0]
+        scaled_params[1] = ( ((params[1] + 1) / 2 ) * (self.workspace_y[1] - self.workspace_y[0]) ) + self.workspace_y[0]
+        scaled_params[2] = ( ((params[2] + 1) / 2 ) * (self.workspace_z[1] - self.workspace_z[0]) ) + self.workspace_z[0]
+        scaled_params[3] = ( ((params[3] + 1) / 2 ) * (self.yaw_bounds[1] - self.yaw_bounds[0]) ) + self.yaw_bounds[0]
 
-        return params
+        return scaled_params
+
+    def _normalize_params(self, params):
+        """
+        Normalize raw parameter to ([-1, 1]) range.
+        """
+        normalized_params = np.copy(params)
+        normalized_params[0] = 2 * (params[0] - self.workspace_x[0]) / (self.workspace_x[1] - self.workspace_x[0]) - 1
+        normalized_params[1] = 2 * (params[1] - self.workspace_y[0]) / (self.workspace_y[1] - self.workspace_y[0]) - 1
+        normalized_params[2] = 2 * (params[2] - self.workspace_z[0]) / (self.workspace_z[1] - self.workspace_z[0]) - 1
+        normalized_params[3] = 2 * (params[3] - self.yaw_bounds[0]) / (self.yaw_bounds[1] - self.yaw_bounds[0]) - 1
+
+        return normalized_params
+
+    def human_reward(self, action):
+        if self.normalized_params: # scale parameters if input params are normalized values
+            scaled_params = self._scale_params(action[self.num_skills:])
+
+        print("Target Position:", self.target_position)
+        print("Region:", scaled_params[0:2])
+
+        good_skill = action[0] > action[1]
+        good_params = self._check_in_region(
+            region_center = self.target_position,
+            region_bounds = self.target_half_size,
+            coord = scaled_params[0:2]
+        )
+        
+        if good_skill and good_params:
+            print("human reward:", 1.0)
+            return 1.0
+        else:
+            print("human reward:", -1.0)
+            return -1.0

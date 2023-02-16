@@ -158,7 +158,7 @@ class StackCustom(SingleArmEnv):
         render_visual_mesh=True,
         render_gpu_device_id=-1,
         control_freq=20,
-        horizon=200,
+        horizon=500,
         ignore_done=False,
         hard_reset=True,
         camera_names="agentview",
@@ -702,9 +702,45 @@ class StackCustom(SingleArmEnv):
         """
         Scales normalized parameter ([-1, 1]) to appropriate raw values
         """
-        params[0] = ( ((params[0] + 1) / 2 ) * (self.workspace_x[1] - self.workspace_x[0]) ) + self.workspace_x[0]
-        params[1] = ( ((params[1] + 1) / 2 ) * (self.workspace_y[1] - self.workspace_y[0]) ) + self.workspace_y[0]
-        params[2] = ( ((params[2] + 1) / 2 ) * (self.workspace_z[1] - self.workspace_z[0]) ) + self.workspace_z[0]
-        params[3] = ( ((params[3] + 1) / 2 ) * (self.yaw_bounds[1] - self.yaw_bounds[0]) ) + self.yaw_bounds[0]
+        scaled_params = np.copy(params)
+        scaled_params[0] = ( ((params[0] + 1) / 2 ) * (self.workspace_x[1] - self.workspace_x[0]) ) + self.workspace_x[0]
+        scaled_params[1] = ( ((params[1] + 1) / 2 ) * (self.workspace_y[1] - self.workspace_y[0]) ) + self.workspace_y[0]
+        scaled_params[2] = ( ((params[2] + 1) / 2 ) * (self.workspace_z[1] - self.workspace_z[0]) ) + self.workspace_z[0]
+        scaled_params[3] = ( ((params[3] + 1) / 2 ) * (self.yaw_bounds[1] - self.yaw_bounds[0]) ) + self.yaw_bounds[0]
 
-        return params
+        return scaled_params
+
+    def _normalize_params(self, params):
+        """
+        Normalize raw parameter to ([-1, 1]) range.
+        """
+        normalized_params = np.copy(params)
+        normalized_params[0] = 2 * (params[0] - self.workspace_x[0]) / (self.workspace_x[1] - self.workspace_x[0]) - 1
+        normalized_params[1] = 2 * (params[1] - self.workspace_y[0]) / (self.workspace_y[1] - self.workspace_y[0]) - 1
+        normalized_params[2] = 2 * (params[2] - self.workspace_z[0]) / (self.workspace_z[1] - self.workspace_z[0]) - 1
+        normalized_params[3] = 2 * (params[3] - self.yaw_bounds[0]) / (self.yaw_bounds[1] - self.yaw_bounds[0]) - 1
+
+        return normalized_params
+
+    def human_reward(self, action):
+        grasping_A = self._check_grasp(gripper=self.robots[0].gripper, object_geoms=self.cubeA)
+        cubeA_pos = np.array(self.sim.data.body_xpos[self.cubeA_body_id])
+        cubeB_pos = np.array(self.sim.data.body_xpos[self.cubeB_body_id])
+        place_pos = np.array([cubeB_pos[0], cubeB_pos[1], cubeB_pos[2] + 0.05])
+
+        if self.normalized_params: # scale parameters if input params are normalized values
+            scaled_params = self._scale_params(action[self.num_skills:])
+
+        if grasping_A:
+            good_skill = action[1] > action[0]
+            good_params = np.linalg.norm(place_pos - scaled_params[0:3]) < 0.05
+        else:
+            good_skill = action[0] > action[1]
+            good_params = np.linalg.norm(cubeA_pos[0:3] - scaled_params[0:3]) < 0.05
+
+        if good_skill and good_params:
+            print("human reward:", 1)
+            return 1.0
+        else:
+            print("human reward:", -1)
+            return -1.0
