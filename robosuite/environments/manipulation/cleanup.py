@@ -161,6 +161,7 @@ class Cleanup(SingleArmEnv):
         use_delta=None, # if set, ignore controller_configs and use osc controller (if True, use delta control, if false use global controller)
         normalized_params=True,
         use_aff_rewards=False,
+        aff_penalty_factor=2.0,
     ):
         # settings for table top
         self.table_full_size = table_full_size
@@ -170,6 +171,7 @@ class Cleanup(SingleArmEnv):
         # reward configuration
         self.reward_scale = reward_scale
         self.reward_shaping = reward_shaping
+        self.aff_penalty_factor = aff_penalty_factor
 
         # whether to use ground-truth object states
         self.use_object_obs = use_object_obs
@@ -665,11 +667,10 @@ class Cleanup(SingleArmEnv):
             # process rewards
             reward = self._reward()
             if self.use_aff_rewards:
-                aff_penalty_factor = 1.0
                 aff_reward = self.skill.compute_affordance_reward(action, self.keypoints)
                 assert 0.0 <= aff_reward <= 1.0
                 aff_penalty = 1.0 - aff_reward
-                reward = reward - aff_penalty_factor * aff_penalty
+                reward = reward - self.aff_penalty_factor * aff_penalty
 
             if reward > 0 and not skill_success:
                 print("Reward earned on accident... Setting reward = 0")
