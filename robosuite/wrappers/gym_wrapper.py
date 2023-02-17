@@ -68,7 +68,7 @@ class GymWrapper(Wrapper, Env):
             max_num_params = self.env.skill.max_num_params
             param_max = 1.0
             high = np.concatenate([np.ones(num_skills), param_max * np.ones(max_num_params)])
-            low = np.concatenate([np.zeros(num_skills), -param_max * np.ones(max_num_params)])
+            low = np.concatenate([-np.ones(num_skills), -param_max * np.ones(max_num_params)])
             self.action_space = spaces.Box(low=low, high=high)
         else:
             low, high = self.env.action_spec
