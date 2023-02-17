@@ -727,17 +727,17 @@ class StackCustom(SingleArmEnv):
         grasping_A = self._check_grasp(gripper=self.robots[0].gripper, object_geoms=self.cubeA)
         cubeA_pos = np.array(self.sim.data.body_xpos[self.cubeA_body_id])
         cubeB_pos = np.array(self.sim.data.body_xpos[self.cubeB_body_id])
-        place_pos = np.array([cubeB_pos[0], cubeB_pos[1], cubeB_pos[2] + 0.05])
+        place_pos = np.array([cubeB_pos[0], cubeB_pos[1], cubeB_pos[2] + 0.045])
 
         if self.normalized_params: # scale parameters if input params are normalized values
             scaled_params = self._scale_params(action[self.num_skills:])
 
         if grasping_A:
             good_skill = action[1] > action[0]
-            good_params = np.linalg.norm(place_pos - scaled_params[0:3]) < 0.05
+            good_params = np.linalg.norm(place_pos - scaled_params[0:3]) < 0.015
         else:
             good_skill = action[0] > action[1]
-            good_params = np.linalg.norm(cubeA_pos[0:3] - scaled_params[0:3]) < 0.05
+            good_params = np.linalg.norm(cubeA_pos[0:3] - scaled_params[0:3]) < 0.015
 
         if good_skill and good_params:
             print("human reward:", 1)
