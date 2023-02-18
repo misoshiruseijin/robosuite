@@ -161,7 +161,7 @@ class Cleanup(SingleArmEnv):
         use_delta=None, # if set, ignore controller_configs and use osc controller (if True, use delta control, if false use global controller)
         normalized_params=True,
         use_aff_rewards=False,
-        aff_penalty_factor=2.0,
+        aff_penalty_factor=1.0,
     ):
         # settings for table top
         self.table_full_size = table_full_size
