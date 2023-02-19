@@ -212,10 +212,6 @@ if __name__ == "__main__":
     negative_human_reward = 0
     pick_success = 0
 
-    action = np.array([1, 0, 0, 0, 0, 0])
-    env.reset()
-    env.step(action)
-    pdb.set_trace()
     for i in range(1000):
         obs = env.reset()
         eef_pos = obs["robot0_eef_pos"]
