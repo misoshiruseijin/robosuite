@@ -306,7 +306,7 @@ class PrimitiveSkillGlobal():
             self.phase += 1
             self.prev_success = False
 
-        if self.steps > max_steps:
+        if not self.phase == 4 and self.steps > max_steps:
             self.phase = 4
             skill_failed = True
             print("max steps for pick reached:", max_steps)
@@ -381,7 +381,7 @@ class PrimitiveSkillGlobal():
             self.phase += 1
             self.prev_success = False
 
-        if self.steps > max_steps:
+        if not self.phase == 4 and self.steps > max_steps:
             self.phase = 4
             skill_failed = True
             print("max steps for place reached:", max_steps)
@@ -457,7 +457,7 @@ class PrimitiveSkillGlobal():
             self.phase += 1
             self.prev_success = False
 
-        if self.steps > max_steps:
+        if not self.phase == 4 and self.steps > max_steps:
             self.phase = 4
             skill_failed = True
             print("max steps for push reached:", max_steps)
@@ -809,7 +809,7 @@ class PrimitiveSkillDelta():
             self.prev_success = False
 
         # if max steps reached go to rehoming phase
-        if self.steps > max_steps:
+        if not self.phase == 4 and self.steps > max_steps:
             self.phase = 4
             skill_failed = True
             print("max steps for pick reached:", max_steps)
@@ -883,7 +883,7 @@ class PrimitiveSkillDelta():
             self.phase += 1
             self.prev_success = False
         
-        if self.steps > max_steps:
+        if not self.phase == 4 and self.steps > max_steps:
             self.phase = 4
             skill_failed = True
             print("max steps for place reached:", max_steps)
@@ -961,7 +961,7 @@ class PrimitiveSkillDelta():
             self.phase += 1
             self.prev_success = False
 
-        if self.steps > max_steps:
+        if not self.phase == 4 and self.steps > max_steps:
             self.phase = 4
             skill_failed = True
             print("max steps for push reached:", max_steps)

@@ -731,13 +731,30 @@ class StackCustom(SingleArmEnv):
 
         if self.normalized_params: # scale parameters if input params are normalized values
             scaled_params = self._scale_params(action[self.num_skills:])
-
-        if grasping_A:
-            good_skill = action[1] > action[0]
-            good_params = np.linalg.norm(place_pos - scaled_params[0:3]) < 0.015
         else:
+            scaled_params = action[self.num_skills:]
+        
+        # extra safe yaw angles
+        yaw_safe = abs(scaled_params[3]) < 0.25*np.pi
+
+        if grasping_A: # should place
+            good_skill = action[1] > action[0]
+            good_pos = np.all(np.abs(place_pos - scaled_params[0:3]) < 0.005)
+            good_yaw = yaw_safe
+
+        else: # should pick
             good_skill = action[0] > action[1]
-            good_params = np.linalg.norm(cubeA_pos[0:3] - scaled_params[0:3]) < 0.015
+            uA2B = cubeB_pos[:2] - cubeA_pos[:2]
+            theta = np.arctan2(uA2B[1], uA2B[0])
+            if theta > 0.5*np.pi:
+                theta -= np.pi
+            elif theta < -0.5*np.pi:
+                theta += np.pi
+            
+            good_pos = np.all(np.abs(cubeA_pos - scaled_params[0:3]) < 0.005)
+            yaw_no_collision = abs(theta - scaled_params[3]) < (1/3) * np.pi
+            good_yaw = yaw_no_collision and yaw_safe
+            good_params = good_pos and good_yaw
 
         if good_skill and good_params:
             print("human reward:", 1)

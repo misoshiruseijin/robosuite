@@ -1,6 +1,5 @@
 import robosuite as suite
 import numpy as np
-import redis
 from robosuite import load_controller_config
 from robosuite.devices import Keyboard, SpaceMouse
 from robosuite.utils.input_utils import input2action
@@ -142,78 +141,123 @@ if __name__ == "__main__":
     #     env.render()
     #     pdb.set_trace()
 
-    env = suite.make(
-        env_name="Cleanup",
-        robots="Panda",
-        # controller_configs=load_controller_config(default_controller="OSC_POSE"),
-        controller_configs=pose_controller_config,
-        reward_scale=1.0,
-        initialization_noise=None,
-        has_renderer=True,
-        use_camera_obs=False,
-        has_offscreen_renderer=False,
-        ignore_done=False,
-        use_skills=True,
-        normalized_params=False,
-        control_freq=10,
-        horizon=1000,
-        use_delta=True,
-    )
-    obs = env.reset()
-    pnp_pos = obs["pnp_obj_pos"]
-    push_pos = obs["push_obj_pos"]
-
-    # pnp
-    action = np.array([1, 0, 0, pnp_pos[0], pnp_pos[1], pnp_pos[2], 0.0])
-    obs, reward, done, info = env.step(action)
-    print(reward)
-    pdb.set_trace()
-
-    action = np.array([0, 1, 0, -0.1, -0.1, pnp_pos[2]+0.07, 0])
-    obs, reward, done, info = env.step(action)
-    print(reward)
-    pdb.set_trace()
-    
-    # push
-    push_pos = obs["push_obj_pos"]
-    start_push_pos = np.array([push_pos[0], push_pos[1]-0.2, push_pos[2]+0.001])
-    end_push_pos = np.array([push_pos[0], 0.1, push_pos[2]+0.001])
-    if push_pos[1] < 0.1:
-        action = np.concatenate([np.array([0, 0, 1]), start_push_pos, end_push_pos, np.array([0.4, 1])])
-        # action = np.array([0, 0, 1, push_pos[0], push_pos[1]-0.1, push_pos[2]+0.005, 0.15, push_pos[1], push_pos[2]+0.005, 0, 1])
-        obs, reward, done, info = env.step(action)
-        push_pos = obs["push_obj_pos"]
-        print(reward)
-        pdb.set_trace()
-    action = np.array([0, 0, 1, push_pos[0]+0.1, push_pos[1], push_pos[2]+0.005, -0.12, 0.13, push_pos[2]+0.005, 0, 1])
-    obs, reward, done, info = env.step(action)
-    print("reward ", reward)
-    pdb.set_trace()
-
     # env = suite.make(
-    #     env_name="StackCustom",
+    #     env_name="Cleanup",
     #     robots="Panda",
     #     # controller_configs=load_controller_config(default_controller="OSC_POSE"),
     #     controller_configs=pose_controller_config,
-    #     use_camera_obs=False,
-    #     use_object_obs=True,
     #     reward_scale=1.0,
+    #     initialization_noise=None,
     #     has_renderer=True,
+    #     use_camera_obs=False,
     #     has_offscreen_renderer=False,
     #     ignore_done=False,
     #     use_skills=True,
     #     normalized_params=False,
     #     control_freq=10,
-    #     initialization_noise=None,
-    #     use_delta=True,
     #     horizon=1000,
+    #     use_delta=True,
     # )
-
     # obs = env.reset()
-    # eef_pos = obs["robot0_eef_pos"]
-    # cubeA_pos = obs["cubeA_pos"]
-    # cubeB_pos = obs["cubeB_pos"]
+    # pnp_pos = obs["pnp_obj_pos"]
+    # push_pos = obs["push_obj_pos"]
 
+    # # pnp
+    # action = np.array([1, 0, 0, pnp_pos[0], pnp_pos[1], pnp_pos[2], 0.0])
+    # obs, reward, done, info = env.step(action)
+    # print(reward)
+    # pdb.set_trace()
+
+    # action = np.array([0, 1, 0, -0.1, -0.1, pnp_pos[2]+0.07, 0])
+    # obs, reward, done, info = env.step(action)
+    # print(reward)
+    # pdb.set_trace()
+    
+    # # push
+    # push_pos = obs["push_obj_pos"]
+    # start_push_pos = np.array([push_pos[0], push_pos[1]-0.2, push_pos[2]+0.001])
+    # end_push_pos = np.array([push_pos[0], 0.1, push_pos[2]+0.001])
+    # if push_pos[1] < 0.1:
+    #     action = np.concatenate([np.array([0, 0, 1]), start_push_pos, end_push_pos, np.array([0.4, 1])])
+    #     # action = np.array([0, 0, 1, push_pos[0], push_pos[1]-0.1, push_pos[2]+0.005, 0.15, push_pos[1], push_pos[2]+0.005, 0, 1])
+    #     obs, reward, done, info = env.step(action)
+    #     push_pos = obs["push_obj_pos"]
+    #     print(reward)
+    #     pdb.set_trace()
+    # action = np.array([0, 0, 1, push_pos[0]+0.1, push_pos[1], push_pos[2]+0.005, -0.12, 0.13, push_pos[2]+0.005, 0, 1])
+    # obs, reward, done, info = env.step(action)
+    # print("reward ", reward)
+    # pdb.set_trace()
+
+    env = suite.make(
+        env_name="StackCustom",
+        robots="Panda",
+        # controller_configs=load_controller_config(default_controller="OSC_POSE"),
+        controller_configs=pose_controller_config,
+        use_camera_obs=False,
+        use_object_obs=True,
+        reward_scale=1.0,
+        has_renderer=True,
+        has_offscreen_renderer=False,
+        ignore_done=False,
+        use_skills=True,
+        normalized_params=False,
+        control_freq=10,
+        initialization_noise=None,
+        use_delta=True,
+        horizon=1000,
+    )
+
+    positive_human_reward = 0
+    negative_human_reward = 0
+    pick_success = 0
+
+    action = np.array([1, 0, 0, 0, 0, 0])
+    env.reset()
+    env.step(action)
+    pdb.set_trace()
+    for i in range(1000):
+        obs = env.reset()
+        eef_pos = obs["robot0_eef_pos"]
+        cubeA_pos = obs["cubeA_pos"]
+        cubeB_pos = obs["cubeB_pos"]
+        # pick
+        th = 0.005
+        pos = np.array([
+            np.random.uniform(cubeA_pos[0]-th, cubeA_pos[0]+th),
+            np.random.uniform(cubeA_pos[1]-th, cubeA_pos[1]+th),
+            np.random.uniform(cubeA_pos[2]-th, cubeA_pos[2]+th),
+        ])
+            
+            
+        uA2B = cubeB_pos[:2] - cubeA_pos[:2]
+        theta = np.arctan2(uA2B[1], uA2B[0])
+        if theta > 0.5*np.pi:
+            theta -= np.pi
+        elif theta < -0.5*np.pi:
+            theta += np.pi
+        
+        good_yaw = False
+        while not good_yaw:
+            yaw = np.random.uniform(-0.25*np.pi, 0.25*np.pi)
+            good_yaw = abs(theta - yaw) < (1/3) * np.pi 
+
+        params = np.concatenate([pos, [yaw]])
+        print("params", params)
+
+        action = np.concatenate([np.array([1, 0]), params])
+        human_rew = env.human_reward(action)
+        obs, reward, done, info = env.step(action)
+        grasping = env._check_grasp(gripper=env.robots[0].gripper, object_geoms=env.cubeA)
+
+        if human_rew > 0:
+            positive_human_reward += 1
+        elif human_rew < 0:
+            negative_human_reward += 1
+        if grasping:
+            pick_success += 1
+
+        print(f"\ntrial {i}:\npositive: {positive_human_reward}\nnegative: {negative_human_reward}\npick: {pick_success}")
     # action = np.concatenate([np.array([1., 0.]), cubeA_pos, np.array([0.3*np.pi, 1])])
     # # action = np.array([1, 0, 0, 0, 0, 0, 0])
     # obs, reward, done, info = env.step(action)
