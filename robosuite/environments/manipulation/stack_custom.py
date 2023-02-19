@@ -173,6 +173,7 @@ class StackCustom(SingleArmEnv):
         normalized_params=True,
         use_aff_rewards=False,
         aff_penalty_factor=1.0,
+        use_yaw=True,
     ):
         # settings for table top
         self.table_full_size = table_full_size
@@ -205,20 +206,21 @@ class StackCustom(SingleArmEnv):
         
         # primitive skill mode 
         self.use_skills = use_skills  
-        if use_delta == False:
-            self.skill = PrimitiveSkillGlobal(
-                skill_indices={
-                    0 : "pick",
-                    1 : "place",
-                }
-            )
-        else:
-            self.skill = PrimitiveSkillDelta(
-                skill_indices={
-                    0 : "pick",
-                    1 : "place",
-                }
-            )
+        # if use_delta == False:
+        #     self.skill = PrimitiveSkillGlobal(
+        #         skill_indices={
+        #             0 : "pick",
+        #             1 : "place",
+        #         }
+        #     )
+        # else:
+        self.skill = PrimitiveSkillDelta(
+            skill_indices={
+                0 : "pick",
+                1 : "place",
+            },
+            use_yaw=use_yaw,
+        )
 
         self.keypoints = self.skill.get_keypoints_dict()
         self.use_aff_rewards = use_aff_rewards
