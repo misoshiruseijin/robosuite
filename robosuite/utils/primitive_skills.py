@@ -682,6 +682,8 @@ class PrimitiveSkillDelta():
             skill_done: True if goal skill completed successfully or if max allowed steps is reached
         """
         goal_pos = params[:3]
+        # goal_yaw = params[3]
+        # gripper_action = params[4]
         if self.use_yaw:
             goal_yaw = params[3]
             gripper_action = 1 if params[4] > 0 else -1
@@ -833,12 +835,18 @@ class PrimitiveSkillDelta():
 
         # phase 0: move to above grip site
         if self.phase == 0:
-            params = np.concatenate([above_pos, np.array([goal_yaw, -1])])
+            if self.use_yaw:
+                params = np.concatenate([above_pos, np.array([goal_yaw, -1])])
+            else:
+                params = np.concatenate([above_pos, [-1]])
             action, skill_done, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, count_steps=False)
 
         # phase 1: move down to grip site
         if self.phase == 1:
-            params = np.concatenate([goal_pos, np.array([goal_yaw, -1])])
+            if self.use_yaw:
+                params = np.concatenate([goal_pos, np.array([goal_yaw, -1])])
+            else:
+                params = np.concatenate([goal_pos, [-1]])
             action, skill_done, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, count_steps=False)
 
         # phase 2: grip
@@ -847,13 +855,20 @@ class PrimitiveSkillDelta():
 
         # phase 3: lift
         if self.phase == 3:
-            params = np.concatenate([above_pos, np.array([goal_yaw, 1])])
+            if self.use_yaw:
+                params = np.concatenate([above_pos, np.array([goal_yaw, 1])])
+            else:
+                params = np.concatenate([above_pos, [1]])
             action, skill_done, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, count_steps=False)
 
         # phase 4: move to home
         if self.phase == 4:
             self.grip_steps = 0
-            params = np.concatenate([self.home_pos, np.array([0, 1])])
+            if self.use_yaw:
+                params = np.concatenate([self.home_pos, np.array([0, 1])])
+            else:
+                params = np.concatenate([self.home_pos, [1]])
+
             if skill_failed:
                 params[-1] = -1
             action, skill_done, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, count_steps=False)
@@ -911,12 +926,19 @@ class PrimitiveSkillDelta():
 
         # phase 0: move to above place site
         if self.phase == 0:
-            params = np.concatenate([above_pos, np.array([goal_yaw, 1])])
+            if self.use_yaw:
+                params = np.concatenate([above_pos, np.array([goal_yaw, 1])])
+            else:
+                params = np.concatenate([above_pos, [1]])
             action, skill_done, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, count_steps=False)
 
         # phase 1: move down to drop site
         if self.phase == 1:
-            params = np.concatenate([goal_pos, np.array([goal_yaw, 1])])
+            if self.use_yaw:
+                params = np.concatenate([goal_pos, np.array([goal_yaw, 1])])
+            else:
+                params = np.concatenate([goal_pos, [1]])
+                
             action, skill_done, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, count_steps=False)
 
         # phase 2: release
@@ -925,7 +947,10 @@ class PrimitiveSkillDelta():
 
         # phase 3: lift
         if self.phase == 3:
-            params = np.concatenate([above_pos, np.array([goal_yaw, -1])])
+            if self.use_yaw:
+                params = np.concatenate([above_pos, np.array([goal_yaw, -1])])
+            else:
+                params = np.concatenate([above_pos, [-1]])
             action, skill_done, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, count_steps=False)
 
         # phase 4: move to home
@@ -933,7 +958,11 @@ class PrimitiveSkillDelta():
             self.grip_steps = 0
             self.steps = 0
             failed = self.skill_failed
-            params = np.concatenate([self.home_pos, np.array([0, -1])])
+            if self.use_yaw:
+                params = np.concatenate([self.home_pos, np.array([0, -1])])
+            else:
+                params = np.concatenate([self.home_pos, [-1]])
+                
             action, skill_done, self.prev_success = self._move_to(obs=obs, params=params, robot_id=robot_id, speed=speed, thresh=thresh, yaw_thresh=yaw_thresh, count_steps=False)
             
             if self.prev_success:
