@@ -187,6 +187,9 @@ class StackCustom(SingleArmEnv):
         # whether to use ground-truth object states
         self.use_object_obs = use_object_obs
 
+        # whether to use yaw as a input parameter
+        self.use_yaw = use_yaw
+
         # object placement initializer
         self.placement_initializer = placement_initializer
 
@@ -709,7 +712,8 @@ class StackCustom(SingleArmEnv):
         scaled_params[0] = ( ((params[0] + 1) / 2 ) * (self.workspace_x[1] - self.workspace_x[0]) ) + self.workspace_x[0]
         scaled_params[1] = ( ((params[1] + 1) / 2 ) * (self.workspace_y[1] - self.workspace_y[0]) ) + self.workspace_y[0]
         scaled_params[2] = ( ((params[2] + 1) / 2 ) * (self.workspace_z[1] - self.workspace_z[0]) ) + self.workspace_z[0]
-        scaled_params[3] = ( ((params[3] + 1) / 2 ) * (self.yaw_bounds[1] - self.yaw_bounds[0]) ) + self.yaw_bounds[0]
+        if self.use_yaw:
+            scaled_params[3] = ( ((params[3] + 1) / 2 ) * (self.yaw_bounds[1] - self.yaw_bounds[0]) ) + self.yaw_bounds[0]
 
         return scaled_params
 
@@ -721,7 +725,8 @@ class StackCustom(SingleArmEnv):
         normalized_params[0] = 2 * (params[0] - self.workspace_x[0]) / (self.workspace_x[1] - self.workspace_x[0]) - 1
         normalized_params[1] = 2 * (params[1] - self.workspace_y[0]) / (self.workspace_y[1] - self.workspace_y[0]) - 1
         normalized_params[2] = 2 * (params[2] - self.workspace_z[0]) / (self.workspace_z[1] - self.workspace_z[0]) - 1
-        normalized_params[3] = 2 * (params[3] - self.yaw_bounds[0]) / (self.yaw_bounds[1] - self.yaw_bounds[0]) - 1
+        if self.use_yaw:
+            normalized_params[3] = 2 * (params[3] - self.yaw_bounds[0]) / (self.yaw_bounds[1] - self.yaw_bounds[0]) - 1
 
         return normalized_params
 
@@ -737,26 +742,38 @@ class StackCustom(SingleArmEnv):
             scaled_params = action[self.num_skills:]
         
         # extra safe yaw angles
-        yaw_safe = abs(scaled_params[3]) < 0.25*np.pi
+        if self.use_yaw:
+            yaw_safe = abs(scaled_params[3]) < 0.25*np.pi
 
-        if grasping_A: # should place
-            good_skill = action[1] > action[0]
-            good_pos = np.all(np.abs(place_pos - scaled_params[0:3]) < 0.005)
-            good_yaw = yaw_safe
+            if grasping_A: # should place
+                good_skill = action[1] > action[0]
+                good_pos = np.all(np.abs(place_pos - scaled_params[0:3]) < 0.005)
+                good_yaw = yaw_safe
+            else: # should pick
+                good_skill = action[0] > action[1]
+                
+                uA2B = cubeB_pos[:2] - cubeA_pos[:2]
+                theta = np.arctan2(uA2B[1], uA2B[0])
+                if theta > 0.5*np.pi:
+                    theta -= np.pi
+                elif theta < -0.5*np.pi:
+                    theta += np.pi
+                
+                good_pos = np.all(np.abs(cubeA_pos - scaled_params[0:3]) < 0.005)
+                yaw_no_collision = abs(theta - scaled_params[3]) < (1/3) * np.pi
+                good_yaw = yaw_no_collision and yaw_safe
+        
+            good_params = good_pos and good_yaw    
+        else:
+            if grasping_A: # should place
+                good_skill = action[1] > action[0]
+                good_pos = np.all(np.abs(place_pos - scaled_params[0:3]) < 0.005)
+            else: # should pick
+                good_skill = action[0] > action[1]
+                good_pos = np.all(np.abs(cubeA_pos - scaled_params[0:3]) < 0.005)
+        
+            good_params = good_pos
 
-        else: # should pick
-            good_skill = action[0] > action[1]
-            uA2B = cubeB_pos[:2] - cubeA_pos[:2]
-            theta = np.arctan2(uA2B[1], uA2B[0])
-            if theta > 0.5*np.pi:
-                theta -= np.pi
-            elif theta < -0.5*np.pi:
-                theta += np.pi
-            
-            good_pos = np.all(np.abs(cubeA_pos - scaled_params[0:3]) < 0.005)
-            yaw_no_collision = abs(theta - scaled_params[3]) < (1/3) * np.pi
-            good_yaw = yaw_no_collision and yaw_safe
-            good_params = good_pos and good_yaw
 
         if good_skill and good_params:
             print("human reward:", 1)
