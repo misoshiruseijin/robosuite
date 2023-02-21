@@ -194,9 +194,12 @@ class StackCustom(SingleArmEnv):
         self.placement_initializer = placement_initializer
 
         # workspace boundaries
-        self.workspace_x = (-0.2, 0.2)
-        self.workspace_y = (-0.4, 0.4)
-        self.workspace_z = (0.83, 1.3)
+        # self.workspace_x = (-0.2, 0.2)
+        # self.workspace_y = (-0.4, 0.4)
+        # self.workspace_z = (0.83, 1.3)
+        self.workspace_x = (-0.061, 0.061)
+        self.workspace_y = (-0.061, 0.061)
+        self.workspace_z = (0.82, 0.92)
         self.yaw_bounds = (-0.5*np.pi, 0.5*np.pi)
 
         # gripper state
@@ -370,15 +373,19 @@ class StackCustom(SingleArmEnv):
         )
         self.cubeA = BoxObject(
             name="cubeA",
-            size_min=[0.02, 0.02, 0.02],
-            size_max=[0.02, 0.02, 0.02],
+            # size_min=[0.02, 0.02, 0.02],
+            # size_max=[0.02, 0.02, 0.02],
+            size_min=[0.015, 0.015, 0.03],
+            size_max=[0.015, 0.015, 0.03],
             rgba=[1, 0, 0, 1],
             material=redwood,
         )
         self.cubeB = BoxObject(
             name="cubeB",
-            size_min=[0.025, 0.025, 0.025],
-            size_max=[0.025, 0.025, 0.025],
+            # size_min=[0.025, 0.025, 0.025],
+            # size_max=[0.025, 0.025, 0.025],
+            size_min=[0.04, 0.04, 0.01],
+            size_max=[0.04, 0.04, 0.01],
             rgba=[0, 1, 0, 1],
             material=greenwood,
         )
@@ -391,8 +398,10 @@ class StackCustom(SingleArmEnv):
             self.placement_initializer = UniformRandomSampler(
                 name="ObjectSampler",
                 mujoco_objects=cubes,
-                x_range=[-0.08, 0.08],
-                y_range=[-0.08, 0.08],
+                x_range=[-0.06, 0.06],
+                y_range=[-0.06, 0.06],
+                # x_range=[-0.08, 0.08],
+                # y_range=[-0.08, 0.08],
                 rotation=None,
                 ensure_object_boundary_in_range=False,
                 ensure_valid_placement=True,
@@ -767,13 +776,29 @@ class StackCustom(SingleArmEnv):
         else:
             if grasping_A: # should place
                 good_skill = action[1] > action[0]
-                good_pos = np.all(np.abs(place_pos - scaled_params[0:3]) < 0.005)
+                delta = scaled_params[0:3] - cubeB_pos
+                good_x =  -0.02 < delta[0] < 0.02
+                good_y =  -0.02 < delta[1] < 0.02
+                good_z =  0.035 < delta[2] 
+                good_pos = good_x and good_y and good_z
             else: # should pick
                 good_skill = action[0] > action[1]
+                delta = scaled_params[0:3] - cubeA_pos
                 good_pos = np.all(np.abs(cubeA_pos - scaled_params[0:3]) < 0.005)
-        
-            good_params = good_pos
+                good_x =  -0.01 < delta[0] < 0.01
+                good_y =  -0.015 < delta[1] < 0.015
+                good_z =  -0.025 < delta[2] < 0.005
+                good_pos = good_x and good_y and good_z
+                # good_pos = good_x
+                # good_x =  -10 < delta[0] < 10
+                # good_y = -10 < delta[1] < 10
+                # good_z =  -10 < delta[2] < 10
+                
+                # import pdb; pdb.set_trace()
+                
+                
 
+            good_params = good_pos
 
         if good_skill and good_params:
             print("human reward:", 1)
