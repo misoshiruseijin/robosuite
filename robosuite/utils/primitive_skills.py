@@ -105,8 +105,8 @@ class PrimitiveSkillGlobal():
         else:
             self.aff_pos_thresh = {
                 "move_to" : 0.05,
-                "pick" : 0.03,
-                "place" : 0.03,
+                "pick" : 0.01,
+                "place" : 0.01,
                 "push" : 0.1,
             }
         self.aff_tanh_scaling = 1.0

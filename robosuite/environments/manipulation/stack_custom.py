@@ -173,7 +173,7 @@ class StackCustom(SingleArmEnv):
         normalized_params=True,
         use_aff_rewards=False,
         aff_penalty_factor=1.0,
-        use_yaw=True,
+        use_yaw=False,
     ):
         # settings for table top
         self.table_full_size = table_full_size
