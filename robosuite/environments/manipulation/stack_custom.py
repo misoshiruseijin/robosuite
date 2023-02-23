@@ -158,7 +158,7 @@ class StackCustom(SingleArmEnv):
         render_visual_mesh=True,
         render_gpu_device_id=-1,
         control_freq=10,
-        horizon=500,
+        horizon=2000,
         ignore_done=False,
         hard_reset=True,
         camera_names="agentview",
