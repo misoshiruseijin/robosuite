@@ -174,6 +174,7 @@ class StackCustom(SingleArmEnv):
         use_aff_rewards=False,
         aff_penalty_factor=1.0,
         use_yaw=False,
+        normalized_obs=False,
     ):
         # settings for table top
         self.table_full_size = table_full_size
@@ -197,9 +198,9 @@ class StackCustom(SingleArmEnv):
         # self.workspace_x = (-0.2, 0.2)
         # self.workspace_y = (-0.4, 0.4)
         # self.workspace_z = (0.83, 1.3)
-        self.workspace_x = (-0.061, 0.061)
-        self.workspace_y = (-0.061, 0.061)
-        self.workspace_z = (0.82, 0.92)
+        self.workspace_x = (-0.075, 0.075)
+        self.workspace_y = (-0.075, 0.075)
+        self.workspace_z = (0.82, 0.87)
         self.yaw_bounds = (-0.5*np.pi, 0.5*np.pi)
 
         # gripper state
@@ -234,6 +235,7 @@ class StackCustom(SingleArmEnv):
 
         self.num_skills = self.skill.n_skills
         self.normalized_params = normalized_params
+        self.normalized_obs = normalized_obs
 
         # whether reward has been given - completion reward is only given once
         self.reward_given = False
@@ -373,10 +375,10 @@ class StackCustom(SingleArmEnv):
         )
         self.cubeA = BoxObject(
             name="cubeA",
-            # size_min=[0.02, 0.02, 0.02],
-            # size_max=[0.02, 0.02, 0.02],
-            size_min=[0.015, 0.015, 0.03],
-            size_max=[0.015, 0.015, 0.03],
+            size_min=[0.02, 0.02, 0.02],
+            size_max=[0.02, 0.02, 0.02],
+            # size_min=[0.015, 0.015, 0.03],
+            # size_max=[0.015, 0.015, 0.03],
             rgba=[1, 0, 0, 1],
             material=redwood,
         )
@@ -398,15 +400,15 @@ class StackCustom(SingleArmEnv):
             self.placement_initializer = UniformRandomSampler(
                 name="ObjectSampler",
                 mujoco_objects=cubes,
-                x_range=[-0.06, 0.06],
-                y_range=[-0.06, 0.06],
+                x_range=[-0.072, 0.072],
+                y_range=[-0.072, 0.072],
                 # x_range=[-0.08, 0.08],
                 # y_range=[-0.08, 0.08],
                 rotation=None,
                 ensure_object_boundary_in_range=False,
                 ensure_valid_placement=True,
                 reference_pos=self.table_offset,
-                z_offset=0.01,
+                z_offset=0.001,
             )
 
         # task includes arena, robot, and objects of interest
@@ -483,7 +485,10 @@ class StackCustom(SingleArmEnv):
             # position and rotation of the first cube
             @sensor(modality=modality)
             def cubeA_pos(obs_cache):
-                return np.array(self.sim.data.body_xpos[self.cubeA_body_id])
+                if self.normalized_obs:
+                    return self._normalize_params(np.array(self.sim.data.body_xpos[self.cubeA_body_id]))
+                else:
+                    return np.array(self.sim.data.body_xpos[self.cubeA_body_id])
 
             @sensor(modality=modality)
             def cubeA_quat(obs_cache):
@@ -497,7 +502,10 @@ class StackCustom(SingleArmEnv):
 
             @sensor(modality=modality)
             def cubeB_pos(obs_cache):
-                return np.array(self.sim.data.body_xpos[self.cubeB_body_id])
+                if self.normalized_obs:
+                    return self._normalize_params(np.array(self.sim.data.body_xpos[self.cubeB_body_id]))
+                else:
+                    return np.array(self.sim.data.body_xpos[self.cubeB_body_id])
 
             @sensor(modality=modality)
             def cubeB_quat(obs_cache):
@@ -749,6 +757,12 @@ class StackCustom(SingleArmEnv):
             scaled_params = self._scale_params(action[self.num_skills:])
         else:
             scaled_params = action[self.num_skills:]
+
+        print("cube A", cubeA_pos)
+        print("cube B", cubeB_pos)
+        print("action 0", action[0])
+        print("action 1", action[1])
+        print("params", scaled_params)
         
         # extra safe yaw angles
         if self.use_yaw:
@@ -777,17 +791,25 @@ class StackCustom(SingleArmEnv):
             if grasping_A: # should place
                 good_skill = action[1] > action[0]
                 delta = scaled_params[0:3] - cubeB_pos
-                good_x =  -0.02 < delta[0] < 0.02
-                good_y =  -0.02 < delta[1] < 0.02
-                good_z =  0.035 < delta[2] 
+                good_x =  -0.02501 <= delta[0] < 0.02501
+                good_y =  -0.02501 <= delta[1] <= 0.02501
+                good_z =  0.043999 <= delta[2] 
+                print(delta)
+                print(good_x)
+                print(good_y)
+                print(good_z)
                 good_pos = good_x and good_y and good_z
             else: # should pick
                 good_skill = action[0] > action[1]
                 delta = scaled_params[0:3] - cubeA_pos
-                good_pos = np.all(np.abs(cubeA_pos - scaled_params[0:3]) < 0.005)
-                good_x =  -0.01 < delta[0] < 0.01
-                good_y =  -0.015 < delta[1] < 0.015
-                good_z =  -0.025 < delta[2] < 0.005
+                # good_pos = np.all(np.abs(cubeA_pos - scaled_params[0:3]) < 0.005)
+                good_x =  -0.015001 <= delta[0] <= 0.015001
+                good_y =  -0.016001 <= delta[1] <= 0.016001
+                good_z =  -0.010001 <= delta[2] <= 0.0085001
+                print(delta)
+                print(good_x)
+                print(good_y)
+                print(good_z)
                 good_pos = good_x and good_y and good_z
                 # good_pos = good_x
                 # good_x =  -10 < delta[0] < 10
