@@ -718,7 +718,6 @@ class Reaching2D(SingleArmEnv):
         normalized_params[0] = 2 * (params[0] - self.workspace_x[0]) / (self.workspace_x[1] - self.workspace_x[0]) - 1
         normalized_params[1] = 2 * (params[1] - self.workspace_y[0]) / (self.workspace_y[1] - self.workspace_y[0]) - 1
         normalized_params[2] = 2 * (params[2] - self.workspace_z[0]) / (self.workspace_z[1] - self.workspace_z[0]) - 1
-        normalized_params[3] = 2 * (params[3] - self.yaw_bounds[0]) / (self.yaw_bounds[1] - self.yaw_bounds[0]) - 1
         if self.use_yaw:
             normalized_params[3] = 2 * (params[3] - self.yaw_bounds[0]) / (self.yaw_bounds[1] - self.yaw_bounds[0]) - 1
 
