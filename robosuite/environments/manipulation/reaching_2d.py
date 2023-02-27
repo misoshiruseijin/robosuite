@@ -238,7 +238,7 @@ class Reaching2D(SingleArmEnv):
             )
 
         self.keypoints = self.skill.get_keypoints_dict()
-        self.keypoints["move_to"] = [np.append(self.target_position, 1.0)]
+        self.keypoints["move_to_w_gripper_closed"] = [np.append(self.target_position, 1.0)]
         self.use_aff_rewards = use_aff_rewards
 
         self.num_skills = self.skill.n_skills
