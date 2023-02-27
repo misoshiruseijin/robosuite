@@ -23,7 +23,8 @@ class PandaGripperBase(GripperModel):
 
     @property
     def init_qpos(self):
-        return np.array([0.020833, -0.020833])
+        # return np.array([0.020833, -0.020833])
+        return np.array([0.04, -0.04])
 
     @property
     def _important_geoms(self):

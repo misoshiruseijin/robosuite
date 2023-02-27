@@ -212,7 +212,10 @@ class Reaching2D(SingleArmEnv):
         
         # setup controller
         if use_delta is not None:
-            controller_configs = load_controller_config(default_controller="OSC_POSE")
+            if use_skills:
+                controller_configs = load_controller_config(default_controller="OSC_POSE")
+            else:
+                controller_configs = load_controller_config(default_controller="OSC_POSITION")
             controller_configs["control_delta"] = use_delta
         
         # primitive skill mode 
@@ -220,14 +223,14 @@ class Reaching2D(SingleArmEnv):
         if use_delta == False:
             self.skill = PrimitiveSkillGlobal(
                 skill_indices={
-                    0 : "move_to",
+                    0 : "move_to_w_gripper_closed",
                     1 : "gripper_release",
                 }
             )
         else:
             self.skill = PrimitiveSkillDelta(
                 skill_indices={
-                    0 : "move_to",
+                    0 : "move_to_w_gripper_closed",
                     1 : "gripper_release",
                 }
             )
@@ -523,9 +526,9 @@ class Reaching2D(SingleArmEnv):
     def _check_action_in_bounds(self, action):
 
         sf = 3 # safety factor to prevent robot from moving out of bounds
-        x_in_bounds = self.workspace_x[0] < self._eef_xpos[0] + sf * action[0] / self.control_freq < self.workspace_x[1]
-        y_in_bounds = self.workspace_y[0] < self._eef_xpos[1] + sf * action[1] / self.control_freq < self.workspace_y[1]
-        z_in_bounds = self.workspace_z[0] < self._eef_xpos[2] + sf * action[2] / self.control_freq < self.workspace_z[1]
+        x_in_bounds = self.workspace_x[0] < self._eef_xpos[0] + 0.05 * sf * action[0] / self.control_freq < self.workspace_x[1]
+        y_in_bounds = self.workspace_y[0] < self._eef_xpos[1] + 0.05 * sf * action[1] / self.control_freq < self.workspace_y[1]
+        z_in_bounds = self.workspace_z[0] < self._eef_xpos[2] + 0.05 * sf * action[2] / self.control_freq < self.workspace_z[1]
         
         if not (x_in_bounds and y_in_bounds and z_in_bounds):
             print(f"Action {action} out of bounds at pos {self._eef_xpos}")
@@ -542,7 +545,6 @@ class Reaching2D(SingleArmEnv):
             num_timesteps = 0
             if self.normalized_params: # scale parameters if input params are normalized values
                 action[self.num_skills:] = self._scale_params(action[self.num_skills:])
-            
             while not done and not skill_done:
                 action_ll, skill_done, skill_success = self.skill.get_action(action, obs)
                 obs, reward, done, info = super().step(action_ll)
@@ -577,9 +579,12 @@ class Reaching2D(SingleArmEnv):
         # if using low level inputs        
         else:
             # if input action dimension is 5, input is assumed to be [x, y, z, yaw, gripper]
-            if action.shape[0] == 5:
-                action = np.concatenate([action[:3], np.zeros(2), action[3:]])
-
+            
+            # if action.shape[0] == 5:
+            #     action = np.concatenate([action[:3], np.zeros(2), action[3:]])
+            # elif action.shape[0] == 4:
+            #     action = np.concatenate([action[:3], np.zeros(3), action[3:]])
+            
             action_in_bounds = self._check_action_in_bounds(action)
 
             # if end effector position is off the table, ignore the action
@@ -691,7 +696,7 @@ class Reaching2D(SingleArmEnv):
         scaled_params[0] = ( ((params[0] + 1) / 2 ) * (self.workspace_x[1] - self.workspace_x[0]) ) + self.workspace_x[0]
         scaled_params[1] = ( ((params[1] + 1) / 2 ) * (self.workspace_y[1] - self.workspace_y[0]) ) + self.workspace_y[0]
         scaled_params[2] = ( ((params[2] + 1) / 2 ) * (self.workspace_z[1] - self.workspace_z[0]) ) + self.workspace_z[0]
-        scaled_params[3] = ( ((params[3] + 1) / 2 ) * (self.yaw_bounds[1] - self.yaw_bounds[0]) ) + self.yaw_bounds[0]
+        # scaled_params[3] = ( ((params[3] + 1) / 2 ) * (self.yaw_bounds[1] - self.yaw_bounds[0]) ) + self.yaw_bounds[0] # not using yaw anymore
 
         return scaled_params
 

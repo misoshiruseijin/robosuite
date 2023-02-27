@@ -189,83 +189,92 @@ if __name__ == "__main__":
     # print("reward ", reward)
     # pdb.set_trace()
 
-    env = suite.make(
-        env_name="StackCustom",
-        robots="Panda",
-        # controller_configs=load_controller_config(default_controller="OSC_POSE"),
-        controller_configs=pose_controller_config,
-        use_camera_obs=False,
-        use_object_obs=True,
-        reward_scale=1.0,
-        has_renderer=True,
-        has_offscreen_renderer=False,
-        ignore_done=False,
-        use_skills=True,
-        normalized_params=False,
-        control_freq=10,
-        initialization_noise=None,
-        use_delta=True,
-        horizon=1000,
-        use_yaw=False,
-    )
-    obs = env.reset()
-    cubeA_pos = obs["cubeA_pos"]
-    cubeB_pos = obs["cubeB_pos"]
-    action = np.concatenate([np.array([1., 0.]), cubeA_pos])
+    # env = suite.make(
+    #     env_name="StackCustom",
+    #     robots="Panda",
+    #     # controller_configs=load_controller_config(default_controller="OSC_POSE"),
+    #     controller_configs=pose_controller_config,
+    #     use_camera_obs=False,
+    #     use_object_obs=True,
+    #     reward_scale=1.0,
+    #     has_renderer=True,
+    #     has_offscreen_renderer=False,
+    #     ignore_done=False,
+    #     use_skills=False,
+    #     normalized_params=False,
+    #     control_freq=10,
+    #     initialization_noise=None,
+    #     use_delta=True,
+    #     horizon=1000,
+    #     use_yaw=False,
+    # )
+    # env.modify_observable(observable_name="robot0_gripper_qpos", attribute="active", modifier=True)
 
-    obs, reward, done, info = env.step(action)
-    print(env.timestep)
-    print("rew", reward)
-    pdb.set_trace()
+    # while True:
+    #     # print("!!!!", env.render_gpu_device_id)
+    #     action = np.array([0, 0, 0, 0, 0, 0, -1])
+    #     obs, reward, done, info = env.step(action)
+    #     print(obs["robot0_gripper_qpos"])
+    # obs = env.reset()
+    # env.render()
+    # pdb.set_trace()
+    # cubeA_pos = obs["cubeA_pos"]
+    # cubeB_pos = obs["cubeB_pos"]
+    # action = np.concatenate([np.array([1., 0.]), cubeA_pos])
 
-    # simulated human reward test
-    positive_human_reward = 0
-    negative_human_reward = 0
-    pick_success = 0
+    # obs, reward, done, info = env.step(action)
+    # print(env.timestep)
+    # print("rew", reward)
+    # pdb.set_trace()
 
-    for i in range(1000):
-        obs = env.reset()
-        pdb.set_trace()
-        eef_pos = obs["robot0_eef_pos"]
-        cubeA_pos = obs["cubeA_pos"]
-        cubeB_pos = obs["cubeB_pos"]
-        # pick
-        th = 0.005
-        pos = np.array([
-            np.random.uniform(cubeA_pos[0]-th, cubeA_pos[0]+th),
-            np.random.uniform(cubeA_pos[1]-th, cubeA_pos[1]+th),
-            np.random.uniform(cubeA_pos[2]-th, cubeA_pos[2]+th),
-        ])
+    # # simulated human reward test
+    # positive_human_reward = 0
+    # negative_human_reward = 0
+    # pick_success = 0
+
+    # for i in range(1000):
+    #     obs = env.reset()
+    #     pdb.set_trace()
+    #     eef_pos = obs["robot0_eef_pos"]
+    #     cubeA_pos = obs["cubeA_pos"]
+    #     cubeB_pos = obs["cubeB_pos"]
+    #     # pick
+    #     th = 0.005
+    #     pos = np.array([
+    #         np.random.uniform(cubeA_pos[0]-th, cubeA_pos[0]+th),
+    #         np.random.uniform(cubeA_pos[1]-th, cubeA_pos[1]+th),
+    #         np.random.uniform(cubeA_pos[2]-th, cubeA_pos[2]+th),
+    #     ])
             
             
-        uA2B = cubeB_pos[:2] - cubeA_pos[:2]
-        theta = np.arctan2(uA2B[1], uA2B[0])
-        if theta > 0.5*np.pi:
-            theta -= np.pi
-        elif theta < -0.5*np.pi:
-            theta += np.pi
+    #     uA2B = cubeB_pos[:2] - cubeA_pos[:2]
+    #     theta = np.arctan2(uA2B[1], uA2B[0])
+    #     if theta > 0.5*np.pi:
+    #         theta -= np.pi
+    #     elif theta < -0.5*np.pi:
+    #         theta += np.pi
         
-        good_yaw = False
-        while not good_yaw:
-            yaw = np.random.uniform(-0.25*np.pi, 0.25*np.pi)
-            good_yaw = abs(theta - yaw) < (1/3) * np.pi 
+    #     good_yaw = False
+    #     while not good_yaw:
+    #         yaw = np.random.uniform(-0.25*np.pi, 0.25*np.pi)
+    #         good_yaw = abs(theta - yaw) < (1/3) * np.pi 
 
-        params = np.concatenate([pos, [yaw]])
-        print("params", params)
+    #     params = np.concatenate([pos, [yaw]])
+    #     print("params", params)
 
-        action = np.concatenate([np.array([1, 0]), params])
-        human_rew = env.human_reward(action)
-        obs, reward, done, info = env.step(action)
-        grasping = env._check_grasp(gripper=env.robots[0].gripper, object_geoms=env.cubeA)
+    #     action = np.concatenate([np.array([1, 0]), params])
+    #     human_rew = env.human_reward(action)
+    #     obs, reward, done, info = env.step(action)
+    #     grasping = env._check_grasp(gripper=env.robots[0].gripper, object_geoms=env.cubeA)
 
-        if human_rew > 0:
-            positive_human_reward += 1
-        elif human_rew < 0:
-            negative_human_reward += 1
-        if grasping:
-            pick_success += 1
+    #     if human_rew > 0:
+    #         positive_human_reward += 1
+    #     elif human_rew < 0:
+    #         negative_human_reward += 1
+    #     if grasping:
+    #         pick_success += 1
 
-        print(f"\ntrial {i}:\npositive: {positive_human_reward}\nnegative: {negative_human_reward}\npick: {pick_success}")
+    #     print(f"\ntrial {i}:\npositive: {positive_human_reward}\nnegative: {negative_human_reward}\npick: {pick_success}")
     
     # action = np.concatenate([np.array([1., 0.]), cubeA_pos, np.array([0.3*np.pi, 1])])
     # # action = np.array([1, 0, 0, 0, 0, 0, 0])
@@ -281,23 +290,37 @@ if __name__ == "__main__":
     # print("rew",reward)
     # pdb.set_trace()
     
-    # env = suite.make(
-    #     env_name="Reaching2D",
-    #     robots="Panda",
-    #     # controller_configs=load_controller_config(default_controller="OSC_POSE"),
-    #     # controller_configs=pose_controller_config,
-    #     reward_scale=5.0, # change this to any value
-    #     use_skills=True,
-    #     normalized_params=False,
-    #     has_renderer=True,
-    #     has_offscreen_renderer=False,
-    #     use_camera_obs=False,
-    #     control_freq=10,
-    #     initialization_noise=None,
-    #     use_delta=False,
-    # )
+    env = suite.make(
+        env_name="Reaching2D",
+        robots="Panda",
+        # controller_configs=load_controller_config(default_controller="OSC_POSE"),
+        # controller_configs=pose_controller_config,
+        controller_configs=load_controller_config(default_controller="OSC_POSITION"),
+        reward_scale=5.0, # change this to any value
+        use_skills=False,
+        normalized_params=True,
+        has_renderer=True,
+        has_offscreen_renderer=False,
+        use_camera_obs=False,
+        control_freq=10,
+        initialization_noise=None,
+        # use_delta=False,
+    )
     
-    # obs = env.reset()
+    obs = env.reset()
+
+    action = np.array([0.1, 0.1, 0.1, 1])
+    done = False
+    while not done:
+        obs, reward, done, info = env.step(action)
+        env.render()
+    # action = np.concatenate([
+    #     [1, 0],
+    #     [1., 1, 1],
+    #     [1.]
+    # ])
+
+    # obs, reward, done, info = env.step(action)
     # # goal_pos = np.array([0.1, 0.3, 1])
     # goal_pos = np.array([-0.1, -0.2, 1])
     # action = np.array([1, 0, goal_pos[0], goal_pos[1], goal_pos[2], 0, 1])
