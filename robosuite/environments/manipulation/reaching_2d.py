@@ -178,6 +178,7 @@ class Reaching2D(SingleArmEnv):
         use_delta=None, # if set, ignore controller_configs and use osc controller (if True, use delta control, if false use global control)
         normalized_params=True,
         use_aff_rewards=False, # use affordance score
+        normalized_obs=False,
     ):
 
         # settings for table top
@@ -241,6 +242,7 @@ class Reaching2D(SingleArmEnv):
 
         self.num_skills = self.skill.n_skills
         self.normalized_params = normalized_params
+        self.normalized_obs = normalized_obs
 
         # gripper state
         self.gripper_state = -1 # 1 is closed, -1 is opened
@@ -407,11 +409,15 @@ class Reaching2D(SingleArmEnv):
 
                 @sensor(modality=modality)
                 def eef_xyz(obs_cache):
-                    return (
+                    eef_xyz = (
                         obs_cache[f"{pf}eef_pos"] 
                         if f"{pf}eef_pos" in obs_cache
                         else np.zeros(3)
                     )
+                    if self.normalized_obs:
+                        return self._normalize_params(np.array(eef_xyz))
+                    else:
+                        return np.array(eef_xyz)
 
                 @sensor(modality=modality)
                 def eef_yaw(obs_cache):
@@ -696,7 +702,8 @@ class Reaching2D(SingleArmEnv):
         scaled_params[0] = ( ((params[0] + 1) / 2 ) * (self.workspace_x[1] - self.workspace_x[0]) ) + self.workspace_x[0]
         scaled_params[1] = ( ((params[1] + 1) / 2 ) * (self.workspace_y[1] - self.workspace_y[0]) ) + self.workspace_y[0]
         scaled_params[2] = ( ((params[2] + 1) / 2 ) * (self.workspace_z[1] - self.workspace_z[0]) ) + self.workspace_z[0]
-        # scaled_params[3] = ( ((params[3] + 1) / 2 ) * (self.yaw_bounds[1] - self.yaw_bounds[0]) ) + self.yaw_bounds[0] # not using yaw anymore
+        if self.use_yaw:
+            scaled_params[3] = ( ((params[3] + 1) / 2 ) * (self.yaw_bounds[1] - self.yaw_bounds[0]) ) + self.yaw_bounds[0]
 
         return scaled_params
 
@@ -709,6 +716,8 @@ class Reaching2D(SingleArmEnv):
         normalized_params[1] = 2 * (params[1] - self.workspace_y[0]) / (self.workspace_y[1] - self.workspace_y[0]) - 1
         normalized_params[2] = 2 * (params[2] - self.workspace_z[0]) / (self.workspace_z[1] - self.workspace_z[0]) - 1
         normalized_params[3] = 2 * (params[3] - self.yaw_bounds[0]) / (self.yaw_bounds[1] - self.yaw_bounds[0]) - 1
+        if self.use_yaw:
+            normalized_params[3] = 2 * (params[3] - self.yaw_bounds[0]) / (self.yaw_bounds[1] - self.yaw_bounds[0]) - 1
 
         return normalized_params
 
