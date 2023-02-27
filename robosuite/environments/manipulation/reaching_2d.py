@@ -178,6 +178,7 @@ class Reaching2D(SingleArmEnv):
         use_delta=None, # if set, ignore controller_configs and use osc controller (if True, use delta control, if false use global control)
         normalized_params=True,
         use_aff_rewards=False, # use affordance score
+        use_yaw=False,
         normalized_obs=False,
     ):
 
@@ -249,6 +250,8 @@ class Reaching2D(SingleArmEnv):
 
         # flags
         self.reward_given = False
+
+        self.use_yaw = use_yaw
 
         super().__init__(
             robots=robots,
