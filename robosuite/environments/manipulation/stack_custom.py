@@ -200,7 +200,7 @@ class StackCustom(SingleArmEnv):
         # self.workspace_z = (0.83, 1.3)
         self.workspace_x = (-0.075, 0.075)
         self.workspace_y = (-0.075, 0.075)
-        self.workspace_z = (0.82, 0.87)
+        self.workspace_z = (0.82, 1.05)
         self.yaw_bounds = (-0.5*np.pi, 0.5*np.pi)
 
         # gripper state
@@ -746,6 +746,54 @@ class StackCustom(SingleArmEnv):
             normalized_params[3] = 2 * (params[3] - self.yaw_bounds[0]) / (self.yaw_bounds[1] - self.yaw_bounds[0]) - 1
 
         return normalized_params
+
+    def synthetic_human_reward(self, obs, action):
+        
+        eef_pos = obs["eef_pos"] # alternatively eef_pos = self._eef_xpos        
+        grasping_A = self._check_grasp(gripper=self.robots[0].gripper, object_geoms=self.cubeA)
+        
+        cubeA_pos = np.array(self.sim.data.body_xpos[self.cubeA_body_id])
+        waypointA = cubeA_pos.copy()
+        waypointA += np.array([0, 0, 0.03]) 
+        
+        cubeB_pos = np.array(self.sim.data.body_xpos[self.cubeB_body_id])
+        place_pos = np.array([cubeB_pos[0], cubeB_pos[1], cubeB_pos[2] + 0.045])
+        
+        pick_pos_thresh = (0.015001, 0.016001, 0.0085001) # thresh in x, y, z for picking cubeA
+        place_pos_thresh = (0.02501, 0.02501, 0.043999) # thresh in x, y, z for placing on cubeB
+
+        human_reward = 0.0
+        scaled_pos_action = action[:3] * 0.05 # default robosuite controller scales action by 0.05
+        gripper_action = action[-1]
+
+        if not grasping_A:
+            # check if eef is close enough to pick pos
+            if np.all(np.abs(eef_pos - cubeA_pos) < pick_pos_thresh):
+                # should close gripper without moving outside this region
+
+            # check if eef is close enough to waypoint A
+            elif np.all(np.abs(eef_pos - waypointA) < pick_pos_thresh):
+                # should move down without violating x,y limits
+
+        if grasping_A:
+            # gripper should always be closed
+            # check if in good position to release - if yes, give 1 if release, -1 else
+            # check z - if high enough, move to place pos, else move up
+        
+
+
+
+            # goal_pos = cubeA_pos
+            # cur_dist = np.linalg.norm(eef_pos - goal_pos)
+            # next_dist = np.linalg.norm(eef_pos + scaled_pos_action)
+            # if next_dist < cur_dist: # if the next action takes eef closer to goal position
+            #     if next_dist > 0.03: 
+            #         human_reward = 1.0
+            #     elif gripper_action == -1: # if the eef is close to pick location, gripper should be opened
+            #         human_reward = 1.0
+
+
+
 
     def human_reward(self, action):
         grasping_A = self._check_grasp(gripper=self.robots[0].gripper, object_geoms=self.cubeA)

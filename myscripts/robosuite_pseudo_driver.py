@@ -295,30 +295,41 @@ if __name__ == "__main__":
         robots="Panda",
         # controller_configs=load_controller_config(default_controller="OSC_POSE"),
         # controller_configs=pose_controller_config,
-        controller_configs=load_controller_config(default_controller="OSC_POSITION"),
+        # controller_configs=load_controller_config(default_controller="OSC_POSITION"),
         reward_scale=5.0, # change this to any value
-        use_skills=False,
-        normalized_params=True,
+        use_skills=True,
+        normalized_params=False,
         has_renderer=True,
         has_offscreen_renderer=False,
         use_camera_obs=False,
         control_freq=10,
         initialization_noise=None,
-        # use_delta=False,
+        use_delta=True,
+        horizon=500
     )
     
     obs = env.reset()
+    pdb.set_trace()
 
-    action = np.array([0.1, 0.1, 0.1, 1])
-    done = False
-    while not done:
-        obs, reward, done, info = env.step(action)
-        env.render()
-    # action = np.concatenate([
-    #     [1, 0],
-    #     [1., 1, 1],
-    #     [1.]
-    # ])
+
+    # action = np.array([0.1, 0.1, 0.1, 1])
+    # done = False
+    # while not done:
+    #     obs, reward, done, info = env.step(action)
+    #     env.render()
+    goal_pos = np.array([-0.1, -0.2, 1])
+    action = np.concatenate([
+        [1., 0.],
+        [-0.1, -0.2, -1],
+        [1.]
+    ])
+    env.step(action)
+    action = np.concatenate([
+        [1., 0.],
+        [-0.1, -0.2, 1],
+        [1.]
+    ])
+    env.step(action)
 
     # obs, reward, done, info = env.step(action)
     # # goal_pos = np.array([0.1, 0.3, 1])
