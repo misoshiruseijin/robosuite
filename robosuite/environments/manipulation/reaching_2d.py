@@ -238,7 +238,7 @@ class Reaching2D(SingleArmEnv):
             )
 
         self.keypoints = self.skill.get_keypoints_dict()
-        self.keypoints["move_to"] = [np.append(self.target_position, 1.0)]
+        self.keypoints["move_to_w_gripper_closed"] = [np.append(self.target_position, 1.0)]
         self.use_aff_rewards = use_aff_rewards
 
         self.num_skills = self.skill.n_skills
@@ -718,7 +718,6 @@ class Reaching2D(SingleArmEnv):
         normalized_params[0] = 2 * (params[0] - self.workspace_x[0]) / (self.workspace_x[1] - self.workspace_x[0]) - 1
         normalized_params[1] = 2 * (params[1] - self.workspace_y[0]) / (self.workspace_y[1] - self.workspace_y[0]) - 1
         normalized_params[2] = 2 * (params[2] - self.workspace_z[0]) / (self.workspace_z[1] - self.workspace_z[0]) - 1
-        normalized_params[3] = 2 * (params[3] - self.yaw_bounds[0]) / (self.yaw_bounds[1] - self.yaw_bounds[0]) - 1
         if self.use_yaw:
             normalized_params[3] = 2 * (params[3] - self.yaw_bounds[0]) / (self.yaw_bounds[1] - self.yaw_bounds[0]) - 1
 

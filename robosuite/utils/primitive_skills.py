@@ -849,6 +849,7 @@ class PrimitiveSkillDelta():
         if count_steps and (self.steps > max_steps):
             print("Max steps for primitive reached: ", max_steps)
             print(f"Goal was {params}\nReached {eef_pos}, {cur_yaw}")
+            self.steps = 0
             success = False
             skill_done = True
 
