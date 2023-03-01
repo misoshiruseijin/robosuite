@@ -467,11 +467,16 @@ class StackCustom(SingleArmEnv):
             # eef observations
             @sensor(modality=modality)
             def eef_xyz(obs_cache):
-                return (
-                    np.array(obs_cache[f"{pf}eef_pos"])
-                    if f"{pf}eef_pos" is obs_cache
+                def eef_xyz(obs_cache):
+                eef_xyz = (
+                    obs_cache[f"{pf}eef_pos"] 
+                    if f"{pf}eef_pos" in obs_cache
                     else np.zeros(3)
                 )
+                if self.normalized_obs:
+                    return self._normalize_params(np.array(eef_xyz))
+                else:
+                    return np.array(eef_xyz)
 
             @sensor(modality=modality)
             def eef_yaw(obs_cache):
