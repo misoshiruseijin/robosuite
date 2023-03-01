@@ -208,7 +208,10 @@ class StackCustom(SingleArmEnv):
 
         # setup controller
         if use_delta is not None:
-            controller_configs = load_controller_config(default_controller="OSC_POSE")
+            if use_skills:
+                controller_configs = load_controller_config(default_controller="OSC_POSE")
+            else:
+                controller_configs = load_controller_config(default_controller="OSC_POSITION")
             controller_configs["control_delta"] = use_delta
         
         # primitive skill mode 
