@@ -219,6 +219,8 @@ class Cleanup(SingleArmEnv):
             use_yaw=use_yaw,
         )
 
+        self.use_yaw = use_yaw
+
         self.keypoints = self.skill.get_keypoints_dict()
         self.use_aff_rewards = use_aff_rewards
         self.num_skills = self.skill.n_skills
@@ -820,3 +822,25 @@ class Cleanup(SingleArmEnv):
 
         return np.concatenate([action[:self.num_skills], params])
 
+    def _normalize_params(self, action):
+        """
+        Normalize raw parameter to ([-1, 1]) range.
+        """
+        action = np.copy(action)
+        params = action[self.num_skills:]
+
+        normalized_params = np.copy(params)
+        normalized_params[0] = 2 * (params[0] - self.workspace_x[0]) / (self.workspace_x[1] - self.workspace_x[0]) - 1
+        normalized_params[1] = 2 * (params[1] - self.workspace_y[0]) / (self.workspace_y[1] - self.workspace_y[0]) - 1
+        normalized_params[2] = 2 * (params[2] - self.workspace_z[0]) / (self.workspace_z[1] - self.workspace_z[0]) - 1
+
+        if action[2] > 0: # action is push
+            normalized_params[3] = 2 * (params[3] - self.workspace_x[0]) / (self.workspace_x[1] - self.workspace_x[0]) - 1
+            normalized_params[4] = 2 * (params[4] - self.workspace_y[0]) / (self.workspace_y[1] - self.workspace_y[0]) - 1
+            normalized_params[5] = 2 * (params[5] - self.workspace_z[0]) / (self.workspace_z[1] - self.workspace_z[0]) - 1
+            normalized_params[6] = 2 * (params[6] - self.yaw_bounds[0]) / (self.yaw_bounds[1] - self.yaw_bounds[0]) - 1
+
+        else: # action is pick or place
+            normalized_params[3] = 2 * (params[3] - self.yaw_bounds[0]) / (self.yaw_bounds[1] - self.yaw_bounds[0]) - 1
+        
+        return np.concatenate([action[:self.num_skills], normalized_params])

@@ -467,7 +467,6 @@ class StackCustom(SingleArmEnv):
             # eef observations
             @sensor(modality=modality)
             def eef_xyz(obs_cache):
-                def eef_xyz(obs_cache):
                 eef_xyz = (
                     obs_cache[f"{pf}eef_pos"] 
                     if f"{pf}eef_pos" in obs_cache
@@ -756,7 +755,7 @@ class StackCustom(SingleArmEnv):
         return normalized_params
 
     def synthetic_human_reward(self, action):
-        eef_pos = = self._eef_xpos        
+        eef_pos = self._eef_xpos        
         grasping_A = self._check_grasp(gripper=self.robots[0].gripper, object_geoms=self.cubeA)
         
         cubeA_pos = np.array(self.sim.data.body_xpos[self.cubeA_body_id])
